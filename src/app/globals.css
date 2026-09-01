@@ -1,0 +1,886 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Override browser autofill background (Firefox/Chrome) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px rgba(0, 0, 0, 0.3) inset !important;
+  -webkit-text-fill-color: white !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+input:-moz-autofill,
+input:-moz-autofill:hover,
+input:-moz-autofill:focus {
+  box-shadow: 0 0 0 30px rgba(0, 0, 0, 0.3) inset !important;
+  -moz-text-fill-color: white !important;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 7% 7%/20%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 7% 7%/20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 7% 7%/20%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 0 0% 0% / 0%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 210 40% 98%;
+    --card: 0 7% 7%/20%;
+    --card-foreground: 210 40% 98%;
+    --popover: 0 7% 7%/20%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 0 70% 50%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 0 82% 9%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 0 82% 9%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 0 82% 9%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+    --ring: 0 0% 0% / 0%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply text-foreground;
+    background: #0000;
+    background-attachment: fixed;
+  }
+  /* Remove all focus rings/outlines globally */
+  *:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    --tw-ring-color: transparent !important;
+    --tw-ring-shadow: none !important;
+  }
+  *:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    --tw-ring-color: transparent !important;
+    --tw-ring-shadow: none !important;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-radial {
+    background-image: radial-gradient(circle, var(--tw-gradient-stops));
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 31.91%);
+  border-radius: 0.375rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 45%);
+}
+
+/* Always visible scrollbar for tab system */
+.tab-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0deg 0% 31.91%) hsl(0deg 0% 0% / 0%);
+}
+
+.tab-scroll-container.light-theme {
+  scrollbar-color: hsl(0deg 0% 50.29%) hsl(0deg 0% 100%);
+}
+
+.tab-scroll-container::-webkit-scrollbar {
+  height: 8px;
+  position: relative;
+  top: -2px; /* Position scrollbar slightly above tabs */
+}
+
+.tab-scroll-container::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 31.91%);
+  border-radius: 0.375rem;
+}
+
+.tab-scroll-container.light-theme::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 50.29%);
+  border-radius: 0.375rem;
+}
+
+.tab-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 45%);
+}
+
+.tab-scroll-container.light-theme::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 40%);
+}
+
+.tab-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-scroll-container.light-theme::-webkit-scrollbar-track {
+  background: hsl(0deg 0% 100%);
+}
+
+/* Scrollbar for maps sidebar */
+.maps-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0deg 0% 31.91%) hsl(0deg 0% 0% / 0%);
+}
+
+.maps-sidebar-scroll.light-theme {
+  scrollbar-color: hsl(0deg 0% 50.29%) hsl(0deg 0% 100%);
+}
+
+.maps-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.maps-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 31.91%);
+  border-radius: 0.375rem;
+}
+
+.maps-sidebar-scroll.light-theme::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 50.29%);
+  border-radius: 0.375rem;
+}
+
+.maps-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 45%);
+}
+
+.maps-sidebar-scroll.light-theme::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 40%);
+}
+
+.maps-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.maps-sidebar-scroll.light-theme::-webkit-scrollbar-track {
+  background: hsl(0deg 0% 100%);
+}
+
+/* Scrollbar for hexdump viewer */
+.hexdump-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0deg 0% 31.91%) hsl(0deg 0% 0% / 0%);
+}
+
+.hexdump-scroll.light-theme {
+  scrollbar-color: hsl(0deg 0% 50.29%) hsl(0deg 0% 100%);
+}
+
+.hexdump-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.hexdump-scroll::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 31.91%);
+  border-radius: 0.375rem;
+}
+
+.hexdump-scroll.light-theme::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 50.29%);
+  border-radius: 0.375rem;
+}
+
+.hexdump-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 45%);
+}
+
+.hexdump-scroll.light-theme::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 40%);
+}
+
+.hexdump-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hexdump-scroll.light-theme::-webkit-scrollbar-track {
+  background: hsl(0deg 0% 100%);
+}
+
+/* Hexdump : scrollbar native masquée — la minimap la remplace */
+.hexdump-noscrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hexdump-noscrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scrollbar for settings menu */
+.settings-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0deg 0% 31.91%) hsl(0deg 0% 0% / 0%);
+}
+
+.settings-scroll.light-theme {
+  scrollbar-color: hsl(0deg 0% 50.29%) hsl(0deg 0% 100%);
+}
+
+.settings-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 31.91%);
+  border-radius: 0.375rem;
+}
+
+.settings-scroll.light-theme::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 50.29%);
+  border-radius: 0.375rem;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 45%);
+}
+
+.settings-scroll.light-theme::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 40%);
+}
+
+.settings-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-scroll.light-theme::-webkit-scrollbar-track {
+  background: hsl(0deg 0% 100%);
+}
+
+/* Scrollbar for upload modal */
+.upload-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0deg 0% 31.91%) hsl(0deg 0% 0% / 0%);
+}
+
+.upload-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.upload-scroll::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 31.91%);
+  border-radius: 0.375rem;
+}
+
+.upload-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 45%);
+}
+
+.upload-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-primary to-red-600 bg-clip-text text-transparent;
+}
+
+/* Glass morphism effect */
+.glass {
+  @apply bg-white/10 backdrop-blur-lg border border-white/20;
+}
+
+/* 3D viewer container */
+.viewer-3d {
+  @apply w-full h-full min-h-[500px] rounded-lg overflow-hidden;
+}
+
+/* File upload zone */
+.upload-zone {
+  @apply border-2 border-dashed border-primary/50 rounded-lg p-8 transition-colors hover:border-primary hover:bg-primary/5;
+}
+
+.upload-zone.active {
+  @apply border-primary bg-primary/10;
+}
+
+/* Dashboard button hover styles */
+.dashboard-outline-button:hover {
+  background-color: hsl(0, 81.8%, 8.6%) !important;
+}
+
+.dashboard-upload-button {
+  background: radial-gradient(circle, rgb(0 255 129 / 18%) 0%, rgb(26 108 119 / 25%) 100% 100%) !important;
+}
+
+.dashboard-upload-button:hover {
+  background: radial-gradient(circle, rgb(0 255 129 / 22%) 0%, rgb(26 85 119 / 33%) 100% 100%) !important;
+}
+
+.upload-zone-hover:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important
+}
+
+/* Animations macOS-style pour la fenêtre Hexdump */
+@keyframes hexdumpExpand {
+  0% {
+    transform: scale(0.7) translateY(60px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.02) translateY(-5px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes hexdumpCollapse {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  40% {
+    transform: scale(1.02) translateY(-5px);
+  }
+  100% {
+    transform: scale(0.7) translateY(60px);
+    opacity: 0;
+  }
+}
+
+/* Animations pour les modales (Project Info & Upload) */
+@keyframes modalExpand {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes modalCollapse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+}
+
+/* Animations pour le menu déroulant utilisateur */
+@keyframes dropdownExpand {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes dropdownCollapse {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}
+
+@keyframes backdropFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes backdropFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Scrollbar for select dropdowns */
+select::-webkit-scrollbar {
+  width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+select::-webkit-scrollbar-thumb {
+  background: hsl(0deg 0% 50%);
+  border-radius: 0.375rem;
+}
+
+select::-webkit-scrollbar-thumb:hover {
+  background: hsl(0deg 0% 60%);
+}
+
+/* Enhanced background animations */
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(30px, -30px) scale(1.1);
+    opacity: 0.5;
+  }
+}
+
+@keyframes floatMedium {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0.2;
+  }
+  33% {
+    transform: translate(-20px, 20px) rotate(120deg);
+    opacity: 0.4;
+  }
+  66% {
+    transform: translate(20px, -20px) rotate(240deg);
+    opacity: 0.3;
+  }
+}
+
+@keyframes floatFast {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.25;
+  }
+  25% {
+    transform: translate(20px, 30px) scale(1.05);
+    opacity: 0.35;
+  }
+  75% {
+    transform: translate(-20px, -30px) scale(0.95);
+    opacity: 0.3;
+  }
+}
+
+/* Dashboard intro animations */
+@keyframes logoAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes logoGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 40px rgba(255, 255, 255, 0.6));
+  }
+}
+
+@keyframes introFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes slideInFromTop {
+  0% {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Admin-configured dashboard message effects */
+@keyframes dashboardMarquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes dashboardBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes scaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Landing page animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInFromBack {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateZ(-100px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateZ(0);
+    filter: blur(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 1.2s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 1.2s ease-out forwards;
+}
+
+.animate-fade-in-back {
+  animation: fadeInFromBack 1.2s ease-out forwards;
+}
+
+/* Ambilight effect animation */
+@keyframes ambilightPulse {
+  0%, 100% {
+    opacity: 0.25;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: translateY(-50%) scale(1.1);
+  }
+}
+
+/* Modern Loader - Red & White Theme */
+/* Modern comet loader: a faint static track ring, a red→orange comet with a
+   fading trail + soft glow (editor-logo gradient), and an inner black comet
+   counter-rotating. Comets are conic-gradients clipped to a ring by a radial
+   mask (borders can't take gradients). */
+.loader {
+  --loader-bw: 3px;
+  width: 50px;
+  aspect-ratio: 1;
+  display: grid;
+  /* Transparent border only for sizing (inherited by the comet rings) */
+  border: 4px solid #0000;
+  border-radius: 50%;
+  animation: loader-spin 1s infinite linear;
+}
+
+.loader::before,
+.loader::after {
+  content: "";
+  grid-area: 1/1;
+  margin: 2px;
+  border: inherit;
+  border-color: #0000;
+  border-radius: 50%;
+  -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - var(--loader-bw)), #000 calc(100% - var(--loader-bw) + 0.5px));
+  mask: radial-gradient(farthest-side, #0000 calc(100% - var(--loader-bw)), #000 calc(100% - var(--loader-bw) + 0.5px));
+}
+
+.loader::before {
+  /* Comet: transparent tail sweeping into red-600 then an orange-500 head */
+  background: conic-gradient(#0000 15%, #dc2626 55%, #f97316 100%);
+  animation: inherit;
+  animation-duration: .5s;
+  animation-direction: reverse;
+}
+
+.loader::after {
+  margin: 8px;
+  /* Inner white comet (rotates with the element, opposite the red one) */
+  background: conic-gradient(#0000 25%, #ffffff 100%);
+}
+
+/* Thème clair : le comet intérieur blanc serait invisible sur fond blanc —
+   il passe en ardoise foncée (la classe est posée par les écrans clairs) */
+.loader-light::after {
+  background: conic-gradient(#0000 25%, #1e293b 100%);
+}
+
+/* Loader sizes */
+.loader-sm {
+  --loader-bw: 1.5px;
+  width: 20px;
+  border-width: 2px;
+}
+
+.loader-sm::before,
+.loader-sm::after {
+  margin: 1px;
+}
+
+.loader-sm::after {
+  margin: 4px;
+}
+
+.loader-md {
+  --loader-bw: 2.5px;
+  width: 40px;
+  border-width: 3px;
+}
+
+.loader-md::before,
+.loader-md::after {
+  margin: 2px;
+}
+
+.loader-md::after {
+  margin: 6px;
+}
+
+.loader-lg {
+  --loader-bw: 4px;
+  width: 64px;
+  border-width: 5px;
+}
+
+.loader-lg::before,
+.loader-lg::after {
+  margin: 3px;
+}
+
+.loader-lg::after {
+  margin: 10px;
+}
+
+@keyframes loader-spin {
+  100% { transform: rotate(1turn); }
+}
+
+/* Toast notification animations - inline notifications (editor) */
+@keyframes slideUp {
+  0% {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOutDown {
+  0% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+}
+
+/* Toast notification animations - Toaster component */
+@keyframes toastSlideIn {
+  0% {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastFadeOut {
+  0% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+}
+
+@keyframes mappackUnlock {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dotPulse {
+  0%, 20% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.mappack-unlock-anim > * {
+  animation: mappackUnlock 0.5s ease-out both;
+}
+
+.mappack-unlock-anim > *:nth-child(1) { animation-delay: 0s; }
+.mappack-unlock-anim > *:nth-child(2) { animation-delay: 0.04s; }
+.mappack-unlock-anim > *:nth-child(3) { animation-delay: 0.08s; }
+.mappack-unlock-anim > *:nth-child(4) { animation-delay: 0.12s; }
+.mappack-unlock-anim > *:nth-child(5) { animation-delay: 0.16s; }
+.mappack-unlock-anim > *:nth-child(6) { animation-delay: 0.2s; }
+.mappack-unlock-anim > *:nth-child(7) { animation-delay: 0.24s; }
+.mappack-unlock-anim > *:nth-child(8) { animation-delay: 0.28s; }
+.mappack-unlock-anim > *:nth-child(9) { animation-delay: 0.32s; }
+.mappack-unlock-anim > *:nth-child(10) { animation-delay: 0.36s; }
+.mappack-unlock-anim > *:nth-child(n+11) { animation-delay: 0.4s; }
+
+/* ── Desktop app: neutralize browser-like gestures ──────────────────
+   The two-finger horizontal trackpad swipe triggers WebView2's
+   back/forward navigation and visually slides the whole page.
+   A desktop tool must never do that (also disabled via
+   --overscroll-history-navigation=0 in tauri.conf.json). */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+/* No element dragging with the mouse (ghost images, link drags) */
+img,
+a {
+  -webkit-user-drag: none;
+  user-drag: none;
+}

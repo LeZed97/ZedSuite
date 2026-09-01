@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ZedSuite",
+  "version": "1.0.0",
+  "identifier": "com.zedsuite.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../out"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ZedSuite",
+        "width": 1500,
+        "height": 950,
+        "minWidth": 900,
+        "minHeight": 700,
+        "center": true,
+        "decorations": false,
+        "backgroundColor": "#0a0b0f",
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --overscroll-history-navigation=0 --pull-to-refresh=0"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "ZedPerf",
+    "copyright": "Copyright © 2026 ZedPerf",
+    "homepage": "https://github.com/LeZed97/ZedSuite",
+    "shortDescription": "Open source ECU map editor for VAG-group Bosch EDC15/EDC16",
+    "longDescription": "ZedSuite is a fully local, open source map editor for VAG-group Bosch EDC15/EDC16 ECUs: automatic map detection with completeness check, table/2D/3D editing, hexdump, versions, virtual dyno, DTC off, checksum correction and WinOLS-compatible mappack export.",
+    "licenseFile": "../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp",
+        "languages": ["English", "French"],
+        "displayLanguageSelector": true
+      }
+    }
+  }
+}
