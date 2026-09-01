@@ -1,0 +1,13 @@
+ZedSuite — open source ECU map editor
+Copyright (C) 2026 ZedPerf
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License version 3 (see LICENSE).
+
+The "ZedSuite" name, logo, mascot and application icons are trademarks of
+ZedPerf and are NOT covered by the GPL license grant (GPL-3.0 §7(e)).
+Forks and modified redistributions must use their own name and branding.
+See TRADEMARKS.md for the full policy.
+
+Official builds are published exclusively at:
+https://github.com/LeZed97/ZedSuite/releases

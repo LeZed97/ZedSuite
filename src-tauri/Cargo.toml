@@ -1,0 +1,42 @@
+[package]
+name = "zedsuite"
+version = "1.0.0"
+edition = "2021"
+description = "ZedSuite - Open source ECU map editor (Bosch EDC15/EDC16)"
+authors = ["ZedSuite contributors"]
+license = "GPL-3.0-only"
+repository = "https://github.com/LeZed97/ZedSuite"
+
+[lib]
+name = "zedsuite_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+base64 = "0.22"
+log = "0.4"
+# Update system: GitHub releases check + installer download
+reqwest = { version = "0.12", features = ["json"] }
+
+# Thin LTO + parallel codegen: release builds in ~1-1.5 min instead of 4-5.
+# For a final published release you can temporarily switch to the maximum
+# profile (lto = true, codegen-units = 1) — a few % faster detector and a
+# slightly smaller exe, at the cost of much longer builds.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+strip = true
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt"] }
+env_logger = "0.11"

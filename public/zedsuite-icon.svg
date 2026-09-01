@@ -1,0 +1,77 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Icône ZedSuite">
+  <defs>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="230"/>
+    </clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14161B"/>
+      <stop offset="1" stop-color="#060709"/>
+    </linearGradient>
+    <linearGradient id="zfill" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#FF7A18"/>
+      <stop offset="0.55" stop-color="#FF4D2E"/>
+      <stop offset="1" stop-color="#FF2E2E"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <!-- Fond carbone -->
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <!-- Pistes PCB (angles a 45 degres) -->
+    <g fill="none" stroke="#9AA0A8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.75">
+      <path d="M150 118 H410 L470 178 H700"/>
+      <path d="M320 88 H770 L830 148"/>
+      <path d="M124 582 V800 L184 860 H430"/>
+      <path d="M900 582 V780 L840 840 H580"/>
+      <path d="M300 932 H720"/>
+    </g>
+    <!-- Vias -->
+    <g fill="#060709" stroke="#C9CDD3" stroke-width="6">
+      <circle cx="150" cy="118" r="11"/>
+      <circle cx="700" cy="178" r="11"/>
+      <circle cx="320" cy="88" r="11"/>
+      <circle cx="830" cy="148" r="11"/>
+      <circle cx="430" cy="860" r="11"/>
+      <circle cx="580" cy="840" r="11"/>
+      <circle cx="300" cy="932" r="11"/>
+      <circle cx="720" cy="932" r="11"/>
+    </g>
+
+    <!-- Pattes de composant (boitier ECU), gauche -->
+    <g stroke="#C9CDD3" stroke-width="18" stroke-linecap="round" opacity="0.9">
+      <line x1="132" y1="460" x2="206" y2="460"/>
+      <line x1="132" y1="512" x2="206" y2="512"/>
+      <line x1="132" y1="564" x2="206" y2="564"/>
+      <line x1="818" y1="460" x2="892" y2="460"/>
+      <line x1="818" y1="512" x2="892" y2="512"/>
+      <line x1="818" y1="564" x2="892" y2="564"/>
+    </g>
+    <g fill="#EDEFF2" opacity="0.95">
+      <circle cx="124" cy="460" r="15"/>
+      <circle cx="124" cy="512" r="15"/>
+      <circle cx="124" cy="564" r="15"/>
+      <circle cx="900" cy="460" r="15"/>
+      <circle cx="900" cy="512" r="15"/>
+      <circle cx="900" cy="564" r="15"/>
+    </g>
+
+    <!-- Halo du Z (flash) -->
+    <path d="M300 260 H724 V380 L468 644 H724 V764 H300 V644 L556 380 H300 Z"
+          fill="#FF3D1F" opacity="0.55" filter="url(#glow)"/>
+
+    <!-- Z principal -->
+    <path d="M300 260 H724 V380 L468 644 H724 V764 H300 V644 L556 380 H300 Z"
+          fill="url(#zfill)"/>
+
+    <!-- Reflet haut, tres subtil -->
+    <path d="M0 0 H1024 V420 C 704 512 320 512 0 420 Z" fill="#FFFFFF" opacity="0.04"/>
+  </g>
+
+  <!-- Lisere interieur -->
+  <rect x="8" y="8" width="1008" height="1008" rx="224" fill="none"
+        stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="4"/>
+</svg>

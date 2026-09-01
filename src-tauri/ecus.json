@@ -1,0 +1,168 @@
+[
+  {
+    "id": "edc15p",
+    "name": "EDC15P",
+    "manufacturer": "Bosch",
+    "family": "EDC15",
+    "processor": "MPC555/556",
+    "endianness": "Little-Endian",
+    "file_sizes": [
+      "512KB"
+    ],
+    "vehicles": "VAG 1.9 TDI PD (VW, Audi, Seat, Skoda)",
+    "detection_method": "CheckMap + Dynamic patterns",
+    "status": "production",
+    "enabled": true,
+    "map_categories": [
+      "Turbo boost pressure",
+      "Smoke limitation",
+      "Start of injection SOI",
+      "Engine torque limiters",
+      "Vehicle speed limiters",
+      "EGR",
+      "Idle speed RPM",
+      "Fuel quantity",
+      "Calibrations"
+    ],
+    "mappack_export_enabled": true,
+    "mappack_price": 40
+  },
+  {
+    "id": "edc15v",
+    "name": "EDC15V",
+    "manufacturer": "Bosch",
+    "family": "EDC15",
+    "processor": "MPC555/556",
+    "endianness": "Little-Endian",
+    "file_sizes": [
+      "512KB"
+    ],
+    "vehicles": "Volvo / VAG (variante V)",
+    "detection_method": "CheckMap + Dynamic patterns",
+    "status": "production",
+    "enabled": true,
+    "map_categories": [
+      "Turbo boost pressure",
+      "Smoke limitation",
+      "Start of injection SOI",
+      "Engine torque limiters",
+      "EGR",
+      "Idle speed RPM",
+      "Calibrations"
+    ],
+    "mappack_export_enabled": true,
+    "mappack_price": 40
+  },
+  {
+    "id": "edc15vm",
+    "name": "EDC15VM",
+    "manufacturer": "Bosch",
+    "family": "EDC15",
+    "processor": "MPC555/556",
+    "endianness": "Little-Endian",
+    "file_sizes": [
+      "512KB"
+    ],
+    "vehicles": "Various manufacturers (VM variant)",
+    "detection_method": "CheckMap + Dynamic patterns",
+    "status": "production",
+    "enabled": true,
+    "map_categories": [
+      "Turbo boost pressure",
+      "Smoke limitation",
+      "Start of injection SOI",
+      "EGR",
+      "Idle speed RPM",
+      "Calibrations"
+    ],
+    "mappack_export_enabled": true,
+    "mappack_price": 40
+  },
+  {
+    "id": "edc16u1",
+    "name": "EDC16U1",
+    "manufacturer": "Bosch",
+    "family": "EDC16",
+    "processor": "MPC556LF",
+    "endianness": "Big-Endian",
+    "file_sizes": [
+      "512KB",
+      "1MB"
+    ],
+    "vehicles": "VAG 1.9/2.0/2.5 TDI",
+    "detection_method": "CheckMap + Dynamic patterns",
+    "status": "production",
+    "enabled": true,
+    "map_categories": [
+      "Turbo boost pressure",
+      "Smoke limitation",
+      "Start of injection SOI",
+      "Engine torque limiters",
+      "Engine torque request",
+      "Vehicle speed limiters",
+      "Maximum RPM limiter",
+      "EGR",
+      "Torque to IQ Conversion"
+    ],
+    "mappack_export_enabled": true,
+    "mappack_price": 40
+  },
+  {
+    "id": "edc16u31",
+    "name": "EDC16U31",
+    "manufacturer": "Bosch",
+    "family": "EDC16",
+    "processor": "MPC563",
+    "endianness": "Big-Endian",
+    "file_sizes": [
+      "512KB",
+      "1MB"
+    ],
+    "vehicles": "VAG 1.9/2.0/2.5 TDI PD",
+    "detection_method": "CheckMap + Dynamic patterns",
+    "status": "production",
+    "enabled": true,
+    "map_categories": [
+      "Turbo boost pressure",
+      "Smoke limitation",
+      "Start of injection SOI",
+      "Engine torque limiters",
+      "Engine torque request",
+      "Vehicle speed limiters",
+      "Maximum RPM limiter",
+      "EGR",
+      "Torque to IQ Conversion"
+    ],
+    "mappack_export_enabled": true,
+    "mappack_price": 40
+  },
+  {
+    "id": "edc16u34",
+    "name": "EDC16U34",
+    "manufacturer": "Bosch",
+    "family": "EDC16",
+    "processor": "MPC562",
+    "endianness": "Big-Endian",
+    "file_sizes": [
+      "2MB"
+    ],
+    "vehicles": "VAG 2.0 TDI CR (transversal)",
+    "detection_method": "CheckMap + Dynamic patterns",
+    "status": "production",
+    "enabled": true,
+    "map_categories": [
+      "Turbo boost pressure",
+      "Smoke limitation",
+      "Start of injection SOI",
+      "Engine torque limiters",
+      "Engine torque request",
+      "Vehicle speed limiters",
+      "Maximum RPM limiter",
+      "EGR",
+      "Torque to IQ Conversion",
+      "Fuel quantity"
+    ],
+    "mappack_export_enabled": true,
+    "mappack_price": 40
+  }
+]
