@@ -94,6 +94,12 @@ ZedSuite is free and always will be. If it saved you time or a WinOLS licence, y
 - **SOL / USDC** (Solana): `AqjSzxi7pBkwcCVkyVxBVLTk9TgPmui71bNgVgNLWrJC`
 - **TRX** (Tron): `TRDgrasP7yaEKcz54r8spbmgZdRBFpNerW`
 
+## ⬇️ Download
+
+Grab the installer from the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest): in the **Assets** section, download the `ZedSuite_x.y.z_x64-setup.exe` file and run it. The app then keeps itself up to date on its own.
+
+ZedSuite requires **Windows 10 or 11**. It is not compatible with older versions of Windows: adapting it to Windows 7 would have required a lot more work as well as two separate installers.
+
 ## 🚀 Getting started (development)
 
 Prerequisites:
