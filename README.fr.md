@@ -96,9 +96,9 @@ ZedSuite est gratuit et le restera. S'il vous a fait gagner du temps ou une lice
 
 ## ⬇️ Téléchargement
 
-Récupérez l'installateur depuis la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest) : dans la section **Assets**, téléchargez le fichier `ZedSuite_x.y.z_x64-setup.exe` et lancez-le. L'application se met ensuite à jour toute seule.
+Récupérez l'installateur depuis la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest) : dans la section **Assets**, téléchargez le fichier `ZedSuite_x.y.z_x64-setup.exe` et lancez-le (sur un Windows 32 bits, prenez `ZedSuite_x.y.z_x86-setup.exe`). L'application se met ensuite à jour toute seule.
 
-ZedSuite demande **Windows 10 ou 11**. L'application n'est pas compatible avec les Windows antérieurs à Windows 10 : l'adapter à Windows 7 aurait demandé encore beaucoup de travail ainsi que deux installateurs séparés.
+ZedSuite demande **Windows 10 ou 11**. L'application n'est pas compatible avec les Windows antérieurs à Windows 10 : l'adapter à Windows 7 aurait demandé encore beaucoup de travail.
 
 ## 🚀 Démarrer (développement)
 

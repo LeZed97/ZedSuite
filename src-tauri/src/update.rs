@@ -7,9 +7,11 @@
 // error (surfaced on the manual button, silent for background checks).
 //
 // Publishing a release = create a GitHub release tagged `vX.Y.Z` with the
-// NSIS installer (`ZedSuite_X.Y.Z_x64-setup.exe`) attached as asset. The
-// updater downloads the first `.exe` asset (preferring one named *setup*)
-// into the temp dir, launches it and exits the app.
+// NSIS installers attached as assets: `ZedSuite_X.Y.Z_x64-setup.exe` AND
+// `ZedSuite_X.Y.Z_x86-setup.exe` (32-bit). Upload the x64 one FIRST: the
+// 1.0.0 x64 clients shipped with an arch-blind picker that takes the first
+// *setup* .exe of the list. The updater downloads the asset matching its
+// own architecture into the temp dir, launches it and exits the app.
 
 use serde::Serialize;
 use std::io::Write;
@@ -94,18 +96,30 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateInfo, Strin
         .map(String::from)
         .unwrap_or(releases_page);
 
-    // Pick the installer asset: first .exe, preferring one named *setup*
+    // Pick the installer asset for THIS build's architecture — an x86 app
+    // must NEVER launch the x64 installer (it cannot run on 32-bit Windows):
+    //  - build x64 : ignore les assets x86, sinon logique historique
+    //    (premier .exe, préférence *setup*) ;
+    //  - build x86 : uniquement un .exe marqué x86/i686.
+    let want_x86 = cfg!(target_arch = "x86");
     let mut download_url: Option<String> = None;
     if let Some(assets) = json["assets"].as_array() {
         for asset in assets {
             let name = asset["name"].as_str().unwrap_or("").to_lowercase();
-            if name.ends_with(".exe") {
-                if download_url.is_none() || name.contains("setup") {
-                    download_url = asset["browser_download_url"].as_str().map(String::from);
-                }
-                if name.contains("setup") {
-                    break;
-                }
+            if !name.ends_with(".exe") {
+                continue;
+            }
+            let is_x64 =
+                name.contains("x64") || name.contains("x86_64") || name.contains("amd64");
+            let is_x86 = !is_x64 && (name.contains("x86") || name.contains("i686"));
+            if want_x86 != is_x86 {
+                continue;
+            }
+            if download_url.is_none() || name.contains("setup") {
+                download_url = asset["browser_download_url"].as_str().map(String::from);
+            }
+            if name.contains("setup") {
+                break;
             }
         }
     }
