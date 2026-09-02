@@ -3695,8 +3695,11 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         }
       }
     }
-    return `${mapData.address}|${rows}x${cols}|${xs}|${ys}|${hash.toString(16)}`;
-  }, [mapData.address, displayXAxisLabels, displayYAxisLabels, displayMapValues, onPlot3DDataChange]);
+    // theme et disableGraphColors changent la colorscale du plot3DData émis :
+    // sans eux dans la signature, la Preview gardait l'ancienne surface
+    // colorée quand on basculait « Disable 3D colors » (ou de thème).
+    return `${mapData.address}|${rows}x${cols}|${xs}|${ys}|${hash.toString(16)}|${theme}|${disableGraphColors ? 1 : 0}`;
+  }, [mapData.address, displayXAxisLabels, displayYAxisLabels, displayMapValues, onPlot3DDataChange, theme, disableGraphColors]);
 
   useEffect(() => {
     if (!onPlot3DDataChange) return;
