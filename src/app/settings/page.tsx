@@ -372,13 +372,16 @@ function SettingsContent() {
                   value={language}
                   minWidth={140}
                   onChange={(value) => {
-                    const newLang = value as "EN" | "FR";
+                    const newLang = value as "EN" | "FR" | "ES" | "IT" | "DE";
                     updateSettings({ language: newLang });
                     void saveSettings({ ...settings, language: newLang });
                   }}
                   options={[
                     { value: "EN", label: "English" },
                     { value: "FR", label: "Français" },
+                    { value: "ES", label: "Español" },
+                    { value: "IT", label: "Italiano" },
+                    { value: "DE", label: "Deutsch" },
                   ]}
                 />
               </div>

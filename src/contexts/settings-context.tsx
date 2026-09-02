@@ -23,10 +23,11 @@ export interface UserSettings {
 const detectBrowserLanguage = (): string => {
   if (typeof window === "undefined") return "EN";
   const browserLang = navigator.language || (navigator as any).userLanguage || "en";
-  // Check if browser language starts with "fr"
-  if (browserLang.toLowerCase().startsWith("fr")) {
-    return "FR";
-  }
+  const lang = browserLang.toLowerCase();
+  if (lang.startsWith("fr")) return "FR";
+  if (lang.startsWith("es")) return "ES";
+  if (lang.startsWith("it")) return "IT";
+  if (lang.startsWith("de")) return "DE";
   return "EN";
 };
 

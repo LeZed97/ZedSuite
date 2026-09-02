@@ -1,6 +1,6 @@
 [package]
 name = "zedsuite"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "ZedSuite - Open source ECU map editor (Bosch EDC15/EDC16)"
 authors = ["ZedSuite contributors"]

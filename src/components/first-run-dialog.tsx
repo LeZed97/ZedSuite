@@ -30,7 +30,7 @@ export function FirstRunDialog({ onDone }: FirstRunDialogProps) {
   ];
 
   // Language switches live so the dialog itself changes language
-  const setLanguage = (lang: "EN" | "FR") => {
+  const setLanguage = (lang: "EN" | "FR" | "ES" | "IT" | "DE") => {
     updateSettings({ language: lang });
   };
 
@@ -79,12 +79,16 @@ export function FirstRunDialog({ onDone }: FirstRunDialogProps) {
           {/* Langue */}
           <div className="mb-5">
             <div className="font-medium text-white mb-2">{t.firstRun.language}</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               {([
                 { id: "EN" as const, label: "English" },
                 { id: "FR" as const, label: "Français" },
+                { id: "ES" as const, label: "Español" },
+                { id: "IT" as const, label: "Italiano" },
+                { id: "DE" as const, label: "Deutsch" },
               ]).map((opt) => {
-                const selected = (settings.language === "FR" ? "FR" : "EN") === opt.id;
+                const known = ["EN", "FR", "ES", "IT", "DE"];
+                const selected = (known.includes(settings.language) ? settings.language : "EN") === opt.id;
                 return (
                   <button
                     key={opt.id}

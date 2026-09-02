@@ -21,6 +21,10 @@ export interface UpdateInfo {
 const LS_LAST_CHECK = "updateLastCheck";
 const LS_SKIPPED = "updateSkippedVersion";
 const LS_FIRST_RUN = "zedsuiteFirstRunDone";
+// Version proposée mais ni installée ni passée (« La prochaine fois ») :
+// la fenêtre doit être RE-proposée à chaque démarrage de l'app, sans
+// attendre la cadence de 24 h.
+const LS_PENDING = "updatePendingVersion";
 
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // once a day
 
@@ -55,6 +59,15 @@ export function getSkippedVersion(): string {
 
 export function skipVersion(version: string): void {
   localStorage.setItem(LS_SKIPPED, version);
+  clearPendingUpdate();
+}
+
+export function getPendingUpdate(): string {
+  return localStorage.getItem(LS_PENDING) || "";
+}
+
+export function clearPendingUpdate(): void {
+  localStorage.removeItem(LS_PENDING);
 }
 
 export function isFirstRun(): boolean {
@@ -76,8 +89,13 @@ export async function backgroundUpdateCheck(): Promise<UpdateInfo | null> {
     const info = await checkForUpdate();
     markUpdateCheckDone();
     if (info.update_available && info.latest_version !== getSkippedVersion()) {
+      // « La prochaine fois » : mémoriser la version en attente pour que le
+      // prochain DÉMARRAGE re-propose la fenêtre sans attendre 24 h.
+      localStorage.setItem(LS_PENDING, info.latest_version);
       return info;
     }
+    // À jour (ou version passée) : plus rien en attente
+    clearPendingUpdate();
     return null;
   } catch {
     // Silent: next attempt in 24h (do NOT mark the check as done so a

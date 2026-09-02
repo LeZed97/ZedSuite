@@ -13,6 +13,8 @@ import { FirstRunDialog } from "@/components/first-run-dialog";
 import { UpdateDialog } from "@/components/update-dialog";
 import {
   backgroundUpdateCheck,
+  getPendingUpdate,
+  getSkippedVersion,
   isFirstRun,
   markFirstRunDone,
   shouldAutoCheck,
@@ -30,13 +32,17 @@ export function AppBootstrap() {
     if (info) setUpdateInfo(info);
   }, []);
 
-  // Startup: first-run dialog, or daily background check
+  // Startup: first-run dialog, or daily background check. Une mise à jour
+  // proposée mais laissée « à la prochaine fois » est re-vérifiée À CHAQUE
+  // démarrage (sans attendre la cadence de 24 h) tant qu'elle n'est ni
+  // installée ni passée.
   useEffect(() => {
     if (isFirstRun()) {
       setShowFirstRun(true);
       return;
     }
-    if (shouldAutoCheck()) {
+    const pending = getPendingUpdate();
+    if (shouldAutoCheck() || (pending && pending !== getSkippedVersion())) {
       void runBackgroundCheck();
     }
   }, [runBackgroundCheck]);
