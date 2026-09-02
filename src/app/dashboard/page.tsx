@@ -17,6 +17,7 @@ import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings } from "@/contexts/settings-context";
+import { getCustomWallpaper, subscribeCustomWallpaper } from "@/lib/custom-wallpaper";
 import {
   Upload,
   FileText,
@@ -441,27 +442,42 @@ function DashboardContent() {
   const { settings, updateSettings, saveSettings } = useSettings();
   const { theme } = useTheme();
 
+  // Image personnalisée (lib/custom-wallpaper) — suivie en direct pour que
+  // le choix fait dans les Paramètres s'applique sans recharger la page
+  const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
+  useEffect(() => {
+    setCustomWallpaper(getCustomWallpaper("dashboard"));
+    return subscribeCustomWallpaper("dashboard", setCustomWallpaper);
+  }, []);
+
   // Thème + fond d'écran. Choix manuel dans les Paramètres, sinon automatique
   // selon le thème (défaut → traits animés, clair → blanc, OLED → noir).
   // Contraintes : thème clair → fond blanc uniquement ; OLED → jamais blanc.
+  // Le fond PERSONNALISÉ (image utilisateur) est utilisable avec TOUS les
+  // thèmes ; sans image enregistrée il retombe sur l'automatique.
   const stored = settings.dashboardWallpaper;
   let wallpaper: string =
-    theme === "light"
-      ? (stored === "lines-light" ? "lines-light" : "white")
-      : stored && stored !== "auto"
-        ? stored
-        : theme === "oled"
-          ? "black"
-          : "lines";
+    stored === "custom" && customWallpaper
+      ? "custom"
+      : theme === "light"
+        ? (stored === "lines-light" ? "lines-light" : "white")
+        : stored && stored !== "auto"
+          ? stored
+          : theme === "oled"
+            ? "black"
+            : "lines";
   // Le blanc et les traits clairs n'existent que sur le thème clair
-  if (theme !== "light" && (wallpaper === "white" || wallpaper === "lines-light")) {
-    wallpaper = theme === "oled" ? "black" : "lines";
-  }
-  if (!["lines", "lines-light", "editor", "white", "black"].includes(wallpaper)) {
-    wallpaper = theme === "oled" ? "black" : "lines";
+  if (wallpaper !== "custom") {
+    if (theme !== "light" && (wallpaper === "white" || wallpaper === "lines-light")) {
+      wallpaper = theme === "oled" ? "black" : "lines";
+    }
+    if (!["lines", "lines-light", "editor", "white", "black"].includes(wallpaper)) {
+      wallpaper = theme === "oled" ? "black" : "lines";
+    }
   }
   // Les textes s'adaptent à la luminosité du fond effectif (pas au thème seul)
-  const isLight = wallpaper === "white" || wallpaper === "lines-light";
+  // — sur une image personnalisée, on suit le thème choisi.
+  const isLight = wallpaper === "custom" ? theme === "light" : (wallpaper === "white" || wallpaper === "lines-light");
   const pageBg = wallpaper === "black" ? "#000000" : isLight ? "#eef1f6" : "#0a0b0f";
 
   useEffect(() => {
@@ -773,6 +789,26 @@ function DashboardContent() {
             opacity: 0.03,
             backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`
           }} />
+        </>
+      )}
+      {/* Image personnalisée de l'utilisateur : plein écran en cover, avec un
+          léger voile suivant le thème pour garder les panneaux lisibles */}
+      {wallpaper === "custom" && customWallpaper && (
+        <>
+          <div
+            aria-hidden
+            className="fixed inset-0 z-0 pointer-events-none"
+            style={{
+              backgroundImage: `url(${customWallpaper})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          />
+          <div
+            aria-hidden
+            className="fixed inset-0 z-0 pointer-events-none"
+            style={{ backgroundColor: isLight ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.35)" }}
+          />
         </>
       )}
       {/* Fond d'écran par défaut de l'éditeur : trois halos flous + grain */}

@@ -9,10 +9,12 @@ export interface UserSettings {
   autoSave: boolean;
   autoSaveInterval: string;
   language: string;
-  /** Dashboard wallpaper: 'auto' follows the theme, or force one */
-  dashboardWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black";
+  /** Dashboard wallpaper: 'auto' follows the theme, or force one.
+   *  'custom' = image choisie par l'utilisateur (lib/custom-wallpaper),
+   *  utilisable avec TOUS les thèmes. */
+  dashboardWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black" | "custom";
   /** Editor wallpaper: same options and rules as the dashboard */
-  editorWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black";
+  editorWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black" | "custom";
   /** Nom de l'entreprise de reprogrammation — affiché sur les PDF exportés */
   companyName: string;
 }
@@ -21,10 +23,11 @@ export interface UserSettings {
 const detectBrowserLanguage = (): string => {
   if (typeof window === "undefined") return "EN";
   const browserLang = navigator.language || (navigator as any).userLanguage || "en";
-  // Check if browser language starts with "fr"
-  if (browserLang.toLowerCase().startsWith("fr")) {
-    return "FR";
-  }
+  const lang = browserLang.toLowerCase();
+  if (lang.startsWith("fr")) return "FR";
+  if (lang.startsWith("es")) return "ES";
+  if (lang.startsWith("it")) return "IT";
+  if (lang.startsWith("de")) return "DE";
   return "EN";
 };
 

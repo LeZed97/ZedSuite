@@ -53,6 +53,7 @@ import { saveBytesToFile } from "@/lib/local/save-file";
 import { identifyEcu, bytesToBase64, detectorVersion } from "@/lib/local/detector";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { useSettings } from "@/contexts/settings-context";
+import { getCustomWallpaper, subscribeCustomWallpaper } from "@/lib/custom-wallpaper";
 import { useI18n } from "@/contexts/i18n-context";
 import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
@@ -1488,20 +1489,32 @@ function EditorPageContent() {
   // Fond d'écran de l'éditeur — mêmes options et règles que le dashboard :
   // blanc réservé au thème clair, automatique = look natif du thème
   // (défaut → halos de l'éditeur, clair → blanc, OLED → noir)
+  // Image personnalisée (lib/custom-wallpaper) — suivie en direct, utilisable
+  // avec TOUS les thèmes ; sans image enregistrée, repli automatique.
+  const [customEditorWallpaper, setCustomEditorWallpaper] = useState<string | null>(null);
+  useEffect(() => {
+    setCustomEditorWallpaper(getCustomWallpaper("editor"));
+    return subscribeCustomWallpaper("editor", setCustomEditorWallpaper);
+  }, []);
+
   const storedEditorWallpaper = settings.editorWallpaper;
   let editorWallpaper: string =
-    theme === "light"
-      ? (storedEditorWallpaper === "lines-light" ? "lines-light" : "white")
-      : storedEditorWallpaper && storedEditorWallpaper !== "auto"
-        ? storedEditorWallpaper
-        : theme === "oled"
-          ? "black"
-          : "editor";
-  if (theme !== "light" && (editorWallpaper === "white" || editorWallpaper === "lines-light")) {
-    editorWallpaper = theme === "oled" ? "black" : "editor";
-  }
-  if (!["lines", "lines-light", "editor", "white", "black"].includes(editorWallpaper)) {
-    editorWallpaper = theme === "oled" ? "black" : "editor";
+    storedEditorWallpaper === "custom" && customEditorWallpaper
+      ? "custom"
+      : theme === "light"
+        ? (storedEditorWallpaper === "lines-light" ? "lines-light" : "white")
+        : storedEditorWallpaper && storedEditorWallpaper !== "auto"
+          ? storedEditorWallpaper
+          : theme === "oled"
+            ? "black"
+            : "editor";
+  if (editorWallpaper !== "custom") {
+    if (theme !== "light" && (editorWallpaper === "white" || editorWallpaper === "lines-light")) {
+      editorWallpaper = theme === "oled" ? "black" : "editor";
+    }
+    if (!["lines", "lines-light", "editor", "white", "black"].includes(editorWallpaper)) {
+      editorWallpaper = theme === "oled" ? "black" : "editor";
+    }
   }
 
   const getBackgroundColor = () => {
@@ -1520,7 +1533,8 @@ function EditorPageContent() {
   // Un fond d'écran explicitement choisi en OLED doit rester visible :
   // les surfaces passent en translucide (sinon noir opaque = fond invisible)
   const oledShowsWallpaper =
-    theme === 'oled' && (editorWallpaper === 'lines' || editorWallpaper === 'editor');
+    theme === 'oled' &&
+    (editorWallpaper === 'lines' || editorWallpaper === 'editor' || editorWallpaper === 'custom');
 
   // Translucent sidebar surface; the ambient halos glow through it.
   // OLED stays near-opaque dark to preserve the true-black look.
@@ -5384,6 +5398,26 @@ function EditorPageContent() {
             parallaxStrength={0.15}
           />
         </div>
+      )}
+      {/* Image personnalisée de l'utilisateur : plein écran en cover, léger
+          voile suivant le thème pour garder fenêtres et panneaux lisibles */}
+      {editorWallpaper === 'custom' && customEditorWallpaper && (
+        <>
+          <div
+            aria-hidden
+            className="absolute inset-0 z-0 pointer-events-none"
+            style={{
+              backgroundImage: `url(${customEditorWallpaper})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+          <div
+            aria-hidden
+            className="absolute inset-0 z-0 pointer-events-none"
+            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.35)' }}
+          />
+        </>
       )}
       {/* Film grain for glass tactility (off on pure black) */}
       {editorWallpaper !== 'black' && (

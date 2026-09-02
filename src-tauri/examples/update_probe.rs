@@ -3,7 +3,7 @@
 //! d'asset et le même téléchargement streamé que `check_for_update` /
 //! `download_and_install_update` — mais n'exécute PAS l'installeur.
 //!
-//! Usage : cargo run --example update_probe -- <owner/repo> [version_courante]
+//! Usage : cargo run --example update_probe -- <owner/repo> [version_courante] [x64|x86]
 
 use std::io::Write;
 
@@ -32,6 +32,12 @@ async fn run() {
     let args: Vec<String> = std::env::args().collect();
     let repo = args.get(1).cloned().unwrap_or_else(|| "LeZed97/ZedSuite".to_string());
     let current_version = args.get(2).cloned().unwrap_or_else(|| "1.0.0".to_string());
+    // Simule l'architecture du client (défaut : celle de la compilation)
+    let want_x86 = match args.get(3).map(String::as_str) {
+        Some("x86") => true,
+        Some("x64") => false,
+        _ => cfg!(target_arch = "x86"),
+    };
 
     // Auto-tests parse_version (mêmes règles que update.rs)
     assert_eq!(parse_version("v1.0.0"), (1, 0, 0));
@@ -69,23 +75,31 @@ async fn run() {
     let release_notes = json["body"].as_str().unwrap_or_default();
     let release_url = json["html_url"].as_str().unwrap_or_default();
 
-    // Choix de l'asset : même boucle que update.rs
+    // Choix de l'asset : même boucle (par architecture) que update.rs
     let mut download_url: Option<String> = None;
     let mut picked_name = String::new();
     if let Some(assets) = json["assets"].as_array() {
         for asset in assets {
             let name = asset["name"].as_str().unwrap_or("").to_lowercase();
-            if name.ends_with(".exe") {
-                if download_url.is_none() || name.contains("setup") {
-                    download_url = asset["browser_download_url"].as_str().map(String::from);
-                    picked_name = name.clone();
-                }
-                if name.contains("setup") {
-                    break;
-                }
+            if !name.ends_with(".exe") {
+                continue;
+            }
+            let is_x64 =
+                name.contains("x64") || name.contains("x86_64") || name.contains("amd64");
+            let is_x86 = !is_x64 && (name.contains("x86") || name.contains("i686"));
+            if want_x86 != is_x86 {
+                continue;
+            }
+            if download_url.is_none() || name.contains("setup") {
+                download_url = asset["browser_download_url"].as_str().map(String::from);
+                picked_name = name.clone();
+            }
+            if name.contains("setup") {
+                break;
             }
         }
     }
+    println!("architecture simulée: {}", if want_x86 { "x86" } else { "x64" });
 
     let update_available = parse_version(&latest_version) > parse_version(&current_version);
     println!("tag: {latest_version} | courante: {current_version} | update_available: {update_available}");

@@ -4,8 +4,9 @@ import { createContext, useContext, ReactNode, useMemo } from "react";
 import { useSettings } from "./settings-context";
 import { translations } from "@/i18n/translations";
 
-type Language = "EN" | "FR";
+type Language = "EN" | "FR" | "ES" | "IT" | "DE";
 type TranslationType = (typeof translations)[Language];
+const SUPPORTED: Language[] = ["EN", "FR", "ES", "IT", "DE"];
 
 interface I18nContextType {
   t: TranslationType;
@@ -17,7 +18,9 @@ const I18nContext = createContext<I18nContextType | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
 
-  const language: Language = settings.language === "FR" ? "FR" : "EN";
+  const language: Language = SUPPORTED.includes(settings.language as Language)
+    ? (settings.language as Language)
+    : "EN";
 
   // Use language as the dependency, not t, because translations[language] always returns the same object reference
   const value = useMemo(() => ({
