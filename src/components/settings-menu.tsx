@@ -1,7 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import { X } from "lucide-react";
 import { StyledSelect } from "@/components/styled-select";
+import {
+  clearCustomWallpaper,
+  getCustomWallpaper,
+  setCustomWallpaperFromFile,
+} from "@/lib/custom-wallpaper";
 import { useTheme } from "@/contexts/theme-context";
 import { useSettings, UserSettings } from "@/contexts/settings-context";
 import { useI18n } from "@/contexts/i18n-context";
@@ -34,19 +40,45 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
   };
 
   // ── Fond d'écran : mêmes règles que le dashboard ──────────────────
+  // « Image personnalisée » est disponible avec TOUS les thèmes.
   const wallpaperChoices: { value: Wallpaper; label: string }[] =
     theme === "light"
       ? [
           { value: "auto", label: t.settingsPage.wallpaperAuto },
           { value: "white", label: t.settingsPage.wallpaperWhite },
           { value: "lines-light", label: t.settingsPage.wallpaperLinesLight },
+          { value: "custom", label: t.settingsPage.wallpaperCustom },
         ]
       : [
           { value: "auto", label: t.settingsPage.wallpaperAuto },
           { value: "lines", label: t.settingsPage.wallpaperLines },
           { value: "editor", label: t.settingsPage.wallpaperEditor },
           { value: "black", label: t.settingsPage.wallpaperBlack },
+          { value: "custom", label: t.settingsPage.wallpaperCustom },
         ];
+
+  // Sélecteur de fichier pour l'image personnalisée (fond de l'éditeur)
+  const wallpaperFileRef = useRef<HTMLInputElement>(null);
+  const handleWallpaperChange = (value: Wallpaper) => {
+    // Première sélection de « Image personnalisée » sans image enregistrée :
+    // ouvrir le sélecteur ; le réglage n'est appliqué qu'après un choix.
+    if (value === "custom" && !getCustomWallpaper("editor")) {
+      wallpaperFileRef.current?.click();
+      return;
+    }
+    void apply({ editorWallpaper: value });
+  };
+  const handleWallpaperFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      await setCustomWallpaperFromFile("editor", file);
+      void apply({ editorWallpaper: "custom" });
+    } catch {
+      // image illisible ou stockage plein : on ne change rien
+    }
+  };
 
   // Changement de thème : appliqué direct ; si le fond mémorisé devient
   // invalide pour ce thème, repli immédiat sur Automatique
@@ -54,8 +86,8 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
     setTheme(th);
     const valid =
       th === "light"
-        ? ["auto", "white", "lines-light"]
-        : ["auto", "lines", "editor", "black"];
+        ? ["auto", "white", "lines-light", "custom"]
+        : ["auto", "lines", "editor", "black", "custom"];
     if (!valid.includes(settings.editorWallpaper)) {
       void apply({ editorWallpaper: "auto" });
     }
@@ -187,12 +219,39 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
                           appearance="auto"
                           id="editor-wallpaper"
                           value={settings.editorWallpaper}
-                          onChange={(value) => void apply({ editorWallpaper: value as Wallpaper })}
+                          onChange={(value) => handleWallpaperChange(value as Wallpaper)}
                           minWidth={170}
                           options={wallpaperChoices.map((c) => ({ value: c.value, label: c.label }))}
                         />
                       </div>
                     </div>
+                    {/* Image personnalisée active : changer / retirer */}
+                    {settings.editorWallpaper === "custom" && (
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${menuLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+                          onClick={() => wallpaperFileRef.current?.click()}
+                        >
+                          {t.settingsPage.wallpaperCustomChange}
+                        </button>
+                        <button
+                          className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${menuLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+                          onClick={() => {
+                            clearCustomWallpaper("editor");
+                            void apply({ editorWallpaper: "auto" });
+                          }}
+                        >
+                          {t.settingsPage.wallpaperCustomRemove}
+                        </button>
+                      </div>
+                    )}
+                    <input
+                      ref={wallpaperFileRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => void handleWallpaperFile(e)}
+                    />
                   </div>
 
                   {/* EasyView Default */}

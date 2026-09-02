@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Bell, LayoutDashboard, Check, RefreshCw } from "lucide-react";
@@ -17,6 +17,11 @@ import {
   UPDATE_AVAILABLE_EVENT,
 } from "@/lib/update";
 import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
+import {
+  clearCustomWallpaper,
+  getCustomWallpaper,
+  setCustomWallpaperFromFile,
+} from "@/lib/custom-wallpaper";
 
 type Wallpaper = UserSettings["dashboardWallpaper"];
 
@@ -110,14 +115,32 @@ function SettingsContent() {
     { id: "editor", label: t.settingsPage.wallpaperEditor },
     { id: "white", label: t.settingsPage.wallpaperWhite },
     { id: "black", label: t.settingsPage.wallpaperBlack },
+    { id: "custom", label: t.settingsPage.wallpaperCustom },
   ];
 
   // Règles thème/fond (identiques dashboard et éditeur) : le blanc n'est
-  // disponible QUE sur le thème clair ; sur clair, seuls Auto et Blanc
+  // disponible QUE sur le thème clair ; sur clair, seuls Auto et Blanc.
+  // L'image personnalisée est disponible avec TOUS les thèmes.
   const isWallpaperDisabled = (scopeTheme: Theme, id: Wallpaper) =>
-    id === "white" || id === "lines-light"
-      ? scopeTheme !== "light"
-      : scopeTheme === "light" && id !== "auto";
+    id === "custom"
+      ? false
+      : id === "white" || id === "lines-light"
+        ? scopeTheme !== "light"
+        : scopeTheme === "light" && id !== "auto";
+
+  // Sélecteur de fichier pour l'image personnalisée du dashboard
+  const wallpaperFileRef = useRef<HTMLInputElement>(null);
+  const handleCustomWallpaperFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      await setCustomWallpaperFromFile("dashboard", file);
+      void setWallpaper("dashboardWallpaper", "custom");
+    } catch {
+      // image illisible ou stockage plein : on ne change rien
+    }
+  };
 
   // Indicateur de sélection : pastille dégradé rouge posée sur le coin
   // supérieur droit du bouton — jamais dans la zone de texte, donc aucun
@@ -157,8 +180,8 @@ function SettingsContent() {
     setDashboardTheme(th);
     const valid =
       th === "light"
-        ? ["auto", "white", "lines-light"]
-        : ["auto", "lines", "editor", "black"];
+        ? ["auto", "white", "lines-light", "custom"]
+        : ["auto", "lines", "editor", "black", "custom"];
     if (!valid.includes(settings.dashboardWallpaper)) {
       void setWallpaper("dashboardWallpaper", "auto");
     }
@@ -216,7 +239,16 @@ function SettingsContent() {
           return (
             <button
               key={opt.id}
-              onClick={() => !disabled && setWallpaper(wallpaperKey, opt.id)}
+              onClick={() => {
+                if (disabled) return;
+                // « Image personnalisée » sans image enregistrée : ouvrir le
+                // sélecteur ; le réglage n'est appliqué qu'après un choix.
+                if (opt.id === "custom" && !getCustomWallpaper("dashboard")) {
+                  wallpaperFileRef.current?.click();
+                  return;
+                }
+                void setWallpaper(wallpaperKey, opt.id);
+              }}
               disabled={disabled}
               className={`relative rounded-xl border px-3 py-2.5 transition-all text-center ${
                 disabled
@@ -235,6 +267,33 @@ function SettingsContent() {
           );
         })}
       </div>
+      {/* Image personnalisée active : changer / retirer */}
+      {settings[wallpaperKey] === "custom" && (
+        <div className="flex gap-2 mt-3">
+          <button
+            className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${isLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+            onClick={() => wallpaperFileRef.current?.click()}
+          >
+            {t.settingsPage.wallpaperCustomChange}
+          </button>
+          <button
+            className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${isLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+            onClick={() => {
+              clearCustomWallpaper("dashboard");
+              void setWallpaper(wallpaperKey, "auto");
+            }}
+          >
+            {t.settingsPage.wallpaperCustomRemove}
+          </button>
+        </div>
+      )}
+      <input
+        ref={wallpaperFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => void handleCustomWallpaperFile(e)}
+      />
     </div>
   );
 

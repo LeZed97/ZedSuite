@@ -9,10 +9,12 @@ export interface UserSettings {
   autoSave: boolean;
   autoSaveInterval: string;
   language: string;
-  /** Dashboard wallpaper: 'auto' follows the theme, or force one */
-  dashboardWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black";
+  /** Dashboard wallpaper: 'auto' follows the theme, or force one.
+   *  'custom' = image choisie par l'utilisateur (lib/custom-wallpaper),
+   *  utilisable avec TOUS les thèmes. */
+  dashboardWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black" | "custom";
   /** Editor wallpaper: same options and rules as the dashboard */
-  editorWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black";
+  editorWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black" | "custom";
   /** Nom de l'entreprise de reprogrammation — affiché sur les PDF exportés */
   companyName: string;
 }
