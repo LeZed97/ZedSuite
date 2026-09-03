@@ -196,8 +196,12 @@ impl EDC15PDetector {
             if let Some(ref name) = map.name {
                 let lower = name.to_lowercase();
 
-                // Start of Injection
-                if lower.contains("start of injection") || lower.contains("soi") {
+                // BIP (injecteurs-pompe) : dossier Injection system, comme sur EDC16
+                if lower.starts_with("bip") {
+                    map.category = Some("Injection system".to_string());
+                }
+                // Start of Injection (dont « SOI selector »)
+                else if lower.contains("start of injection") || lower.contains("soi") {
                     map.category = Some("Start of injection".to_string());
                 }
                 // Injector duration / Fuel
@@ -968,6 +972,29 @@ impl EDC15PDetector {
                         }
                     }
                     
+                    // « SOI selector » : le sélecteur de température lui-même
+                    // (1×10, K×10 → °C), listé par WinOLS/EDCSuite et demandé
+                    // par les utilisateurs. Adresse = les valeurs de l'axe C5.
+                    {
+                        let sel_addr = (t + 4) as u32;
+                        maps.retain(|m| m.address != sel_addr);
+                        detected_addresses.remove(&sel_addr);
+                        let mut sel = DetectedMap::new(
+                            sel_addr,
+                            SOI_NUM_MAPS * 2,
+                            MapDimensions::TwoDimensional { rows: 1, cols: SOI_NUM_MAPS },
+                            DataType::UInt16,
+                        );
+                        sel.name = Some("SOI selector".to_string());
+                        sel.description = Some("SOI map selector: coolant temperature thresholds (°C)".to_string());
+                        sel.unit = Some("°C".to_string());
+                        sel.correction_factor = Some(0.1);
+                        sel.offset = Some(-273.1);
+                        sel.confidence = 0.95;
+                        detected_addresses.insert(sel_addr);
+                        maps.push(sel);
+                    }
+
                     // Create 10 SOI maps with their temperatures
                         for i in 0..SOI_NUM_MAPS {
                             let map_addr = (first_map_addr + (i * SOI_MAP_SIZE)) as u32;
@@ -1443,26 +1470,65 @@ impl EDC15PDetector {
             if let Some(found_offset) = self.find_sequence_exact(data, offset, &pattern) {
                 let bip_temp_address = (found_offset + 22) as u32;
                 let x_axis_address = (found_offset + 2) as u32;
-                
-                if !detected_addresses.contains(&bip_temp_address) {
+
+                // Le balayage générique réserve souvent cette adresse avec une
+                // carte sans nom (jetée ensuite) : la carte BIP nommée prend
+                // le dessus — avant, elle était simplement ignorée et aucune
+                // BIP n'apparaissait sur EDC15P.
+                {
+                    maps.retain(|m| m.address != bip_temp_address);
+                    detected_addresses.remove(&bip_temp_address);
                     let mut map = DetectedMap::new(
                         bip_temp_address,
                         20,
                         MapDimensions::TwoDimensional { rows: 1, cols: 10 },
                         DataType::UInt16,
                     );
-                    
+
                     map.name = Some("BIP temperature correction".to_string());
-                    map.subcategory = Some("Other".to_string());
-                    map.description = Some("Crankshaft degrees vs Temperature".to_string());
+                    map.description = Some("BIP correction vs coolant temperature | X: Temperature (°C)".to_string());
+                    // Degrés vilebrequin : brut 273..256 × 0.023437 = 6.4..6.0 °
+                    // (l'ancien 0.000244 donnait 0.07, sans sens physique)
                     map.unit = Some("°".to_string());
                     map.x_axis_address = Some(x_axis_address);
-                    map.y_axis_correction = Some(0.1);
-                    map.y_axis_offset = Some(-273.1);
-                    map.correction_factor = Some(0.000244);
+                    map.x_label = Some("°C".to_string());
+                    map.x_axis_correction = Some(0.1);
+                    map.x_axis_offset = Some(-273.1);
+                    map.correction_factor = Some(0.023437);
                     map.confidence = 0.95;
-                    
+
                     detected_addresses.insert(bip_temp_address);
+                    maps.push(map);
+                }
+
+                // Juste après : « BIP SOI correction » = axe C5 de 7 deltas
+                // SOI signés (±384 brut = ±9 °) + 7 valeurs (polo 0x54680,
+                // golf4 ARL 0x544F8 : même structure sur tous les fichiers P)
+                let soi_axis = found_offset + 22 + 20;
+                if soi_axis + 4 + 28 <= data.len()
+                    && data[soi_axis + 1] == 0xC5
+                    && u16::from_le_bytes([data[soi_axis + 2], data[soi_axis + 3]]) == 7
+                {
+                    let axis_data = (soi_axis + 4) as u32;
+                    let map_addr = (soi_axis + 4 + 14) as u32;
+                    maps.retain(|m| m.address != map_addr);
+                    detected_addresses.remove(&map_addr);
+                    let mut map = DetectedMap::new(
+                        map_addr,
+                        14,
+                        MapDimensions::TwoDimensional { rows: 1, cols: 7 },
+                        DataType::Int16,
+                    );
+                    map.name = Some("BIP SOI correction".to_string());
+                    map.description = Some("BIP correction vs SOI delta | X: SOI delta (°)".to_string());
+                    map.unit = Some("°".to_string());
+                    map.x_axis_address = Some(axis_data);
+                    map.x_label = Some("°".to_string());
+                    map.x_axis_correction = Some(0.023437);
+                    map.x_axis_offset = Some(0.0);
+                    map.correction_factor = Some(0.023437);
+                    map.confidence = 0.9;
+                    detected_addresses.insert(map_addr);
                     maps.push(map);
                 }
                 

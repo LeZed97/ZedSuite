@@ -2104,6 +2104,31 @@ impl EDC15VMDetector {
                 detected_addresses.remove(&map_addr);
             }
 
+            // « SOI selector » : le sélecteur de température lui-même (1×N,
+            // K×10 → °C), demandé par les utilisateurs (WinOLS/EDCSuite le
+            // listent). Adresse = les valeurs de l'axe C4/C5.
+            {
+                let sel_addr = (t + 4) as u32;
+                maps.retain(|m| m.address != sel_addr);
+                detected_addresses.remove(&sel_addr);
+                let mut sel = DetectedMap::new(
+                    sel_addr,
+                    axis_len * 2,
+                    MapDimensions::TwoDimensional { rows: 1, cols: axis_len },
+                    DataType::UInt16,
+                );
+                sel.name = Some("SOI selector".to_string());
+                sel.category = Some("Start of injection".to_string());
+                sel.description = Some("SOI map selector: coolant temperature thresholds (°C)".to_string());
+                sel.unit = Some("°C".to_string());
+                sel.correction_factor = Some(0.1);
+                sel.offset = Some(-273.1);
+                sel.confidence = 0.95;
+                sel.is_little_endian = Some(true);
+                detected_addresses.insert(sel_addr);
+                maps.push(sel);
+            }
+
             for i in 0..axis_len {
                 let map_addr = (first_map_addr + i * SOI_MAP_SIZE) as u32;
                 // Int16 : l'angle SOI passe négatif après le PMH — en non

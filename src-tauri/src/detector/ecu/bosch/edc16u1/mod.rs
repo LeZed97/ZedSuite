@@ -601,6 +601,20 @@ impl EDC16U1Detector {
             }
         }
 
+
+        // ========== PHASE 0.12: Injector BIP correction block ==========
+        // Chained triple (fuel-temp correction 1D×6, basic characteristic
+        // 1D×10, multiple correction 10x10) — porté depuis l'U31.
+        let bip_maps = self.detect_bip_maps(data, &detected_addresses);
+        for map in bip_maps {
+            let range = (map.address, map.address + map.size as u32);
+            if !self.overlaps(&detected_ranges, range) {
+                detected_addresses.insert(map.address);
+                detected_ranges.insert(range);
+                all_maps.push(map);
+            }
+        }
+
         // ========== PHASE 1: Axis-based detection ==========
         // This finds RPM axes first, then validates adjacent data structures
         let axis_maps = self.detect_all_maps_by_axes(data, scan_start, scan_end, &detected_ranges);
@@ -4860,6 +4874,159 @@ impl EDC16U1Detector {
     }
 
     /// Get data section range for scanning
+    /// Detect the injector BIP correction block — three consecutive
+    /// structures (crafter reference: data at 0x1CD48A / 0x1CD4AC / 0x1CD5BA):
+    ///  1. [00 06][6 fuel temps K×10, increasing][6 factors ~4096]
+    ///     → "BIP Fuel Temp Correction" (1D×6)
+    ///  2. [00 0A][10 rail pressures bar, increasing][10 BIP times, overall decreasing]
+    ///     → "BIP Basic Characteristic" (1D×10)
+    ///  3. [00 0A][10 raw axis, increasing][10 signed axis, increasing][100 factors ~4096]
+    ///     → "BIP Multiple Correction" (10x10)
+    /// Nothing is emitted unless all three parts line up (within 0x40 /
+    /// 0x200 windows) — the chained triple keeps false positives out.
+    pub fn detect_bip_maps(&self, data: &[u8], detected: &HashSet<u32>) -> Vec<DetectedMap> {
+        let mut maps = Vec::new();
+        let read = |o: usize| u16::from_be_bytes([data[o], data[o + 1]]);
+        let read_i = |o: usize| i16::from_be_bytes([data[o], data[o + 1]]);
+        let (scan_start, scan_end) = self.get_data_section_range(data.len());
+        let scan_end = scan_end.min(data.len());
+
+        let mut offset = scan_start;
+        while offset + 26 < scan_end {
+            // ---- Part 1: [00 06] + 6 fuel temps + 6 factors ----
+            if !(data[offset] == 0x00 && data[offset + 1] == 0x06) {
+                offset += 2;
+                continue;
+            }
+            let temps: Vec<u16> = (0..6).map(|i| read(offset + 2 + i * 2)).collect();
+            if !(2000..=3000).contains(&temps[0])
+                || !(2500..=4000).contains(&temps[5])
+                || !temps.windows(2).all(|w| w[0] < w[1])
+            {
+                offset += 2;
+                continue;
+            }
+            let d1 = offset + 14;
+            if d1 + 12 > scan_end {
+                offset += 2;
+                continue;
+            }
+            let f1: Vec<u16> = (0..6).map(|i| read(d1 + i * 2)).collect();
+            if !f1.iter().all(|&v| (3000..=5500).contains(&v)) {
+                offset += 2;
+                continue;
+            }
+            let p1_end = d1 + 12;
+
+            // ---- Part 2 within 0x40: [00 0A] + 10 pressures + 10 times ----
+            let mut part2 = None;
+            let mut p = p1_end;
+            while p + 42 <= scan_end && p < p1_end + 0x40 {
+                if data[p] == 0x00 && data[p + 1] == 0x0A {
+                    let press: Vec<u16> = (0..10).map(|i| read(p + 2 + i * 2)).collect();
+                    let times_start = p + 22;
+                    let times: Vec<u16> = (0..10).map(|i| read(times_start + i * 2)).collect();
+                    if (100..=800).contains(&press[0])
+                        && (600..=2500).contains(&press[9])
+                        && press.windows(2).all(|w| w[0] < w[1])
+                        && times.iter().all(|&v| (200..=4000).contains(&v))
+                        && times[0] > times[9]
+                    {
+                        part2 = Some((p + 2, times_start));
+                        break;
+                    }
+                }
+                p += 2;
+            }
+            let Some((press_axis, d2)) = part2 else { offset += 2; continue; };
+            let p2_end = d2 + 20;
+
+            // ---- Part 3 within 0x200: [00 0A] + axis + signed axis + 100 factors ----
+            let mut part3 = None;
+            let mut q = p2_end;
+            while q + 242 <= scan_end && q < p2_end + 0x200 {
+                if data[q] == 0x00 && data[q + 1] == 0x0A {
+                    let ax1: Vec<u16> = (0..10).map(|i| read(q + 2 + i * 2)).collect();
+                    let ax2: Vec<i16> = (0..10).map(|i| read_i(q + 22 + i * 2)).collect();
+                    let d3 = q + 42;
+                    if ax1[0] <= 1000
+                        && ax1.windows(2).all(|w| w[0] < w[1])
+                        && ax2.windows(2).all(|w| w[0] < w[1])
+                        && (0..100).all(|i| (2000..=6500).contains(&read(d3 + i * 2)))
+                    {
+                        part3 = Some((q + 2, q + 22, d3));
+                        break;
+                    }
+                }
+                q += 2;
+            }
+            let Some((ax1_start, ax2_start, d3)) = part3 else { offset += 2; continue; };
+
+            log::debug!("🎯 [EDC16] Found BIP block: temp corr 0x{:X}, basic 0x{:X}, multiple 0x{:X}",
+                d1, d2, d3);
+
+            if !detected.contains(&(d1 as u32)) {
+                let mut map = DetectedMap::new(
+                    d1 as u32,
+                    12,
+                    MapDimensions::OneDimensional { length: 6 },
+                    DataType::UInt16,
+                );
+                map.name = Some("BIP Fuel Temp Correction".to_string());
+                map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
+                map.unit = Some("-".to_string());
+                map.correction_factor = Some(0.000244140625); // 4096 = 1.0
+                map.confidence = 0.88;
+                map.x_axis_address = Some((offset + 2) as u32);
+                map.x_label = Some("°C".to_string());
+                map.x_axis_correction = Some(0.1);
+                map.x_axis_offset = Some(-273.14);
+                maps.push(map);
+            }
+            if !detected.contains(&(d2 as u32)) {
+                let mut map = DetectedMap::new(
+                    d2 as u32,
+                    20,
+                    MapDimensions::OneDimensional { length: 10 },
+                    DataType::UInt16,
+                );
+                map.name = Some("BIP Basic Characteristic".to_string());
+                map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
+                map.unit = Some("µs".to_string());
+                map.correction_factor = Some(1.0);
+                map.confidence = 0.88;
+                map.x_axis_address = Some(press_axis as u32);
+                map.x_label = Some("bar".to_string());
+                map.x_axis_correction = Some(1.0);
+                maps.push(map);
+            }
+            if !detected.contains(&(d3 as u32)) {
+                let mut map = DetectedMap::new(
+                    d3 as u32,
+                    200,
+                    MapDimensions::TwoDimensional { rows: 10, cols: 10 },
+                    DataType::UInt16,
+                );
+                map.name = Some("BIP Multiple Correction".to_string());
+                map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
+                map.unit = Some("-".to_string());
+                map.correction_factor = Some(0.000244140625); // 4096 = 1.0
+                map.confidence = 0.88;
+                map.y_axis_address = Some(ax1_start as u32);
+                map.y_label = Some("raw".to_string());
+                map.y_axis_correction = Some(1.0);
+                map.x_axis_address = Some(ax2_start as u32);
+                map.x_label = Some("raw".to_string());
+                map.x_axis_correction = Some(1.0);
+                maps.push(map);
+            }
+            offset = d3 + 200;
+        }
+
+        log::debug!("🔧 [EDC16] BIP detection: found {} maps", maps.len());
+        maps
+    }
+
     fn get_data_section_range(&self, file_size: usize) -> (usize, usize) {
         // For EDC16, data is typically in the upper half of the ROM
         // Skip first 0x30000 (code/vectors)
