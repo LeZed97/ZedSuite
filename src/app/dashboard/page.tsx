@@ -791,8 +791,10 @@ function DashboardContent() {
           }} />
         </>
       )}
-      {/* Image personnalisée de l'utilisateur : plein écran en cover, avec un
-          léger voile suivant le thème pour garder les panneaux lisibles */}
+      {/* Image personnalisée de l'utilisateur : plein écran en cover, FLOUTÉE
+          (le dashboard n'a pas les surfaces de verre de l'éditeur, sans flou
+          les tuiles étaient illisibles) + léger voile suivant le thème.
+          scale(1.06) cache la frange claire du flou sur les bords. */}
       {wallpaper === "custom" && customWallpaper && (
         <>
           <div
@@ -802,6 +804,8 @@ function DashboardContent() {
               backgroundImage: `url(${customWallpaper})`,
               backgroundSize: "cover",
               backgroundPosition: "center",
+              filter: "blur(14px)",
+              transform: "scale(1.06)",
             }}
           />
           <div

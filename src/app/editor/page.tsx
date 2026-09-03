@@ -1658,6 +1658,12 @@ function EditorPageContent() {
     setMapSortMode((prev) => {
       const next = prev === "address" ? "name" : prev === "name" ? "name-desc" : "address";
       if (projectName) localStorage.setItem(`mapSortMode:${projectName}`, next);
+      // Mémorisé AVEC le projet (files.map_sort_mode) : retrouvé à la
+      // réouverture et repris par l'export du mappack
+      const fileId = projectData?.fileId;
+      if (fileId) {
+        axios.patch(`/api/files/${fileId}`, { map_sort_mode: next }).catch(() => {});
+      }
       return next;
     });
   };
@@ -3192,6 +3198,12 @@ function EditorPageContent() {
             }
             if (response.data.mappack_exported !== undefined) {
               setMappackExported(response.data.mappack_exported === true);
+            }
+
+            // Tri de la liste des maps mémorisé avec le projet
+            const storedSort = response.data.map_sort_mode;
+            if (storedSort === "address" || storedSort === "name" || storedSort === "name-desc") {
+              setMapSortMode(storedSort);
             }
 
             // Restore per-project map display customizations from the backend

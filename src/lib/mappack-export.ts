@@ -54,6 +54,13 @@ export interface ExportMapData {
 
 type WinolsMap = Record<string, string>;
 
+/** Sous-ensemble des réglages d'affichage par map (fenêtre Propriétés) utile
+ *  à l'export : le miroir de chaque axe. Clé = adresse de la map (string). */
+export interface MappackDisplaySettings {
+  xAxis?: { mirror?: boolean };
+  yAxis?: { mirror?: boolean };
+}
+
 function hexAddr(addr: number | null | undefined): string {
   if (!addr || addr <= 0) return "$0";
   return "$" + Math.trunc(addr).toString(16).toUpperCase();
@@ -113,9 +120,15 @@ function buildFolderNames(maps: ExportMapData[]): Map<string, string> {
 function buildWinolsMap(
   m: ExportMapData,
   ecuType: string,
-  folderName: string
+  folderName: string,
+  ds?: MappackDisplaySettings
 ): WinolsMap {
   const { rows, cols } = mapRowsCols(m);
+  // Miroirs choisis par l'utilisateur : l'axe X s'exporte croissant par
+  // défaut (bBackwards 0), l'axe Y de haut en bas comme l'app (bBackwards 1) ;
+  // un miroir inverse le drapeau correspondant.
+  const xMirror = ds?.xAxis?.mirror === true;
+  const yMirror = ds?.yAxis?.mirror === true;
   const name = m.name || `Map ${hexAddr(m.address)}`;
   const dt = (m.data_type || "").toLowerCase();
   const signed = dt === "int16" || dt === "int8";
@@ -160,7 +173,7 @@ function buildWinolsMap(
     "AxisX.Factor": hasX ? fmtFactor(m.x_axis_correction) : "1.000000",
     "AxisX.Offset": hasX ? fmtOffset(m.x_axis_offset) : "0",
     "AxisX.Radix": "10",
-    "AxisX.bBackwards": "0",
+    "AxisX.bBackwards": xMirror ? "1" : "0",
     "AxisX.bReciprocal": "0",
     "AxisX.bSigned": "0",
     "AxisX.Precision": "0",
@@ -174,7 +187,7 @@ function buildWinolsMap(
     "AxisY.Factor": hasY ? fmtFactor(m.y_axis_correction) : "1.000000",
     "AxisY.Offset": hasY ? fmtOffset(m.y_axis_offset) : "0",
     "AxisY.Radix": "10",
-    "AxisY.bBackwards": "1",
+    "AxisY.bBackwards": yMirror ? "0" : "1",
     "AxisY.bReciprocal": "0",
     "AxisY.bSigned": "0",
     "AxisY.Precision": "0",
@@ -196,7 +209,8 @@ export type MapSortMode = "address" | "name" | "name-desc";
 export function buildWinolsMappack(
   maps: ExportMapData[],
   ecuType: string,
-  sortMode: MapSortMode = "address"
+  sortMode: MapSortMode = "address",
+  displaySettings?: Record<string, MappackDisplaySettings>
 ): { maps: WinolsMap[] } {
   // "limp" (limp-home / recovery) maps are backup limiters, not tuning
   // targets — never exported (same rule as the editor map tree).
@@ -224,7 +238,8 @@ export function buildWinolsMappack(
       buildWinolsMap(
         m,
         ecuType,
-        folders.get((m.category || "Other").trim() || "Other") || "1-Other"
+        folders.get((m.category || "Other").trim() || "Other") || "1-Other",
+        displaySettings?.[String(m.address)]
       )
     ),
   };

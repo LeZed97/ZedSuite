@@ -13,7 +13,7 @@
 
 import * as store from "./store";
 import { detectMaps, SUPPORTED_ECUS } from "./detector";
-import {
+import { type MappackDisplaySettings,
   buildWinolsMappack,
   serializeWinolsMappack,
   mappackFileName,
@@ -150,6 +150,7 @@ export async function handleLocalApi(
         mappack_unlocked: true,
         mappack_exported: false,
         map_display_settings: fileRecord.map_display_settings || null,
+        map_sort_mode: fileRecord.map_sort_mode || null,
       });
     }
 
@@ -235,6 +236,7 @@ export async function handleLocalApi(
         "stage",
         "notes",
         "detection_data",
+        "map_sort_mode",
       ];
       const patch: any = {};
       for (const key of allowed) {
@@ -322,13 +324,23 @@ export async function handleLocalApi(
         return error(400, "no_maps");
       }
 
-      // L'éditeur transmet son tri courant (adresse/nom) pour que le mappack
-      // exporté reprenne l'ordre affiché dans la liste des maps
+      // Tri : celui mémorisé avec le projet, sinon celui transmis par l'éditeur
+      // (adresse/nom) — le mappack reprend l'ordre affiché dans la liste des maps
+      const requested = fileRecord.map_sort_mode || body?.sortMode;
       const sortMode =
-        body?.sortMode === "name" || body?.sortMode === "name-desc"
-          ? body.sortMode
-          : "address";
-      const pack = buildWinolsMappack(detection.maps, fileRecord.ecu_type || "", sortMode);
+        requested === "name" || requested === "name-desc" ? requested : "address";
+      // Réglages d'affichage par map (miroirs d'axes de la fenêtre Propriétés)
+      // mémorisés avec le projet : appliqués au mappack (AxisX/Y.bBackwards)
+      const displaySettings =
+        fileRecord.map_display_settings && typeof fileRecord.map_display_settings === "object"
+          ? (fileRecord.map_display_settings as Record<string, MappackDisplaySettings>)
+          : undefined;
+      const pack = buildWinolsMappack(
+        detection.maps,
+        fileRecord.ecu_type || "",
+        sortMode,
+        displaySettings
+      );
       const bytes = serializeWinolsMappack(pack);
       const fileName = mappackFileName(
         fileRecord.project_name || fileRecord.file_name || "project"
