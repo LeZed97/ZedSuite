@@ -1583,7 +1583,7 @@ impl EDC16U34Detector {
                         map.name = Some("N75 Duty Cycle".to_string());
                         map.category = Some(MapCategory::TurboBoostPressureControl.display_name().to_string());
                         map.unit = Some("%".to_string());
-                        map.correction_factor = Some(0.012207);
+                        map.correction_factor = Some(0.01); // 0.01 (pas 100/8192) : vérifié au banc — « no gear » plates à 7500 brut = 75 %, plateaux à 8000 = 80 %
                         map.y_axis_address = Some(rpm_axis_start as u32);
                         map.x_axis_address = Some(iq_axis_start as u32);
                         map.y_axis_correction = Some(1.0);
@@ -1649,7 +1649,7 @@ impl EDC16U34Detector {
                         map.name = Some("N75 duty cycle (no gear)".to_string());
                         map.category = Some(MapCategory::TurboBoostPressureControl.display_name().to_string());
                         map.unit = Some("%".to_string());
-                        map.correction_factor = Some(0.012207);
+                        map.correction_factor = Some(0.01); // 0.01 (pas 100/8192) : vérifié au banc — « no gear » plates à 7500 brut = 75 %, plateaux à 8000 = 80 %
                         map.y_axis_address = Some(y0 as u32);
                         map.x_axis_address = Some(x0 as u32);
                         map.y_axis_correction = Some(1.0);
@@ -5670,7 +5670,7 @@ impl EDC16U34Detector {
                 map.name = Some("N75 Duty Cycle".to_string());
                 map.category = Some(MapCategory::TurboBoostPressureControl.display_name().to_string());
                 map.unit = Some("%".to_string());
-                map.correction_factor = Some(0.012207);
+                map.correction_factor = Some(0.01); // 0.01 (pas 100/8192) : vérifié au banc — « no gear » plates à 7500 brut = 75 %, plateaux à 8000 = 80 %
                 map.x_label = Some("mg/stroke".to_string());
                 map.x_axis_correction = Some(0.01);
             } else {
@@ -7547,7 +7547,7 @@ impl EDC16U34Detector {
                 *data_addr as u32,
                 40, // Data size only
                 MapDimensions::OneDimensional { length: 20 },
-                DataType::UInt16,
+                DataType::Int16,
             );
             map.name = Some(map_name);
             map.category = Some("EGR".to_string());
@@ -7725,7 +7725,7 @@ impl EDC16U34Detector {
                 *data_start as u32,
                 data_size,
                 MapDimensions::OneDimensional { length: 20 },
-                DataType::UInt16,
+                DataType::Int16,
             );
             map.name = Some(map_name);
             map.category = Some("EGR".to_string());
