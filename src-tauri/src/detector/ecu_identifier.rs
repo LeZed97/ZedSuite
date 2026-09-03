@@ -742,8 +742,15 @@ impl ECUIdentifier {
         }
 
         // Return the LAST found number (which is typically the HW part number)
-        // The first one is usually the SW part number
-        if let Some((hw_number, offset)) = found_numbers.last() {
+        // The first one is usually the SW part number.
+        // Priorité aux références « 906 » (comportement historique) ; les
+        // « 997 » (utilitaires Crafter/T5) ne servent que si aucune 906 n'existe.
+        let preferred = found_numbers
+            .iter()
+            .rev()
+            .find(|(n, _)| n.get(3..6) == Some("906"))
+            .or_else(|| found_numbers.last());
+        if let Some((hw_number, offset)) = preferred {
             log::debug!("Using VAG HW number (last of {}): {} at offset 0x{:X}",
                        found_numbers.len(), hw_number, start + offset);
             return Some(hw_number.clone());
@@ -763,7 +770,9 @@ impl ECUIdentifier {
             if zone[i] == b'0'
                 && zone[i + 1].is_ascii_digit()
                 && (zone[i + 2].is_ascii_digit() || zone[i + 2].is_ascii_uppercase())
-                && zone[i + 3..i + 6] == *b"906"
+                // « 906 » (VAG tourisme : 03G906016JA) ou « 997 » (utilitaires
+                // Crafter/T5 : 070997016M) — sans le 997, ces fichiers restaient sans HW
+                && (zone[i + 3..i + 6] == *b"906" || zone[i + 3..i + 6] == *b"997")
                 && zone[i + 6].is_ascii_digit()
                 && zone[i + 7].is_ascii_digit()
                 && zone[i + 8].is_ascii_digit()
@@ -798,7 +807,14 @@ impl ECUIdentifier {
             if end > data.len() {
                 continue;
             }
-            if let Some((n, _)) = Self::find_vag_numbers_in_zone(&data[start..end]).last() {
+            // Même priorité que pour le HW : dernière « 906 », sinon dernière « 997 »
+            let found = Self::find_vag_numbers_in_zone(&data[start..end]);
+            let preferred = found
+                .iter()
+                .rev()
+                .find(|(n, _)| n.get(3..6) == Some("906"))
+                .or_else(|| found.last());
+            if let Some((n, _)) = preferred {
                 return Some(n.clone());
             }
         }
