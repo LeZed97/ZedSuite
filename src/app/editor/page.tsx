@@ -1761,6 +1761,14 @@ function EditorPageContent() {
   
   // Hexdump format state
   const [hexdumpSize, setHexdumpSize] = useState<"8b" | "16b">("8b");
+  // Ordre des octets de l'hexdump 16 bits : par défaut celui de l'ECU (HiLo
+  // = big-endian EDC16/MJD, LoHi = EDC15), basculable dans la toolbar.
+  const [hexdumpByteOrder, setHexdumpByteOrder] = useState<"hilo" | "lohi">("lohi");
+  useEffect(() => {
+    if (projectData?.ecu_type) {
+      setHexdumpByteOrder(isBigEndianEcu(projectData.ecu_type) ? "hilo" : "lohi");
+    }
+  }, [projectData?.ecu_type]);
   const [hexdumpFormat, setHexdumpFormat] = useState<"hex" | "dec">("hex");
 
   // Largeur de fenêtre hexdump calée sur son contenu réel (adresse + valeurs +
@@ -5095,7 +5103,9 @@ function EditorPageContent() {
         // In 16b mode, only even offsets (0,2,4,6,8,10,12,14) are visible
         if (offsetInRow % 2 !== 0) continue;
 
-        const value = fileData[addr] | (fileData[addr + 1] << 8);
+        const value = hexdumpByteOrder === "hilo"
+          ? ((fileData[addr] << 8) | fileData[addr + 1])
+          : (fileData[addr] | (fileData[addr + 1] << 8));
         if (value === searchValue) {
           results.push(addr);
         }
@@ -5111,7 +5121,7 @@ function EditorPageContent() {
       setHexdumpScrollToAddress(results[0]);
       setHexdumpScrollKey(prev => prev + 1); // Force scroll
     }
-  }, [projectData?.file_data, searchConfig, hexdumpSize, hexdumpFormat]);
+  }, [projectData?.file_data, searchConfig, hexdumpSize, hexdumpFormat, hexdumpByteOrder]);
 
   // Navigate to next/previous search result
   const navigateSearchResult = useCallback((direction: 'next' | 'prev') => {
@@ -6002,6 +6012,8 @@ function EditorPageContent() {
             easyViewMode={easyViewMode}
             previewOpen={showPreviewWindow}
             onHexdumpSizeChange={setHexdumpSize}
+            hexdumpByteOrder={hexdumpByteOrder}
+            onHexdumpByteOrderChange={setHexdumpByteOrder}
             onHexdumpFormatChange={setHexdumpFormat}
             onEasyViewModeChange={setEasyViewMode}
             onPreviewClick={handlePreviewToggle}
@@ -6366,6 +6378,7 @@ function EditorPageContent() {
                         originalFileData={originalFileDataRef.current ?? undefined}
                         fileName={projectData.file_name}
                         size={hexdumpSize}
+                        byteOrder={hexdumpByteOrder}
                         format={hexdumpFormat}
                         containerWidth="100%"
                         minWidthOverride="0px"
@@ -7113,6 +7126,7 @@ function EditorPageContent() {
         resolveVersionData={buildVersionFileData}
         hexdumpSize={hexdumpSize}
         hexdumpFormat={hexdumpFormat}
+        hexdumpByteOrder={hexdumpByteOrder}
         mapRegions={projectData?.detectionResults?.maps?.map(m => ({
           name: m.name,
           address: m.address,

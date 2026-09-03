@@ -79,7 +79,7 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
-pub const DETECTOR_VERSION: u32 = 30;
+pub const DETECTOR_VERSION: u32 = 31;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.

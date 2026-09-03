@@ -55,9 +55,15 @@ interface CompareModalProps {
   resolveVersionData?: (versionId: string) => Promise<number[]>;
   hexdumpSize: "8b" | "16b";
   hexdumpFormat: "hex" | "dec";
+  // Ordre des octets initial en 16 bits (suit l'hexdump de l'éditeur)
+  hexdumpByteOrder?: "hilo" | "lohi";
   mapRegions?: MapRegion[];
   ecuType?: string;
 }
+
+/** Lecture d'une valeur 16 bits selon l'ordre des octets choisi. */
+const read16 = (arr: number[], off: number, order: "hilo" | "lohi"): number =>
+  order === "hilo" ? (((arr[off] ?? 0) << 8) | (arr[off + 1] ?? 0)) : ((arr[off] ?? 0) | ((arr[off + 1] ?? 0) << 8));
 
 // Id réservé de la pseudo-version « État actuel (non sauvegardé) »
 const CURRENT_STATE_ID = "__current_state__";
@@ -288,6 +294,7 @@ interface CompareRowProps {
   side: "left" | "right";
   theme: string;
   hexdumpSize: "8b" | "16b";
+  byteOrder: "hilo" | "lohi";
   hexdumpFormat: "hex" | "dec";
   bytesPerRow: number;
   byteToMapInfo: Map<number, ByteMapInfo>;
@@ -309,6 +316,7 @@ const CompareRow = memo(function CompareRow({
   side,
   theme,
   hexdumpSize,
+  byteOrder,
   hexdumpFormat,
   bytesPerRow,
   byteToMapInfo,
@@ -373,7 +381,7 @@ const CompareRow = memo(function CompareRow({
             ? value.toString(16).toUpperCase().padStart(2, "0")
             : value.toString(10).padStart(3, "0");
       } else {
-        value = data[byteOffset] | (data[byteOffset + 1] << 8);
+        value = read16(data, byteOffset, byteOrder);
         displayValue =
           hexdumpFormat === "hex"
             ? value.toString(16).toUpperCase().padStart(4, "0")
@@ -381,7 +389,7 @@ const CompareRow = memo(function CompareRow({
       }
       const other = bytesPerValue === 1
         ? (otherData[byteOffset] ?? 0)
-        : ((otherData[byteOffset] ?? 0) | ((otherData[byteOffset + 1] ?? 0) << 8));
+        : read16(otherData, byteOffset, byteOrder);
       if (value > other) diffSign = 1;
       else if (value < other) diffSign = -1;
     } else {
@@ -540,6 +548,7 @@ export function CompareModal({
   resolveVersionData,
   hexdumpSize: initialHexdumpSize,
   hexdumpFormat: initialHexdumpFormat,
+  hexdumpByteOrder: initialByteOrder = "lohi",
   mapRegions = [],
   ecuType,
 }: CompareModalProps) {
@@ -560,6 +569,7 @@ export function CompareModal({
   // Local format state (independent from parent)
   const [hexdumpSize, setHexdumpSize] = useState<"8b" | "16b">(initialHexdumpSize);
   const [hexdumpFormat, setHexdumpFormat] = useState<"hex" | "dec">(initialHexdumpFormat);
+  const [byteOrder, setByteOrder] = useState<"hilo" | "lohi">(initialByteOrder);
 
   // Selection state
   const [selectedVersion1, setSelectedVersion1] = useState<string>("");
@@ -609,6 +619,7 @@ export function CompareModal({
       setVisibleRange({ start: 0, end: 50 });
       setHexdumpSize(initialHexdumpSize);
       setHexdumpFormat(initialHexdumpFormat);
+      setByteOrder(initialByteOrder);
       // Présélection utile : Ori à gauche, « État actuel » à droite quand il
       // existe — un clic sur Comparer répond au cas le plus courant (voir ses
       // modifications en cours vs l'origine).
@@ -1233,6 +1244,7 @@ export function CompareModal({
           side={side}
           theme={theme}
           hexdumpSize={hexdumpSize}
+          byteOrder={byteOrder}
           hexdumpFormat={hexdumpFormat}
           bytesPerRow={bytesPerRow}
           byteToMapInfo={byteToMapInfo}
@@ -1496,6 +1508,19 @@ export function CompareModal({
                   >
                     16b
                   </Button>
+                  {/* Ordre des octets (16 bits uniquement) : HiLo ↔ LoHi */}
+                  {hexdumpSize === "16b" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setByteOrder(byteOrder === "hilo" ? "lohi" : "hilo")}
+                      title={byteOrder === "hilo" ? "High byte first — click for LoHi" : "Low byte first — click for HiLo"}
+                      className={`h-6 px-2 text-[10px] ${getButtonHoverClass()}`}
+                      style={{ color: getTextColor() }}
+                    >
+                      {byteOrder === "hilo" ? "HiLo" : "LoHi"}
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center rounded px-0.5 ml-1" style={{ background: getButtonBg() }}>
                   <Button
