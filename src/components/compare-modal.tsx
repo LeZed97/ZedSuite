@@ -1508,8 +1508,8 @@ export function CompareModal({
                   >
                     16b
                   </Button>
-                  {/* Ordre des octets (16 bits uniquement) : HiLo ↔ LoHi */}
-                  {hexdumpSize === "16b" && (
+                  {/* Ordre des octets de la vue 16 bits : HiLo ↔ LoHi (toujours visible) */}
+                  {(
                     <Button
                       variant="ghost"
                       size="sm"

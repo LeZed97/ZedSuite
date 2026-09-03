@@ -2743,8 +2743,11 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             // et "Driver wish"/"Inverse driver wish" (EDC15, WinOLS bSigned=1)
             // portent des IQ négatifs (raw 0xFFxx → -0.9, pas 654.5). Forcer le
             // signe couvre les detection_data antérieures taguées UInt16.
+            // « EGR hysteresis » (EDC16) : seuils signés (0xFFFF = -1), les
+            // detection_data antérieures à v31 les taguaient UInt16.
             const isAlwaysSignedMap =
-              mapNameLower.includes('drivers wish') || mapNameLower.includes('driver wish');
+              mapNameLower.includes('drivers wish') || mapNameLower.includes('driver wish') ||
+              mapNameLower.includes('egr hysteresis');
             if ((mapData.data_type === 'Int16' || isAlwaysSignedMap) && rawValue > 32767) {
               rawValue = rawValue - 65536;
             }

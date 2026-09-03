@@ -3323,28 +3323,33 @@ function EditorPageContent() {
   // depuis la création du projet. Les résultats sont figés dans le projet à
   // sa création : sans ce rattrapage, un projet existant resterait
   // indéfiniment sur des adresses, facteurs ou libellés d'axes périmés.
-  const redetectCheckedRef = useRef(false);
+  // PIÈGE corrigé : l'ancienne version annulait l'appel en cours (drapeau
+  // `cancelled` dans le cleanup) dès qu'une dépendance changeait pendant
+  // l'attente — hasUnsavedChanges bascule brièvement au chargement d'une
+  // version — et le ref « déjà vérifié » était déjà posé : la re-détection
+  // n'avait jamais lieu. On laisse l'appel aller au bout et on n'applique le
+  // résultat que si le projet ouvert est toujours le même.
+  const redetectCheckedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (redetectCheckedRef.current) return;
-    if (!projectData?.fileId || !projectData.detectionResults) return;
+    const fileId = projectData?.fileId;
+    if (!fileId || !projectData.detectionResults) return;
     if (hasUnsavedChanges) return; // ne jamais écraser un travail en cours
+    if (redetectCheckedRef.current === fileId) return;
 
-    redetectCheckedRef.current = true;
-    let cancelled = false;
+    redetectCheckedRef.current = fileId;
+    const storedVersion = Number(projectData.detectionResults?.detector_version ?? 0);
 
     (async () => {
       try {
         const current = await detectorVersion();
-        if (cancelled || current === 0) return;
-        const stored = Number(projectData.detectionResults?.detector_version ?? 0);
-        if (stored >= current) return;
+        if (current === 0 || storedVersion >= current) return;
 
-        const response = await axios.post(`/api/files/${projectData.fileId}/redetect`);
-        if (cancelled || !response.data?.success || !response.data.detectionResults) return;
+        const response = await axios.post(`/api/files/${fileId}/redetect`);
+        if (!response.data?.success || !response.data.detectionResults) return;
 
         const refreshed = stripSoiTag(response.data.detectionResults);
         setProjectData((prev) => {
-          if (!prev) return prev;
+          if (!prev || prev.fileId !== fileId) return prev;
           const updated = { ...prev, detectionResults: refreshed };
           saveProjectToSession(updated);
           return updated;
@@ -3358,10 +3363,6 @@ function EditorPageContent() {
         // Rattrapage silencieux : un échec laisse simplement le projet en état.
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [projectData?.fileId, projectData?.detectionResults, hasUnsavedChanges, toast, t]);
 
   // Prevent leaving page with unsaved modifications
@@ -7332,7 +7333,9 @@ function EditorPageContent() {
 /** Largeur (px CSS) nécessaire à la BARRE D'OUTILS seule, marge comprise.
  *  La largeur de la barre latérale — que l'utilisateur peut élargir — s'y
  *  ajoute à l'exécution, et le total est converti selon le zoom courant. */
-const TOOLBAR_MIN_CSS_WIDTH = 1035;
+// +60 px depuis l'ajout du bouton HiLo/LoHi dans la pastille 8b/16b : en
+// dessous, la barre recouvrait les contrôles de fenêtre à largeur minimale.
+const TOOLBAR_MIN_CSS_WIDTH = 1095;
 
 export default function EditorPage() {
   return (

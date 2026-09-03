@@ -1,6 +1,6 @@
 {
   "name": "zedsuite",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "license": "GPL-3.0-only",
   "description": "ZedSuite - Open source ECU map editor (Bosch EDC15/EDC16), desktop app",
