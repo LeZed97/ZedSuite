@@ -968,6 +968,10 @@ const skipAutoSizeRef = useRef<boolean>(false);
 
 
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  // Curseur clavier (coordonnées d'AFFICHAGE) : posé au clic, déplacé par
+  // les flèches ; Ctrl+flèche étend la sélection (même modificateur que le
+  // Ctrl+clic), Ctrl+C / Ctrl+V copient-collent la sélection.
+  const keyboardCursorRef = useRef<{ row: number; col: number } | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ row: number; col: number } | null>(null);
   const [isCtrlDragging, setIsCtrlDragging] = useState<boolean>(false);
@@ -1609,7 +1613,132 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
 
       const hasSelection = selectedCells.size > 0 || selectedXAxisCells.size > 0 || selectedYAxisCells.size > 0;
+
+      // ── Navigation au clavier : flèches = déplacer la cellule active,
+      //    Ctrl+flèche = étendre la sélection (comme le Ctrl+clic) ──
+      const ARROWS: Record<string, [number, number]> = {
+        ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+      };
+      if (e.key in ARROWS && !e.altKey) {
+        const totalRows = displayMapValues.length;
+        const totalCols = displayMapValues[0]?.length ?? 0;
+        if (totalRows === 0 || totalCols === 0) return;
+        let cur = keyboardCursorRef.current;
+        if (!cur) {
+          // Pas de curseur (sélection faite autrement) : partir de la
+          // première cellule sélectionnée
+          const first = Array.from(selectedCells)[0];
+          if (!first) return;
+          const [mr, mc] = first.split('-').map(Number);
+          cur = toDisplayCoords(mr, mc);
+        }
+        const [dr, dc] = ARROWS[e.key];
+        const next = {
+          row: Math.min(totalRows - 1, Math.max(0, cur.row + dr)),
+          col: Math.min(totalCols - 1, Math.max(0, cur.col + dc)),
+        };
+        e.preventDefault();
+        keyboardCursorRef.current = next;
+        const { row, col } = toMapCoords(next.row, next.col);
+        const key = getCellKey(row, col);
+        setSelectedXAxisCells(new Set());
+        setSelectedYAxisCells(new Set());
+        if (e.ctrlKey || e.metaKey) {
+          setSelectedCells(prev => new Set(prev).add(key));
+        } else {
+          setSelectedCells(new Set([key]));
+        }
+        return;
+      }
+
       if (!hasSelection) return;
+
+      // ── Ctrl+C / Ctrl+V : mêmes règles que Copier / Coller du menu ──
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        if (selectedCells.size > 0) {
+          const cellsArray = Array.from(selectedCells).map(k => {
+            const [row, col] = k.split('-').map(Number);
+            return { row, col };
+          });
+          const minRow = Math.min(...cellsArray.map(c => c.row));
+          const maxRow = Math.max(...cellsArray.map(c => c.row));
+          const minCol = Math.min(...cellsArray.map(c => c.col));
+          const maxCol = Math.max(...cellsArray.map(c => c.col));
+          const values: string[][] = [];
+          for (let r = minRow; r <= maxRow; r++) {
+            const rowValues: string[] = [];
+            for (let c = minCol; c <= maxCol; c++) {
+              const v = selectedCells.has(getCellKey(r, c)) ? mapValues[r]?.[c] : undefined;
+              rowValues.push(v !== undefined ? v.toString() : '');
+            }
+            values.push(rowValues);
+          }
+          writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
+          toast({ title: t.mapViewer.copy, description: `${cellsArray.length} value(s) copied` });
+        } else if (selectedXAxisCells.size > 0) {
+          const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
+          const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
+          writeClipboard({ values, type: 'xAxis', rows: indices.length, cols: 1 });
+          toast({ title: t.mapViewer.copy, description: `${indices.length} value(s) copied` });
+        } else if (selectedYAxisCells.size > 0) {
+          const indices = Array.from(selectedYAxisCells).sort((a, b) => a - b);
+          const values = indices.map(index => [readSourceAxis(displayYAxisToSource(index)) || '']);
+          writeClipboard({ values, type: 'yAxis', rows: indices.length, cols: 1 });
+          toast({ title: t.mapViewer.copy, description: `${indices.length} value(s) copied` });
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        const clip = readClipboard();
+        if (!clip) return;
+        let pastedCount = 0;
+        if (selectedCells.size > 0) {
+          const cellsArray = Array.from(selectedCells).map(k => {
+            const [row, col] = k.split('-').map(Number);
+            return { row, col };
+          });
+          const startRow = Math.min(...cellsArray.map(c => c.row));
+          const startCol = Math.min(...cellsArray.map(c => c.col));
+          clip.values.forEach((rowValues, rowOffset) => {
+            rowValues.forEach((value, colOffset) => {
+              if (value === '') return;
+              const targetRow = startRow + rowOffset;
+              const targetCol = startCol + colOffset;
+              if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
+                const parsed = Number(value.replace(',', '.'));
+                if (!Number.isNaN(parsed)) {
+                  updateCellValue(targetRow, targetCol, parsed);
+                  pastedCount++;
+                }
+              }
+            });
+          });
+        } else if (selectedXAxisCells.size > 0) {
+          const startIndex = Array.from(selectedXAxisCells).sort((a, b) => a - b)[0] ?? 0;
+          clip.values.forEach((rowValues, offset) => {
+            const value = rowValues[0];
+            const displayIdx = startIndex + offset;
+            if (value && displayIdx < displayXAxisLabels.length) {
+              mutateDisplayXAxis(displayIdx, () => value);
+              pastedCount++;
+            }
+          });
+        } else if (selectedYAxisCells.size > 0) {
+          const startIndex = Array.from(selectedYAxisCells).sort((a, b) => a - b)[0] ?? 0;
+          clip.values.forEach((rowValues, offset) => {
+            const value = rowValues[0];
+            const displayIdx = startIndex + offset;
+            if (value && displayIdx < displayYAxisLabels.length) {
+              mutateDisplayYAxis(displayIdx, () => value);
+              pastedCount++;
+            }
+          });
+        }
+        toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+        return;
+      }
 
       if (e.key === '+' || e.key === '=' || e.key === 'Add') {
         e.preventDefault();
@@ -1720,7 +1849,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     };
     // displayTransposed/flips inclus : le handler doit voir l'orientation
     // courante pour écrire au bon axe source après un toggle d'inversion.
-  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
 
   // Handle modifyCommand from toolbar (Zap button)
   useEffect(() => {
@@ -3137,6 +3267,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // selectedCells / dragStart / etc. stay in the same space as mapValues.
     const { row, col } = toMapCoords(displayRow, displayCol);
     const cellKey = getCellKey(row, col);
+    keyboardCursorRef.current = { row: displayRow, col: displayCol };
 
     // Clic droit: ne pas modifier la sélection si la cellule est déjà sélectionnée
     // (le menu contextuel sera géré par handleContextMenu)
