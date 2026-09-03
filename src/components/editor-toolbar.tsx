@@ -221,8 +221,9 @@ export function EditorToolbar({
           >
             16b
           </Button>
-          {/* Ordre des octets (16 bits uniquement) : HiLo ↔ LoHi */}
-          {hexdumpSize === "16b" && (
+          {/* Ordre des octets de la vue 16 bits : HiLo ↔ LoHi (toujours
+              visible dans la pastille, n'agit que sur l'affichage 16b) */}
+          {(
             <Button
               variant="ghost"
               size="sm"
