@@ -23,6 +23,9 @@ interface EditorToolbarProps {
   easyViewMode?: boolean;
   previewOpen?: boolean;
   onHexdumpSizeChange?: (size: "8b" | "16b") => void;
+  // Ordre des octets en 16 bits : HiLo (big-endian, EDC16/MJD) ou LoHi (EDC15)
+  hexdumpByteOrder?: "hilo" | "lohi";
+  onHexdumpByteOrderChange?: (order: "hilo" | "lohi") => void;
   onHexdumpFormatChange?: (format: "hex" | "dec") => void;
   onEasyViewModeChange?: (enabled: boolean) => void;
   onPreviewClick?: () => void;
@@ -49,6 +52,8 @@ export function EditorToolbar({
   easyViewMode = false,
   previewOpen = false,
   onHexdumpSizeChange,
+  hexdumpByteOrder = "lohi",
+  onHexdumpByteOrderChange,
   onHexdumpFormatChange,
   onEasyViewModeChange,
   onPreviewClick,
@@ -216,6 +221,19 @@ export function EditorToolbar({
           >
             16b
           </Button>
+          {/* Ordre des octets (16 bits uniquement) : HiLo ↔ LoHi */}
+          {hexdumpSize === "16b" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onHexdumpByteOrderChange?.(hexdumpByteOrder === "hilo" ? "lohi" : "hilo")}
+              title={hexdumpByteOrder === "hilo" ? "High byte first (big-endian) — click for LoHi" : "Low byte first (little-endian) — click for HiLo"}
+              className={`h-7 px-1.5 sm:px-2 lg:px-3 text-xs ${getButtonHoverClass()}`}
+              style={{ color: getTextColor() }}
+            >
+              {hexdumpByteOrder === "hilo" ? "HiLo" : "LoHi"}
+            </Button>
+          )}
           {/* Séparateur */}
           <div className="w-px h-5 mx-0.5 sm:mx-1" style={{ background: theme === 'light' ? '#dee2e6' : 'rgba(255, 255, 255, 0.1)' }}></div>
           <Button

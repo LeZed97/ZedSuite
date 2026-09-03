@@ -24,6 +24,9 @@ interface HexdumpViewerProps {
   originalFileData?: number[];
   fileName: string;
   size?: "8b" | "16b";
+  // Ordre des octets en 16 bits : "hilo" = octet fort d'abord (big-endian,
+  // EDC16/MJD), "lohi" = octet faible d'abord (little-endian, EDC15).
+  byteOrder?: "hilo" | "lohi";
   format?: "hex" | "dec";
   containerWidth?: string;
   minWidthOverride?: string;
@@ -84,6 +87,7 @@ interface HexRowProps {
   originalFileData: number[] | null;
   fileDataLength: number;
   size: "8b" | "16b";
+  byteOrder: "hilo" | "lohi";
   format: "hex" | "dec";
   theme: "default" | "light" | "oled";
   bytesPerValue: number;
@@ -105,12 +109,17 @@ interface HexRowProps {
 // skips them entirely and only mounts the rows entering the window. Without
 // this, dragging the scrollbar re-rendered every visible row on every scroll
 // event and the table went blank until mouse release.
+/** Lecture d'une valeur 16 bits selon l'ordre des octets choisi. */
+const read16 = (arr: number[], off: number, order: "hilo" | "lohi"): number =>
+  order === "hilo" ? ((arr[off] << 8) | arr[off + 1]) : (arr[off] | (arr[off + 1] << 8));
+
 const HexRow = memo(function HexRow({
   rowIndex,
   fileData,
   originalFileData,
   fileDataLength,
   size,
+  byteOrder,
   format,
   theme,
   bytesPerValue,
@@ -186,7 +195,7 @@ const HexRow = memo(function HexRow({
           ? value.toString(16).toUpperCase().padStart(2, '0')
           : value.toString(10).padStart(3, '0');
       } else {
-        value = fileData[byteOffset] | (fileData[byteOffset + 1] << 8);
+        value = read16(fileData, byteOffset, byteOrder);
         displayValue = format === "hex"
           ? value.toString(16).toUpperCase().padStart(4, '0')
           : value.toString(10).padStart(5, '0');
@@ -196,7 +205,7 @@ const HexRow = memo(function HexRow({
       if (originalFileData && byteOffset + bytesPerValue <= originalFileData.length) {
         const orig = size === "8b"
           ? originalFileData[byteOffset]
-          : (originalFileData[byteOffset] | (originalFileData[byteOffset + 1] << 8));
+          : read16(originalFileData, byteOffset, byteOrder);
         if (value > orig) diffSign = 1;
         else if (value < orig) diffSign = -1;
       }
@@ -333,6 +342,7 @@ export function HexdumpViewer({
   originalFileData,
   fileName,
   size = "8b",
+  byteOrder = "lohi",
   format = "hex",
   containerWidth = "30%",
   minWidthOverride,
@@ -409,16 +419,16 @@ export function HexdumpViewer({
       for (let addr = 0; addr + step <= len; addr += step) {
         const cur = step === 1
           ? safeFileData[addr]
-          : (safeFileData[addr] | (safeFileData[addr + 1] << 8));
+          : read16(safeFileData, addr, byteOrder);
         const orig = step === 1
           ? safeOriginalData[addr]
-          : (safeOriginalData[addr] | (safeOriginalData[addr + 1] << 8));
+          : read16(safeOriginalData, addr, byteOrder);
         if (cur > orig) { entries.push({ addr, sign: 1 }); above++; }
         else if (cur < orig) { entries.push({ addr, sign: -1 }); below++; }
       }
     }
     return { entries, above, below };
-  }, [safeFileData, safeOriginalData, fileDataLength, size]);
+  }, [safeFileData, safeOriginalData, fileDataLength, size, byteOrder]);
 
   // Create a map of byte address -> search result info for quick lookup
   const byteToSearchInfo = useMemo(() => {
@@ -761,6 +771,7 @@ export function HexdumpViewer({
                   originalFileData={safeOriginalData}
                   fileDataLength={fileDataLength}
                   size={size}
+                  byteOrder={byteOrder}
                   format={format}
                   theme={theme}
                   bytesPerValue={bytesPerValue}
