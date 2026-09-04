@@ -329,7 +329,35 @@ export async function listMapEdits(versionId: string): Promise<MapEdit[]> {
   }
 }
 
+// Écritures SÉRIALISÉES par version : l'éditeur envoie les edits de chaque
+// map en parallèle (Promise.all), et un read-modify-write concurrent sur
+// edits-<version>.json ne gardait que le dernier écrit — les modifications
+// des autres maps (maps similaires, copier/coller, plusieurs maps éditées à
+// la main) disparaissaient à l'enregistrement.
+const mapEditQueues = new Map<string, Promise<void>>();
+
 export async function addMapEdit(
+  versionId: string,
+  mapAddress: number,
+  payload: any
+): Promise<MapEdit | null> {
+  const previous = mapEditQueues.get(versionId) ?? Promise.resolve();
+  let result: MapEdit | null = null;
+  const run = previous
+    .catch(() => undefined)
+    .then(async () => {
+      result = await addMapEditUnlocked(versionId, mapAddress, payload);
+    });
+  mapEditQueues.set(versionId, run);
+  try {
+    await run;
+  } finally {
+    if (mapEditQueues.get(versionId) === run) mapEditQueues.delete(versionId);
+  }
+  return result;
+}
+
+async function addMapEditUnlocked(
   versionId: string,
   mapAddress: number,
   payload: any
