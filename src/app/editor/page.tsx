@@ -48,7 +48,7 @@ import { isBigEndianEcu } from "@/lib/ecu-endianness";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PromptModal } from "@/components/prompt-modal";
 import { correctChecksumByEcuType, isChecksumSupported, ChecksumResult } from "@/lib/ecu/bosch/checksums";
-import { disableDTC, detectDTCs, type DetectedDTC, type CodeblockInfo } from "@/lib/ecu/bosch/dtc";
+import { disableDTC, enableDTC, detectDTCs, type DetectedDTC, type CodeblockInfo } from "@/lib/ecu/bosch/dtc";
 import { saveBytesToFile } from "@/lib/local/save-file";
 import { identifyEcu, bytesToBase64, detectorVersion } from "@/lib/local/detector";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
@@ -1927,7 +1927,7 @@ function EditorPageContent() {
   const [isDTCClosing, setIsDTCClosing] = useState(false);
   const [dtcRefreshKey, setDtcRefreshKey] = useState(0);
   // DTC notification state
-  const [dtcNotification, setDtcNotification] = useState<{ count: number; visible: boolean; fading: boolean }>({ count: 0, visible: false, fading: false });
+  const [dtcNotification, setDtcNotification] = useState<{ count: number; visible: boolean; fading: boolean; mode: 'disabled' | 'enabled' }>({ count: 0, visible: false, fading: false, mode: 'disabled' });
 
   // Solutions modal state
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false);
@@ -7194,7 +7194,7 @@ function EditorPageContent() {
             setDtcRefreshKey(prev => prev + 1);
 
             // Show DTC notification badge
-            setDtcNotification({ count: dtcs.length, visible: true, fading: false });
+            setDtcNotification({ count: dtcs.length, visible: true, fading: false, mode: 'disabled' });
             // Start fade out after 2.5 seconds
             setTimeout(() => {
               setDtcNotification(prev => ({ ...prev, fading: true }));
@@ -7204,6 +7204,57 @@ function EditorPageContent() {
               setDtcNotification(prev => ({ ...prev, visible: false, fading: false }));
             }, 3000);
 
+          }}
+          onEnableDTCs={(dtcs: DetectedDTC[], codeblocks: CodeblockInfo[]) => {
+            if (!projectData || dtcs.length === 0) return;
+            // Réactivation : on remet l'octet de contrôle à sa valeur d'ORIGINE
+            // (fichier Ori) quand on l'a, sinon à la valeur « actif » connue du
+            // mapping. Une adresse revenue à l'origine sort des modifications
+            // binaires au lieu d'y rester comme une édition.
+            const originalData = originalFileDataRef.current
+              ? new Uint8Array(originalFileDataRef.current)
+              : null;
+            let currentData = new Uint8Array(projectData.file_data) as Uint8Array<ArrayBuffer>;
+            const allChangedAddresses: number[] = [];
+            const ecuFamily = projectData.ecu_type || 'EDC15';
+            for (const dtc of dtcs) {
+              const { modifiedData, changedAddresses } = enableDTC(currentData, dtc, codeblocks, ecuFamily);
+              currentData = modifiedData as Uint8Array<ArrayBuffer>;
+              for (const addr of changedAddresses) {
+                if (originalData && addr < originalData.length) {
+                  currentData[addr] = originalData[addr];
+                }
+                allChangedAddresses.push(addr);
+              }
+            }
+            setBinaryModifications(prev => {
+              const newMods = new Map(prev);
+              for (const addr of allChangedAddresses) {
+                const originalByte = originalData ? originalData[addr] : undefined;
+                if (originalByte !== undefined && currentData[addr] === originalByte) {
+                  newMods.delete(addr);
+                } else {
+                  newMods.set(addr, {
+                    oldValue: originalByte ?? prev.get(addr)?.oldValue ?? currentData[addr],
+                    newValue: currentData[addr],
+                  });
+                }
+              }
+              return newMods;
+            });
+            setProjectData({
+              ...projectData,
+              file_data: Array.from(currentData),
+            });
+            setHasUnsavedChanges(true);
+            setDtcRefreshKey(prev => prev + 1);
+            setDtcNotification({ count: dtcs.length, visible: true, fading: false, mode: 'enabled' });
+            setTimeout(() => {
+              setDtcNotification(prev => ({ ...prev, fading: true }));
+            }, 2500);
+            setTimeout(() => {
+              setDtcNotification(prev => ({ ...prev, visible: false, fading: false }));
+            }, 3000);
           }}
           isClosing={isDTCClosing}
           theme={theme}
@@ -7352,7 +7403,7 @@ function EditorPageContent() {
             </svg>
           </span>
           <span className="font-medium">
-            {dtcNotification.count} {dtcNotification.count > 1 ? t.notifications.dtcsDisabled : t.notifications.dtcDisabled}
+            {dtcNotification.count} {dtcNotification.mode === 'enabled' ? (dtcNotification.count > 1 ? t.notifications.dtcsEnabled : t.notifications.dtcEnabled) : (dtcNotification.count > 1 ? t.notifications.dtcsDisabled : t.notifications.dtcDisabled)}
           </span>
         </div>
       )}

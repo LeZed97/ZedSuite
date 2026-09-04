@@ -22,6 +22,7 @@ interface DTCModalProps {
   fileData: number[] | Uint8Array | null; // Binary file data (can be number[] or Uint8Array)
   onClose: () => void;
   onDisableDTCs: (dtcs: DetectedDTC[], codeblocks: CodeblockInfo[]) => void;
+  onEnableDTCs?: (dtcs: DetectedDTC[], codeblocks: CodeblockInfo[]) => void;
   isClosing?: boolean;
   theme?: 'default' | 'light' | 'oled';
   refreshKey?: number; // Used to force re-detection when file data changes
@@ -32,6 +33,7 @@ export function DTCModal({
   fileData,
   onClose,
   onDisableDTCs,
+  onEnableDTCs,
   isClosing = false,
   theme = 'default',
   refreshKey = 0,
@@ -232,11 +234,26 @@ export function DTCModal({
   // Disable selected DTCs
   const handleDisableSelected = useCallback(() => {
     if (!detectionResult) return;
-
-    const selectedDTCList = detectionResult.dtcs.filter(dtc => selectedDTCs.has(dtc.code));
+    const selectedDTCList = detectionResult.dtcs.filter(dtc => selectedDTCs.has(dtc.code) && dtc.enabled);
+    if (selectedDTCList.length === 0) return;
     onDisableDTCs(selectedDTCList, detectionResult.codeblocks);
     setSelectedDTCs(new Set());
   }, [selectedDTCs, detectionResult, onDisableDTCs]);
+  // Réactiver les DTC désactivés de la sélection (demande Enzo : pouvoir
+  // revenir en arrière sur EDC16 comme sur EDC15)
+  const handleEnableSelected = useCallback(() => {
+    if (!detectionResult || !onEnableDTCs) return;
+    const selectedDTCList = detectionResult.dtcs.filter(dtc => selectedDTCs.has(dtc.code) && !dtc.enabled);
+    if (selectedDTCList.length === 0) return;
+    onEnableDTCs(selectedDTCList, detectionResult.codeblocks);
+    setSelectedDTCs(new Set());
+  }, [selectedDTCs, detectionResult, onEnableDTCs]);
+  const selectedEnabledCount = useMemo(
+    () => (detectionResult?.dtcs || []).filter(dtc => selectedDTCs.has(dtc.code) && dtc.enabled).length,
+    [detectionResult, selectedDTCs]);
+  const selectedDisabledCount = useMemo(
+    () => (detectionResult?.dtcs || []).filter(dtc => selectedDTCs.has(dtc.code) && !dtc.enabled).length,
+    [detectionResult, selectedDTCs]);
 
 
   // Theme-aware colors
@@ -433,7 +450,9 @@ export function DTCModal({
                             {dtcs.map(dtc => {
                               const isSelected = selectedDTCs.has(dtc.code);
                               const canDisable = dtc.canDisable !== false; // Default to true for backward compatibility
-                              const isSelectable = dtc.enabled && canDisable; // Can only select enabled DTCs that can be disabled
+                              // Sélectionnable dès qu'un mapping existe : actif (pour désactiver)
+                              // ou désactivé (pour réactiver)
+                              const isSelectable = canDisable;
 
                               return (
                                 <div
@@ -443,7 +462,7 @@ export function DTCModal({
                                   } ${isSelected ? 'bg-orange-500/10' : ''}`}
                                   style={{ borderColor: getBorderColor() }}
                                   onClick={() => isSelectable && toggleDTC(dtc.code)}
-                                  title={!dtc.enabled ? t.dtcModal.alreadyDisabled : !canDisable ? t.dtcModal.noMapping : undefined}
+                                  title={!canDisable ? t.dtcModal.noMapping : undefined}
                                 >
                                   {/* Selection Checkbox */}
                                   <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
@@ -530,15 +549,25 @@ export function DTCModal({
                 </div>
                 {/* Center section - empty for balance */}
                 <div className="flex-1" />
-                {/* Right section - disable button */}
-                <div className="flex-1 flex justify-end">
+                {/* Right section - enable / disable buttons */}
+                <div className="flex-1 flex justify-end gap-2">
+                  {onEnableDTCs && (
+                    <Button
+                      onClick={handleEnableSelected}
+                      disabled={selectedDisabledCount === 0}
+                      className="px-6 bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 hover:from-emerald-500 hover:via-green-400 hover:to-emerald-500 text-white disabled:opacity-50"
+                    >
+                      <Power className="w-4 h-4 mr-2" />
+                      {t.dtcModal.enableSelected}{selectedDisabledCount > 0 ? ` (${selectedDisabledCount})` : ''}
+                    </Button>
+                  )}
                   <Button
                     onClick={handleDisableSelected}
-                    disabled={selectedDTCs.size === 0}
+                    disabled={selectedEnabledCount === 0}
                     className="px-6 bg-gradient-to-r from-orange-600 via-red-500 to-red-600 hover:from-orange-500 hover:via-red-400 hover:to-red-500 text-white disabled:opacity-50"
                   >
                     <PowerOff className="w-4 h-4 mr-2" />
-                    {t.dtcModal.disableSelected}
+                    {t.dtcModal.disableSelected}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
                   </Button>
                 </div>
               </div>
