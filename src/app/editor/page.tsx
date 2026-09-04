@@ -1157,8 +1157,11 @@ function PreviewWindow({
     if (!activeMapAddress) return;
 
     // Sauvegarder la position de caméra si elle est présente dans l'événement
-    if (event['scene.camera']) {
-      const camera = event['scene.camera'];
+    const camera = event['scene.camera']
+      || (event['scene.camera.eye']
+        ? { eye: event['scene.camera.eye'], center: event['scene.camera.center'], up: event['scene.camera.up'] }
+        : null);
+    if (camera) {
       previewCameraPositions[activeMapAddress] = {
         eye: camera.eye || { x: -1.8, y: -1.8, z: 1.0 },
         center: camera.center || { x: 0, y: 0, z: 0 },
@@ -1166,6 +1169,26 @@ function PreviewWindow({
       };
     }
   }, [activeMapAddress]);
+
+  // Caméra VIVANTE lue sur le graphique Plotly lui-même (gd._fullLayout).
+  // C'est la seule source sûre de l'orientation courante : l'événement
+  // relayout n'était pas toujours reçu, et à chaque re-rendu (clic sur une
+  // cellule du tableau) Plotly repartait de la dernière caméra connue —
+  // orientation par défaut mais zoom conservé (bug signalé par Enzo).
+  const plotDivRef = useRef<any>(null);
+  const plotDivMapRef = useRef<number | null>(null);
+  const liveCameraFor = (address: number | null) => {
+    if (address === null || plotDivMapRef.current !== address) return null;
+    const cam = plotDivRef.current?._fullLayout?.scene?.camera;
+    if (!cam || !cam.eye) return null;
+    return {
+      eye: { ...cam.eye },
+      center: { ...(cam.center || { x: 0, y: 0, z: 0 }) },
+      up: { ...(cam.up || { x: 0, y: 0, z: 1 }) },
+    };
+  };
+  const liveCamera = liveCameraFor(activeMapAddress);
+  if (liveCamera && activeMapAddress) previewCameraPositions[activeMapAddress] = liveCamera;
 
   // Obtenir la position de caméra actuelle
   const cameraPosition = getCameraPosition();
@@ -1176,7 +1199,7 @@ function PreviewWindow({
   const [zoomRev, setZoomRev] = useState(0);
   const zoomCamera = (factor: number) => {
     if (!activeMapAddress) return;
-    const cam = previewCameraPositions[activeMapAddress] || getCameraPosition();
+    const cam = liveCameraFor(activeMapAddress) || previewCameraPositions[activeMapAddress] || getCameraPosition();
     if (!cam) return;
     const c = cam.center || { x: 0, y: 0, z: 0 };
     const eye = {
@@ -1390,6 +1413,14 @@ function PreviewWindow({
               style={{ width: "100%", height: "100%" }}
               useResizeHandler={true}
               onRelayout={handleRelayout}
+              onInitialized={(_figure: unknown, graphDiv: unknown) => {
+                plotDivRef.current = graphDiv;
+                plotDivMapRef.current = activeMapAddress;
+              }}
+              onUpdate={(_figure: unknown, graphDiv: unknown) => {
+                plotDivRef.current = graphDiv;
+                plotDivMapRef.current = activeMapAddress;
+              }}
             />
             {/* Zoom +/− du graphique 3D — coin bas-gauche, comme sur l'EasyView */}
             <div
