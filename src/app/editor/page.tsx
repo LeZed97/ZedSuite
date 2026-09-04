@@ -3088,10 +3088,20 @@ function EditorPageContent() {
     setIsWindowDragActive(false);
   };
 
-  const handleMapAutoSize = (mapAddress: number, width: number, height: number) => {
+  // Fenêtres redimensionnées À LA MAIN (poignée) : un auto-dimensionnement
+  // ultérieur (recalcul sur le tableau en vue texte / EasyView) ne doit jamais
+  // leur rendre leur taille d'origine — signalé par Enzo en changeant de map
+  // puis en revenant sur la fenêtre. La 3D n'a pas d'auto-size, elle gardait
+  // sa taille.
+  const userResizedMapsRef = useRef<Set<number>>(new Set());
+  const handleMapAutoSize = (mapAddress: number, width: number, height: number, source: 'auto' | 'user' = 'auto') => {
+    if (source === 'user') userResizedMapsRef.current.add(mapAddress);
     setMapLayouts((prev) => {
       const next = new Map(prev);
       const existing = next.get(mapAddress);
+      if (source === 'auto' && existing && userResizedMapsRef.current.has(mapAddress)) {
+        return prev; // taille choisie par l'utilisateur : on la garde
+      }
 
       // Calculer la hauteur maximale disponible dans le workspace
       const workspaceRect = workspaceRef.current?.getBoundingClientRect();
@@ -5060,6 +5070,7 @@ function EditorPageContent() {
   };
 
   const handleCloseMapWindow = (mapAddress: number) => {
+    userResizedMapsRef.current.delete(mapAddress);
     setOpenMaps((prev) => prev.filter((m) => m.address !== mapAddress));
     setMapViewModes((prev) => {
       const updated = new Map(prev);
@@ -6655,7 +6666,7 @@ function EditorPageContent() {
                             viewMode={mapViewModes.get(map.address) || "text"}
                             easyViewMode={mapEasyViewStatus.get(map.address) || false}
                             onViewModeChange={(mode) => handleViewModeChange(map.address, mode)}
-                            onAutoSize={(w, h) => handleMapAutoSize(map.address, w, h)}
+                            onAutoSize={(w, h, source) => handleMapAutoSize(map.address, w, h, source)}
                             onDragStart={(e) => handleMapDragStart(map.address, e)}
                             onResizeActiveChange={(active) => {
                               setOverlayCursor('se-resize');

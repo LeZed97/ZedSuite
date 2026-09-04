@@ -376,7 +376,7 @@ interface MapViewerProps {
   viewMode?: ViewMode; // Controlled viewMode from parent
   easyViewMode?: boolean; // Si true, affiche texte + 3D simultanément
   onViewModeChange?: (mode: ViewMode) => void; // Callback to update parent
-  onAutoSize?: (width: number, height: number) => void; // Informe le parent de la taille n├®cessaire en vue texte
+  onAutoSize?: (width: number, height: number, source?: 'auto' | 'user') => void; // Informe le parent de la taille n├®cessaire en vue texte
   onClose?: () => void;
   onDragStart?: (event: React.MouseEvent<HTMLDivElement>) => void;
   currentVersionId?: string | null;
@@ -1143,7 +1143,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       lastAutoSizeRef.current = { w: width, h: height };
       hasCalculatedSizeRef.current = true; // Bloquer tous les futurs calculs
 
-      onAutoSizeRef.current?.(width, height);
+      onAutoSizeRef.current?.(width, height, 'auto');
     });
 
     return () => cancelAnimationFrame(rafId);
@@ -1389,7 +1389,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       onResizeActiveChange?.(false);
       // Committer la taille finale dans le state React du parent
       const finalRect = windowEl.getBoundingClientRect();
-      onAutoSizeRef.current?.(Math.round(finalRect.width), Math.round(finalRect.height));
+      onAutoSizeRef.current?.(Math.round(finalRect.width), Math.round(finalRect.height), 'user');
     };
 
     document.addEventListener('mousemove', onMove);
