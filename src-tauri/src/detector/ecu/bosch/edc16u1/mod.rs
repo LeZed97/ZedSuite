@@ -2457,9 +2457,25 @@ impl EDC16U1Detector {
                                             bad_value_count += 1;
                                         }
                                     }
+                                    // Profil global : une vraie SOI a une avance nette (max
+                                    // >= 300 raw ≈ 7 deg, moyenne >= 100) et peu de négatifs
+                                    // (<= 25 %) — écarte les blocs à valeurs négatives ou plates
+                                    let mut negative_count = 0usize;
+                                    let mut max_val: i16 = i16::MIN;
+                                    let mut sum_val: i64 = 0;
+                                    for i in (0..SOI_MAP_SIZE).step_by(2) {
+                                        let val = i16::from_be_bytes([map_data[i], map_data[i + 1]]);
+                                        if val < 0 { negative_count += 1; }
+                                        if val > max_val { max_val = val; }
+                                        sum_val += val as i64;
+                                    }
+                                    let mean_val = sum_val / total_values.max(1) as i64;
                                     // Relaxed: at least 40% valid and less than 5% bad
                                     let has_valid_soi_values = valid_soi_count >= (total_values * 40 / 100)
-                                                            && bad_value_count <= (total_values * 5 / 100);
+                                                            && bad_value_count <= (total_values * 5 / 100)
+                                                            && negative_count <= (total_values * 25 / 100)
+                                                            && max_val >= 300
+                                                            && mean_val >= 100;
 
                                     if !has_valid_soi_values {
                                         // If we haven't found any valid yet, keep looking

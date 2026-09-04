@@ -6099,6 +6099,23 @@ impl EDC16U31Detector {
                         || x[0] > 700 || !(2500..=5500).contains(&x[cols - 1]) || !non_dec(&x) {
                         pos += 2; continue;
                     }
+                    // Données : doivent ressembler aux SOI principales (avance
+                    // × 0.023437 deg, 0-27 deg). Écarte les 14x13 aux valeurs
+                    // majoritairement négatives ou plates (faux positifs signalés
+                    // par Enzo, ex. Golf U34 0x1DF17C : -780..50).
+                    let n_vals = rows * cols;
+                    if data_start + n_vals * 2 > data.len() { pos += 2; continue; }
+                    let vals: Vec<i16> = (0..n_vals)
+                        .map(|i| i16::from_be_bytes([data[data_start + i * 2], data[data_start + i * 2 + 1]]))
+                        .collect();
+                    let in_range = vals.iter().filter(|&&v| (-200..=1500).contains(&v)).count();
+                    let negatives = vals.iter().filter(|&&v| v < 0).count();
+                    let max_val = vals.iter().copied().max().unwrap_or(0);
+                    let mean_val = vals.iter().map(|&v| v as i64).sum::<i64>() / n_vals.max(1) as i64;
+                    if in_range * 100 < n_vals * 80 || negatives * 100 > n_vals * 25
+                        || max_val < 300 || mean_val < 100 {
+                        pos += 2; continue;
+                    }
                     // Same type as the SOI Dynamic maps (verified: same 0.023437
                     // factor, same 0-27 deg range) — replicate their exact fields.
                     // Named "(Dynamic)" directly (final display name): the numbered
