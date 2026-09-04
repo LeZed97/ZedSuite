@@ -5451,7 +5451,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         // Extract base name (remove address prefix like "E22FA ")
         const getBaseName = (name: string) => {
           // Remove hex address prefix (e.g., "E22FA " -> "Start of Injection")
-          return name.replace(/^[A-Fa-f0-9]{4,6}\s+/, '').trim();
+          // puis le numéro de fin de famille (« Start of injection 03 »,
+          // « Maximum Vehicle Speed 2 », « EGR hysteresis 5 », « GEAR 1-2 »…) :
+          // les maps numérotées d'une même famille doivent être proposées
+          // entre elles (demande Enzo, EDC16). Les dimensions restent
+          // vérifiées en plus du nom.
+          return name
+            .replace(/^[A-Fa-f0-9]{4,6}\s+/, '')
+            .replace(/\s+\d{1,2}(?:-\d{1,2})?$/, '')
+            .trim();
         };
         const currentBaseName = getBaseName(mapData.name);
 
