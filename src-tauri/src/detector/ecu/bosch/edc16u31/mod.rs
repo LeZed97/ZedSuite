@@ -1367,8 +1367,12 @@ impl EDC16U31Detector {
                     let count = read(m + 2) as usize;
                     let entries_at = m + 4 + count * 2; // indices come after the axis
                     if (2..=8).contains(&count) && entries_at + count * 2 <= scan_end {
+                        // Program ids are 00..05 on the Passat, but some SW
+                        // (US BEW 038997016R) fill every slot with 01 00:
+                        // accept any small id (one of the count + 1 programs)
+                        // with a zero high byte.
                         let entries_ok = (0..count).all(|i| {
-                            data[entries_at + i * 2] == i as u8 && data[entries_at + i * 2 + 1] == 0
+                            (data[entries_at + i * 2] as usize) <= count && data[entries_at + i * 2 + 1] == 0
                         });
                         if entries_ok {
                             marker = Some((m, count));
