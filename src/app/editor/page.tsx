@@ -3357,6 +3357,13 @@ function EditorPageContent() {
   // n'avait jamais lieu. On laisse l'appel aller au bout et on n'applique le
   // résultat que si le projet ouvert est toujours le même.
   const redetectCheckedRef = useRef<string | null>(null);
+  // Suivi « en direct » des modifications non enregistrées : la re-détection
+  // est asynchrone (plusieurs secondes sur un EDC16) et l'utilisateur peut
+  // commencer à éditer pendant qu'elle tourne ; on ne remplace jamais la
+  // liste des maps sous un travail en cours (modifications indexées par
+  // adresse : une adresse qui bouge ferait perdre l'édition à l'enregistrement).
+  const hasUnsavedChangesRef = useRef(false);
+  hasUnsavedChangesRef.current = hasUnsavedChanges;
   useEffect(() => {
     const fileId = projectData?.fileId;
     if (!fileId || !projectData.detectionResults) return;
@@ -3373,6 +3380,12 @@ function EditorPageContent() {
 
         const response = await axios.post(`/api/files/${fileId}/redetect`);
         if (!response.data?.success || !response.data.detectionResults) return;
+        if (hasUnsavedChangesRef.current) {
+          // Édition démarrée pendant la re-détection : on garde les maps
+          // actuelles, la mise à jour se fera à la prochaine ouverture
+          redetectCheckedRef.current = null;
+          return;
+        }
 
         const refreshed = stripSoiTag(response.data.detectionResults);
         setProjectData((prev) => {
