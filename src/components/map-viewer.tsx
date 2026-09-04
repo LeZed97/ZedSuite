@@ -461,8 +461,9 @@ interface MapViewerProps {
   onApplyToSimilarMaps?: (targetMaps: number[], copyType: 'modifications' | 'all') => void;
   // Value to use for +/- keyboard shortcuts (from toolbar Add input)
   incrementValue?: number;
+  incrementIsPercent?: boolean; // incrementValue est un pourcentage de la valeur courante
   // Command from toolbar to apply modification (add/fill) to selected cells
-  modifyCommand?: { operation: 'add' | 'fill'; value: number; timestamp: number } | null;
+  modifyCommand?: { operation: 'add' | 'fill' | 'percent'; value: number; timestamp: number } | null;
   // Callback to scroll hexdump to this map's address
   onViewInHexdump?: () => void;
   // Whether this map is the active/focused map (for keyboard shortcuts)
@@ -501,6 +502,7 @@ export function MapViewer({
   allMaps,
   onApplyToSimilarMaps,
   incrementValue = 1,
+  incrementIsPercent = false,
   modifyCommand,
   onViewInHexdump,
   isActive = false,
@@ -972,6 +974,13 @@ const skipAutoSizeRef = useRef<boolean>(false);
   // les flèches ; Ctrl+flèche étend la sélection (même modificateur que le
   // Ctrl+clic), Ctrl+C / Ctrl+V copient-collent la sélection.
   const keyboardCursorRef = useRef<{ row: number; col: number } | null>(null);
+
+  // Incrément de la pastille de la topbar (touches +/- et menus contextuels) :
+  // valeur absolue, ou pourcentage de la valeur courante quand la pastille est
+  // sur « Pourcentage » (5 → ×1.05 / ×0.95)
+  const applyIncrement = (v: number, sign: 1 | -1): number =>
+    incrementIsPercent ? v * (1 + (sign * incrementValue) / 100) : v + sign * incrementValue;
+  const incrementUnit = incrementIsPercent ? '%' : '';
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ row: number; col: number } | null>(null);
   const [isCtrlDragging, setIsCtrlDragging] = useState<boolean>(false);
@@ -1714,7 +1723,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             selectedCells.forEach(cellKey => {
               const [rowIdx, colIdx] = cellKey.split('-').map(Number);
               if (next[rowIdx]?.[colIdx] !== undefined) {
-                next[rowIdx][colIdx] += incrementValue;
+                next[rowIdx][colIdx] = applyIncrement(next[rowIdx][colIdx], 1);
               }
             });
             setChangedCells((prevChangedCells) => {
@@ -1742,7 +1751,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedXAxisCells.forEach(idx => {
             mutateDisplayXAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v + incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, 1));
             });
           });
         }
@@ -1750,7 +1759,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedYAxisCells.forEach(idx => {
             mutateDisplayYAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v + incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, 1));
             });
           });
         }
@@ -1764,7 +1773,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             selectedCells.forEach(cellKey => {
               const [rowIdx, colIdx] = cellKey.split('-').map(Number);
               if (next[rowIdx]?.[colIdx] !== undefined) {
-                next[rowIdx][colIdx] -= incrementValue;
+                next[rowIdx][colIdx] = applyIncrement(next[rowIdx][colIdx], -1);
               }
             });
             setChangedCells((prevChangedCells) => {
@@ -1792,7 +1801,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedXAxisCells.forEach(idx => {
             mutateDisplayXAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v - incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, -1));
             });
           });
         }
@@ -1800,7 +1809,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedYAxisCells.forEach(idx => {
             mutateDisplayYAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v - incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, -1));
             });
           });
         }
@@ -1814,7 +1823,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // displayTransposed/flips inclus : le handler doit voir l'orientation
     // courante pour écrire au bon axe source après un toggle d'inversion.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
+  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, incrementIsPercent, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
 
   // Handle modifyCommand from toolbar (Zap button)
   useEffect(() => {
@@ -1834,6 +1843,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           if (next[rowIdx]?.[colIdx] !== undefined) {
             if (operation === 'add') {
               next[rowIdx][colIdx] += value;
+            } else if (operation === 'percent') {
+              next[rowIdx][colIdx] *= 1 + value / 100;
             } else {
               // fill
               next[rowIdx][colIdx] = value;
@@ -1866,7 +1877,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         mutateDisplayXAxis(idx, cur => {
           const v = parseFloat(cur);
           if (isNaN(v)) return cur;
-          return operation === 'add' ? String(v + value) : String(value);
+          return operation === 'add' ? String(v + value) : operation === 'percent' ? String(v * (1 + value / 100)) : String(value);
         });
       });
     }
@@ -1875,7 +1886,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         mutateDisplayYAxis(idx, cur => {
           const v = parseFloat(cur);
           if (isNaN(v)) return cur;
-          return operation === 'add' ? String(v + value) : String(value);
+          return operation === 'add' ? String(v + value) : operation === 'percent' ? String(v * (1 + value / 100)) : String(value);
         });
       });
     }
@@ -4500,23 +4511,23 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                           selectedCells.forEach(cellKey => {
                             const [row, col] = cellKey.split('-').map(Number);
                             const currentValue = mapValues[row]?.[col] ?? 0;
-                            updateCellValue(row, col, currentValue + incrementValue);
+                            updateCellValue(row, col, applyIncrement(currentValue, 1));
                           });
                         } else if (contextMenu.type === 'xAxis') {
                           selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v + incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, 1)).toString();
                           }));
                         } else if (contextMenu.type === 'yAxis') {
                           selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v + incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, 1)).toString();
                           }));
                         }
                         setContextMenu(null);
                       }}
                     >
-                      {t.mapViewer.increase} (+{incrementValue})
+                      {t.mapViewer.increase} (+{incrementValue}{incrementUnit})
                     </button>
 
                     {/* Decrease */}
@@ -4527,23 +4538,23 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                           selectedCells.forEach(cellKey => {
                             const [row, col] = cellKey.split('-').map(Number);
                             const currentValue = mapValues[row]?.[col] ?? 0;
-                            updateCellValue(row, col, currentValue - incrementValue);
+                            updateCellValue(row, col, applyIncrement(currentValue, -1));
                           });
                         } else if (contextMenu.type === 'xAxis') {
                           selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v - incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, -1)).toString();
                           }));
                         } else if (contextMenu.type === 'yAxis') {
                           selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v - incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, -1)).toString();
                           }));
                         }
                         setContextMenu(null);
                       }}
                     >
-                      {t.mapViewer.decrease} (-{incrementValue})
+                      {t.mapViewer.decrease} (-{incrementValue}{incrementUnit})
                     </button>
 
                     <div className="border-t border-gray-600 my-1" />
@@ -5109,24 +5120,24 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                       const [row, col] = cellKey.split('-').map(Number);
                       const currentValue = mapValues[row]?.[col];
                       if (currentValue !== undefined) {
-                        updateCellValue(row, col, currentValue + incrementValue);
+                        updateCellValue(row, col, applyIncrement(currentValue, 1));
                       }
                     });
                   } else if (contextMenu.type === 'xAxis') {
                     selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed + 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, 1).toString();
                     }));
                   } else if (contextMenu.type === 'yAxis') {
                     selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed + 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, 1).toString();
                     }));
                   }
                   setContextMenu(null);
                 }}
               >
-                {t.mapViewer.increase} (+{incrementValue})
+                {t.mapViewer.increase} (+{incrementValue}{incrementUnit})
               </button>
 
               {/* Value -1 */}
@@ -5138,24 +5149,24 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                       const [row, col] = cellKey.split('-').map(Number);
                       const currentValue = mapValues[row]?.[col];
                       if (currentValue !== undefined) {
-                        updateCellValue(row, col, currentValue - incrementValue);
+                        updateCellValue(row, col, applyIncrement(currentValue, -1));
                       }
                     });
                   } else if (contextMenu.type === 'xAxis') {
                     selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed - 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, -1).toString();
                     }));
                   } else if (contextMenu.type === 'yAxis') {
                     selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed - 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, -1).toString();
                     }));
                   }
                   setContextMenu(null);
                 }}
               >
-                {t.mapViewer.decrease} (-{incrementValue})
+                {t.mapViewer.decrease} (-{incrementValue}{incrementUnit})
               </button>
 
               <div className="border-t border-gray-600 my-1" />

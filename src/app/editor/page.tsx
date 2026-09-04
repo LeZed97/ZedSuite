@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { PiHeadCircuit } from "react-icons/pi";
 import { HexdumpViewer, type MapRegion } from "@/components/hexdump-viewer";
-import { EditorToolbar } from "@/components/editor-toolbar";
+import { EditorToolbar, type ModifyOperation } from "@/components/editor-toolbar";
 import { MapViewer, clearMapDataCache, buildPlot3DTicks } from "@/components/map-viewer";
 import { SettingsMenu } from "@/components/settings-menu";
 import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
@@ -1813,9 +1813,11 @@ function EditorPageContent() {
 
   // Modify value for toolbar (shared with MapViewer for +/- keyboard shortcuts)
   const [modifyValue, setModifyValue] = useState<string>('1');
+  // Opération de la pastille (Add / Fill / Percent), partagée avec les MapViewers
+  const [modifyOperation, setModifyOperation] = useState<ModifyOperation>('add');
 
   // Command to send to active MapViewer when Zap button is clicked
-  const [modifyCommand, setModifyCommand] = useState<{ operation: 'add' | 'fill'; value: number; timestamp: number } | null>(null);
+  const [modifyCommand, setModifyCommand] = useState<{ operation: ModifyOperation; value: number; timestamp: number } | null>(null);
 
   // Sync easyViewMode with settings when settings change (for newly loaded settings)
   useEffect(() => {
@@ -3919,7 +3921,7 @@ function EditorPageContent() {
   }, [projectData, allMapModifications, mapAxisLabels, mapDisplaySettingsStore]);
 
   // Handle modify apply from toolbar (add/fill to active map's selected cells)
-  const handleModifyApply = useCallback((operation: 'add' | 'fill', value: number) => {
+  const handleModifyApply = useCallback((operation: ModifyOperation, value: number) => {
     if (!activeMapAddress) return;
 
     // Send command to MapViewer - it will handle the modification of selected cells
@@ -6070,6 +6072,8 @@ function EditorPageContent() {
             onModifyApply={handleModifyApply}
             modifyValue={modifyValue}
             onModifyValueChange={setModifyValue}
+            modifyOperation={modifyOperation}
+            onModifyOperationChange={setModifyOperation}
             onCompareClick={() => setIsCompareOpen(true)}
           />
         </div>
@@ -6681,6 +6685,7 @@ function EditorPageContent() {
                               const parsed = Number(modifyValue.replace(",", "."));
                               return Number.isNaN(parsed) ? 1 : parsed;
                             })()}
+                            incrementIsPercent={modifyOperation === 'percent'}
                             modifyCommand={map.address === activeMapAddress ? modifyCommand : null}
                             isActive={map.address === activeMapAddress}
                             onViewInHexdump={() => setHexdumpScrollToAddress(map.address)}
