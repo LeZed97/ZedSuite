@@ -38,6 +38,12 @@ export async function setAppMinWidth(cssWidth: number, zoom = 1): Promise<void> 
     // telle quelle. On l'élargit donc explicitement — c'est ce qui permet
     // d'élargir la liste des maps sans repousser la barre d'outils hors du
     // cadre.
+    // Jamais de redimensionnement explicite en plein écran ou maximisé : sur
+    // Windows, un setSize dans ces états fait SORTIR du plein écran et décale
+    // la fenêtre (constaté en élargissant la liste des maps). La contrainte
+    // de taille minimale reste posée et s'appliquera au retour en fenêtré.
+    const [fullscreen, maximized] = await Promise.all([win.isFullscreen(), win.isMaximized()]);
+    if (fullscreen || maximized) return;
     const factor = await win.scaleFactor();
     const current = (await win.innerSize()).toLogical(factor);
     if (current.width < width) {
