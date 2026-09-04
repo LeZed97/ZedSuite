@@ -112,7 +112,9 @@ function buildFolderNames(maps: ExportMapData[]): Map<string, string> {
   ).sort((a, b) => a.localeCompare(b));
   const folders = new Map<string, string>();
   categories.forEach((cat, i) => {
-    folders.set(cat, `${i + 1}-${cat}`);
+    // Pas de préfixe numérique : WinOLS trie les dossiers par nom et le
+    // « 4-… » cassait le classement (demande Enzo, tous calculateurs)
+    folders.set(cat, cat);
   });
   return folders;
 }
