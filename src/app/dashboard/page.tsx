@@ -445,7 +445,8 @@ function DashboardContent() {
   // avec la page Paramètres (components/dashboard-background)
   const { wallpaper, isLight, pageBg, customWallpaper } = useDashboardWallpaper(settings.dashboardWallpaper, theme);
   // Image personnalisée sur thème sombre : les surfaces translucides se
-  // noient dans une photo claire → tuiles et recherche plus opaques
+  // noient dans une photo claire → tuiles et recherche un peu plus opaques,
+  // en gardant l'image visible derrière comme sur le thème clair (bg-white/60)
   const onCustomDark = wallpaper === "custom" && !isLight;
 
   useEffect(() => {
@@ -798,7 +799,7 @@ function DashboardContent() {
                 placeholder={t.dashboard.searchPlaceholder}
                 // Thème clair : fond blanc quasi opaque + placeholder foncé, sinon
                 // le texte se noyait sur un fond d'écran personnalisé sombre
-                className={`w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 transition-colors ${isLight ? 'bg-white/80 border border-black/15 text-slate-900 placeholder:text-slate-600 focus:border-black/30' : onCustomDark ? 'bg-[#0d1017]/70 border border-white/20 text-white placeholder:text-slate-300 focus:border-white/40 backdrop-blur-sm' : 'bg-white/[0.04] border border-white/10 text-white placeholder:text-slate-500 focus:border-white/25'}`}
+                className={`w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 transition-colors ${isLight ? 'bg-white/80 border border-black/15 text-slate-900 placeholder:text-slate-600 focus:border-black/30' : onCustomDark ? 'bg-[#0d1017]/45 border border-white/20 text-white placeholder:text-slate-300 focus:border-white/40' : 'bg-white/[0.04] border border-white/10 text-white placeholder:text-slate-500 focus:border-white/25'}`}
                 spellCheck={false}
               />
             </div>
@@ -845,7 +846,7 @@ function DashboardContent() {
                   return (
                     <div
                       key={file.id}
-                      className={`group flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${isLight ? 'bg-white/60 border border-black/[0.08] hover:bg-white/90 hover:border-black/[0.16] shadow-sm' : onCustomDark ? 'bg-[#0d1017]/70 border border-white/[0.14] hover:bg-[#0d1017]/85 hover:border-white/[0.22] backdrop-blur-sm' : 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]'}`}
+                      className={`group flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${isLight ? 'bg-white/60 border border-black/[0.08] hover:bg-white/90 hover:border-black/[0.16] shadow-sm' : onCustomDark ? 'bg-[#0d1017]/45 border border-white/[0.12] hover:bg-[#0d1017]/60 hover:border-white/[0.2]' : 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]'}`}
                       onClick={() => handleOpenProject(file)}
                     >
                       <div className="flex items-center gap-4 flex-1">
