@@ -6686,6 +6686,7 @@ function EditorPageContent() {
                               return Number.isNaN(parsed) ? 1 : parsed;
                             })()}
                             incrementIsPercent={modifyOperation === 'percent'}
+                            incrementDisabled={modifyOperation === 'fill'}
                             modifyCommand={map.address === activeMapAddress ? modifyCommand : null}
                             isActive={map.address === activeMapAddress}
                             onViewInHexdump={() => setHexdumpScrollToAddress(map.address)}

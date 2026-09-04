@@ -448,6 +448,9 @@ function DashboardContent() {
   // noient dans une photo claire → tuiles et recherche un peu plus opaques,
   // en gardant l'image visible derrière comme sur le thème clair (bg-white/60)
   const onCustomDark = wallpaper === "custom" && !isLight;
+  // Image personnalisée sur thème clair : les boutons du haut, la pagination
+  // et le sélecteur du bas se posent sur une pastille blanche translucide
+  const onCustomLight = wallpaper === "custom" && isLight;
 
   useEffect(() => {
     loadDashboardData();
@@ -759,17 +762,17 @@ function DashboardContent() {
                 flex-shrink-0 : réduire/agrandir/fermer restent toujours
                 visibles quand la fenêtre rétrécit (c'est le wordmark à gauche
                 qui se comprime). */}
-            <div className="flex items-center pt-1 flex-shrink-0">
+            <div className={`flex items-center flex-shrink-0 ${onCustomLight ? "mt-1 rounded-lg bg-white/60" : "pt-1"}`}>
               <button
                 onClick={() => setShowAbout(true)}
-                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
                 title="Help"
               >
                 <HelpCircle className="w-4 h-4" />
               </button>
               <button
                 onClick={() => router.push('/settings')}
-                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
                 title={t.userMenu.settings}
               >
                 <Settings className="w-4 h-4" />
@@ -913,7 +916,7 @@ function DashboardContent() {
                             la pastille Versions, atténuée au repos */}
                         <div className={`flex items-center rounded-full border overflow-hidden opacity-70 group-hover:opacity-100 transition-opacity ${isLight ? 'border-black/[0.12] bg-black/[0.04]' : 'border-white/[0.08] bg-white/[0.04]'}`}>
                           <button
-                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
                             title={t.projectInfo?.title || "Project info"}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -935,7 +938,7 @@ function DashboardContent() {
                           </button>
                           <div className={`w-px h-4 ${isLight ? 'bg-black/[0.12]' : 'bg-white/[0.08]'}`} />
                           <button
-                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
                             title={t.dashboard.openFolder}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -961,7 +964,7 @@ function DashboardContent() {
 
               {/* Pagination */}
               {filteredFiles.length > 0 && (
-                <div className="flex items-center justify-between mt-6">
+                <div className={`flex items-center justify-between mt-6 ${onCustomLight ? "rounded-xl bg-white/60 px-3 py-1.5" : ""}`}>
                   <div className="flex-1" />
 
                   {totalPages > 1 && (

@@ -462,6 +462,7 @@ interface MapViewerProps {
   // Value to use for +/- keyboard shortcuts (from toolbar Add input)
   incrementValue?: number;
   incrementIsPercent?: boolean; // incrementValue est un pourcentage de la valeur courante
+  incrementDisabled?: boolean; // pastille sur « Remplacer » : +/- et Augmenter/Diminuer inactifs
   // Command from toolbar to apply modification (add/fill) to selected cells
   modifyCommand?: { operation: 'add' | 'fill' | 'percent'; value: number; timestamp: number } | null;
   // Callback to scroll hexdump to this map's address
@@ -503,6 +504,7 @@ export function MapViewer({
   onApplyToSimilarMaps,
   incrementValue = 1,
   incrementIsPercent = false,
+  incrementDisabled = false,
   modifyCommand,
   onViewInHexdump,
   isActive = false,
@@ -1714,6 +1716,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       }
 
       if (e.key === '+' || e.key === '=' || e.key === 'Add') {
+        if (incrementDisabled) { e.preventDefault(); return; }
         e.preventDefault();
 
         // Modifier les cellules de données sélectionnées
@@ -1764,6 +1767,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           });
         }
       } else if (e.key === '-' || e.key === '_' || e.key === 'Subtract') {
+        if (incrementDisabled) { e.preventDefault(); return; }
         e.preventDefault();
 
         // Modifier les cellules de données sélectionnées
@@ -1823,7 +1827,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // displayTransposed/flips inclus : le handler doit voir l'orientation
     // courante pour écrire au bon axe source après un toggle d'inversion.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, incrementIsPercent, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
+  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, incrementIsPercent, incrementDisabled, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
 
   // Handle modifyCommand from toolbar (Zap button)
   useEffect(() => {
@@ -4505,7 +4509,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
                     {/* Increase */}
                     <button
-                      className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                      disabled={incrementDisabled}
+                      className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                       onClick={() => {
                         if (contextMenu.type === 'cell') {
                           selectedCells.forEach(cellKey => {
@@ -4532,7 +4537,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
                     {/* Decrease */}
                     <button
-                      className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                      disabled={incrementDisabled}
+                      className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                       onClick={() => {
                         if (contextMenu.type === 'cell') {
                           selectedCells.forEach(cellKey => {
@@ -5113,7 +5119,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
               {/* Value +1 */}
               <button
-                className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                disabled={incrementDisabled}
+                className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                 onClick={() => {
                   if (contextMenu.type === 'cell') {
                     selectedCells.forEach(cellKey => {
@@ -5142,7 +5149,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
               {/* Value -1 */}
               <button
-                className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                disabled={incrementDisabled}
+                className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                 onClick={() => {
                   if (contextMenu.type === 'cell') {
                     selectedCells.forEach(cellKey => {
