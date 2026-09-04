@@ -5579,6 +5579,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                             }}
                             className="w-4 h-4 accent-red-500 rounded"
                           />
+                          {/* Adresse hexa devant le nom, comme dans la liste des maps (demande Enzo) */}
+                          <span className="text-[11px] font-mono text-gray-400 flex-shrink-0">{m.address.toString(16).toUpperCase()}</span>
                           <span className="text-[12px] text-white flex-1 truncate">{m.name}</span>
                           <span className="text-[11px] text-gray-500">{dimStr}</span>
                         </label>
