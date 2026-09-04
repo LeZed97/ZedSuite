@@ -7201,13 +7201,23 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             let currentData = new Uint8Array(projectData.file_data) as Uint8Array<ArrayBuffer>;
             const allChangedAddresses: number[] = [];
             const ecuFamily = projectData.ecu_type || 'EDC15';
+            const isEdc16 = ecuFamily.toUpperCase().startsWith('EDC16');
             for (const dtc of dtcs) {
               const { modifiedData, changedAddresses } = enableDTC(currentData, dtc, codeblocks, ecuFamily);
-              currentData = modifiedData as Uint8Array<ArrayBuffer>;
-              for (const addr of changedAddresses) {
-                if (originalData && addr < originalData.length) {
-                  currentData[addr] = originalData[addr];
-                }
+              // EDC16 : la table de contrôle partage ses octets entre DTC
+              // (511 codes pour 283 octets ; l'octet « alternatif » d'un code
+              // est l'octet principal d'un autre). Réactiver en écrivant les
+              // deux octets rallumait des DTC non sélectionnés : on ne rétablit
+              // que l'octet PRINCIPAL (le premier renvoyé), qui suffit à
+              // l'état « actif ». Les codes qui partagent ce même octet
+              // rallument ensemble, c'est inhérent au calculateur.
+              const targets = isEdc16 ? changedAddresses.slice(0, 1) : changedAddresses;
+              for (const addr of targets) {
+                const enabledByLib = modifiedData[addr];
+                const originalByte = originalData && addr < originalData.length ? originalData[addr] : undefined;
+                // Octet d'origine si le DTC était actif d'origine, sinon la
+                // valeur « actif » connue du mapping (DTC coupé d'usine)
+                currentData[addr] = originalByte !== undefined && originalByte !== 0x00 ? originalByte : enabledByLib;
                 allChangedAddresses.push(addr);
               }
             }
