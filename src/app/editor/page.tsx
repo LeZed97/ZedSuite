@@ -1768,17 +1768,20 @@ function EditorPageContent() {
   const [hexdumpLayout, setHexdumpLayout] = useState<{ x: number; y: number; width: number; height: number }>({
     x: 0,
     y: 0,
-    // Largeur mode 8b (voir HEXDUMP_WINDOW_WIDTH) : contenu + minimap 32px.
+    // Largeur mode 16b (vue par défaut, voir HEXDUMP_WINDOW_WIDTH).
     // Resynchronisée par effet à chaque bascule 8b/16b.
-    width: 452,
+    width: 568,
     height: 700,
   });
   const [hexdumpMovedFromOrigin, setHexdumpMovedFromOrigin] = useState(false);
   const [hexdumpZIndex, setHexdumpZIndex] = useState(10);
   const [mapLayouts, setMapLayouts] = useState<Map<number, { x: number; y: number; width: number; height: number }>>(new Map());
   
-  // Hexdump format state
-  const [hexdumpSize, setHexdumpSize] = useState<"8b" | "16b">("8b");
+  // Hexdump format state. Vue par défaut : 16 bits (les maps EDC15/EDC16 sont
+  // des mots de 16 bits ; même convention que WinOLS qui ouvre ces calibrations
+  // en « 16 Bit LoHi » pour l'EDC15 et « 16 Bit HiLo » pour l'EDC16), l'ordre
+  // des octets suivant l'ECU juste en dessous. Le 8 bits reste à un clic.
+  const [hexdumpSize, setHexdumpSize] = useState<"8b" | "16b">("16b");
   // Ordre des octets de l'hexdump 16 bits : par défaut celui de l'ECU (HiLo
   // = big-endian EDC16/MJD, LoHi = EDC15), basculable dans la toolbar.
   const [hexdumpByteOrder, setHexdumpByteOrder] = useState<"hilo" | "lohi">("lohi");
@@ -5923,7 +5926,7 @@ function EditorPageContent() {
                             <Folder className={`w-3 h-3 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                           )}
                           <span
-                            className={`text-xs ${folderHasModifiedMap ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent' : ''}`}
+                            className={`text-xs ${folderHasModifiedMap ? (theme === 'light' ? MODIFIED_TEXT_GRADIENT_LIGHT : MODIFIED_TEXT_GRADIENT_DARK) : ''}`}
                             style={folderHasModifiedMap ? undefined : { color: folderTextColor }}
                           >{folder}</span>
                           <span
@@ -5937,7 +5940,7 @@ function EditorPageContent() {
                           >
                             {folderHasModifiedMap && (
                               <>
-                                <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent font-semibold">
+                                <span className={`${theme === 'light' ? MODIFIED_TEXT_GRADIENT_LIGHT : MODIFIED_TEXT_GRADIENT_DARK} font-semibold`}>
                                   {folderModifiedCount}
                                 </span>
                                 <span className="mx-0.5 opacity-60">/</span>
@@ -5959,7 +5962,7 @@ function EditorPageContent() {
 
                               // Texte : dégradé du logo si modifié (bg-clip-text), sinon normal.
                               // L'icône (SVG currentColor) ne peut pas prendre le dégradé -> rouge uni.
-                              const modifiedGradient = 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent';
+                              const modifiedGradient = theme === 'light' ? MODIFIED_TEXT_GRADIENT_LIGHT : MODIFIED_TEXT_GRADIENT_DARK;
                               const textColor = isModified
                                 ? '#ef4444' // icône + fallback sans adresse
                                 : (theme === 'light' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)');
@@ -5976,7 +5979,8 @@ function EditorPageContent() {
                                   }}
                                   className={`flex items-center gap-2 w-full px-2 py-1.5 rounded text-left transition-colors focus:outline-none ${
                                     isOpen
-                                      ? "bg-primary/20"
+                                      // Clair + modifiée : fond rouge plus léger sous le texte rouge
+                                      ? (theme === 'light' && isModified ? "bg-primary/10" : "bg-primary/20")
                                       : (theme === 'light' ? 'hover:bg-black/5' : 'hover:bg-white/5')
                                   }`}
                                   style={{ color: textColor }}
@@ -6124,7 +6128,7 @@ function EditorPageContent() {
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-blue-600/15 text-blue-700' : 'bg-blue-600/30 text-blue-300'}`}>
                       {hexdumpSize === '8b' ? '8b' : '16b'}
                     </span>
-                    <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-emerald-600/15 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300'}`}>
+                    <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-amber-500/20 text-amber-700' : 'bg-amber-500/30 text-amber-300'}`}>
                       {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
                     </span>
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-red-600/15 text-red-700' : 'bg-red-600/30 text-red-300'}`}>
@@ -7365,6 +7369,12 @@ function EditorPageContent() {
 // +60 px depuis l'ajout du bouton HiLo/LoHi dans la pastille 8b/16b : en
 // dessous, la barre recouvrait les contrôles de fenêtre à largeur minimale.
 const TOOLBAR_MIN_CSS_WIDTH = 1095;
+
+// Dégradé « modifié » de la liste des maps (texte en bg-clip-text). Sur le
+// thème clair, une map ouverte a un fond rouge translucide : le dégradé
+// standard s'y noyait, on l'assombrit pour rester lisible.
+const MODIFIED_TEXT_GRADIENT_DARK = 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent';
+const MODIFIED_TEXT_GRADIENT_LIGHT = 'bg-gradient-to-r from-red-800 via-red-700 to-orange-700 bg-clip-text text-transparent';
 
 export default function EditorPage() {
   return (
