@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { PiHeadCircuit } from "react-icons/pi";
 import { HexdumpViewer, type MapRegion } from "@/components/hexdump-viewer";
-import { EditorToolbar } from "@/components/editor-toolbar";
+import { EditorToolbar, type ModifyOperation } from "@/components/editor-toolbar";
 import { MapViewer, clearMapDataCache, buildPlot3DTicks } from "@/components/map-viewer";
 import { SettingsMenu } from "@/components/settings-menu";
 import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
@@ -48,7 +48,7 @@ import { isBigEndianEcu } from "@/lib/ecu-endianness";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PromptModal } from "@/components/prompt-modal";
 import { correctChecksumByEcuType, isChecksumSupported, ChecksumResult } from "@/lib/ecu/bosch/checksums";
-import { disableDTC, detectDTCs, type DetectedDTC, type CodeblockInfo } from "@/lib/ecu/bosch/dtc";
+import { disableDTC, enableDTC, detectDTCs, type DetectedDTC, type CodeblockInfo } from "@/lib/ecu/bosch/dtc";
 import { saveBytesToFile } from "@/lib/local/save-file";
 import { identifyEcu, bytesToBase64, detectorVersion } from "@/lib/local/detector";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
@@ -1157,8 +1157,11 @@ function PreviewWindow({
     if (!activeMapAddress) return;
 
     // Sauvegarder la position de caméra si elle est présente dans l'événement
-    if (event['scene.camera']) {
-      const camera = event['scene.camera'];
+    const camera = event['scene.camera']
+      || (event['scene.camera.eye']
+        ? { eye: event['scene.camera.eye'], center: event['scene.camera.center'], up: event['scene.camera.up'] }
+        : null);
+    if (camera) {
       previewCameraPositions[activeMapAddress] = {
         eye: camera.eye || { x: -1.8, y: -1.8, z: 1.0 },
         center: camera.center || { x: 0, y: 0, z: 0 },
@@ -1166,6 +1169,26 @@ function PreviewWindow({
       };
     }
   }, [activeMapAddress]);
+
+  // Caméra VIVANTE lue sur le graphique Plotly lui-même (gd._fullLayout).
+  // C'est la seule source sûre de l'orientation courante : l'événement
+  // relayout n'était pas toujours reçu, et à chaque re-rendu (clic sur une
+  // cellule du tableau) Plotly repartait de la dernière caméra connue —
+  // orientation par défaut mais zoom conservé (bug signalé).
+  const plotDivRef = useRef<any>(null);
+  const plotDivMapRef = useRef<number | null>(null);
+  const liveCameraFor = (address: number | null) => {
+    if (address === null || plotDivMapRef.current !== address) return null;
+    const cam = plotDivRef.current?._fullLayout?.scene?.camera;
+    if (!cam || !cam.eye) return null;
+    return {
+      eye: { ...cam.eye },
+      center: { ...(cam.center || { x: 0, y: 0, z: 0 }) },
+      up: { ...(cam.up || { x: 0, y: 0, z: 1 }) },
+    };
+  };
+  const liveCamera = liveCameraFor(activeMapAddress);
+  if (liveCamera && activeMapAddress) previewCameraPositions[activeMapAddress] = liveCamera;
 
   // Obtenir la position de caméra actuelle
   const cameraPosition = getCameraPosition();
@@ -1176,7 +1199,7 @@ function PreviewWindow({
   const [zoomRev, setZoomRev] = useState(0);
   const zoomCamera = (factor: number) => {
     if (!activeMapAddress) return;
-    const cam = previewCameraPositions[activeMapAddress] || getCameraPosition();
+    const cam = liveCameraFor(activeMapAddress) || previewCameraPositions[activeMapAddress] || getCameraPosition();
     if (!cam) return;
     const c = cam.center || { x: 0, y: 0, z: 0 };
     const eye = {
@@ -1390,6 +1413,14 @@ function PreviewWindow({
               style={{ width: "100%", height: "100%" }}
               useResizeHandler={true}
               onRelayout={handleRelayout}
+              onInitialized={(_figure: unknown, graphDiv: unknown) => {
+                plotDivRef.current = graphDiv;
+                plotDivMapRef.current = activeMapAddress;
+              }}
+              onUpdate={(_figure: unknown, graphDiv: unknown) => {
+                plotDivRef.current = graphDiv;
+                plotDivMapRef.current = activeMapAddress;
+              }}
             />
             {/* Zoom +/− du graphique 3D — coin bas-gauche, comme sur l'EasyView */}
             <div
@@ -1768,17 +1799,20 @@ function EditorPageContent() {
   const [hexdumpLayout, setHexdumpLayout] = useState<{ x: number; y: number; width: number; height: number }>({
     x: 0,
     y: 0,
-    // Largeur mode 8b (voir HEXDUMP_WINDOW_WIDTH) : contenu + minimap 32px.
+    // Largeur mode 16b (vue par défaut, voir HEXDUMP_WINDOW_WIDTH).
     // Resynchronisée par effet à chaque bascule 8b/16b.
-    width: 452,
+    width: 568,
     height: 700,
   });
   const [hexdumpMovedFromOrigin, setHexdumpMovedFromOrigin] = useState(false);
   const [hexdumpZIndex, setHexdumpZIndex] = useState(10);
   const [mapLayouts, setMapLayouts] = useState<Map<number, { x: number; y: number; width: number; height: number }>>(new Map());
   
-  // Hexdump format state
-  const [hexdumpSize, setHexdumpSize] = useState<"8b" | "16b">("8b");
+  // Hexdump format state. Vue par défaut : 16 bits (les maps EDC15/EDC16 sont
+  // des mots de 16 bits ; même convention que WinOLS qui ouvre ces calibrations
+  // en « 16 Bit LoHi » pour l'EDC15 et « 16 Bit HiLo » pour l'EDC16), l'ordre
+  // des octets suivant l'ECU juste en dessous. Le 8 bits reste à un clic.
+  const [hexdumpSize, setHexdumpSize] = useState<"8b" | "16b">("16b");
   // Ordre des octets de l'hexdump 16 bits : par défaut celui de l'ECU (HiLo
   // = big-endian EDC16/MJD, LoHi = EDC15), basculable dans la toolbar.
   const [hexdumpByteOrder, setHexdumpByteOrder] = useState<"hilo" | "lohi">("lohi");
@@ -1810,9 +1844,11 @@ function EditorPageContent() {
 
   // Modify value for toolbar (shared with MapViewer for +/- keyboard shortcuts)
   const [modifyValue, setModifyValue] = useState<string>('1');
+  // Opération de la pastille (Add / Fill / Percent), partagée avec les MapViewers
+  const [modifyOperation, setModifyOperation] = useState<ModifyOperation>('add');
 
   // Command to send to active MapViewer when Zap button is clicked
-  const [modifyCommand, setModifyCommand] = useState<{ operation: 'add' | 'fill'; value: number; timestamp: number } | null>(null);
+  const [modifyCommand, setModifyCommand] = useState<{ operation: ModifyOperation; value: number; timestamp: number } | null>(null);
 
   // Sync easyViewMode with settings when settings change (for newly loaded settings)
   useEffect(() => {
@@ -1891,7 +1927,7 @@ function EditorPageContent() {
   const [isDTCClosing, setIsDTCClosing] = useState(false);
   const [dtcRefreshKey, setDtcRefreshKey] = useState(0);
   // DTC notification state
-  const [dtcNotification, setDtcNotification] = useState<{ count: number; visible: boolean; fading: boolean }>({ count: 0, visible: false, fading: false });
+  const [dtcNotification, setDtcNotification] = useState<{ count: number; visible: boolean; fading: boolean; mode: 'disabled' | 'enabled' }>({ count: 0, visible: false, fading: false, mode: 'disabled' });
 
   // Solutions modal state
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false);
@@ -3052,10 +3088,20 @@ function EditorPageContent() {
     setIsWindowDragActive(false);
   };
 
-  const handleMapAutoSize = (mapAddress: number, width: number, height: number) => {
+  // Fenêtres redimensionnées À LA MAIN (poignée) : un auto-dimensionnement
+  // ultérieur (recalcul sur le tableau en vue texte / EasyView) ne doit jamais
+  // leur rendre leur taille d'origine — signalé en changeant de map
+  // puis en revenant sur la fenêtre. La 3D n'a pas d'auto-size, elle gardait
+  // sa taille.
+  const userResizedMapsRef = useRef<Set<number>>(new Set());
+  const handleMapAutoSize = (mapAddress: number, width: number, height: number, source: 'auto' | 'user' = 'auto') => {
+    if (source === 'user') userResizedMapsRef.current.add(mapAddress);
     setMapLayouts((prev) => {
       const next = new Map(prev);
       const existing = next.get(mapAddress);
+      if (source === 'auto' && existing && userResizedMapsRef.current.has(mapAddress)) {
+        return prev; // taille choisie par l'utilisateur : on la garde
+      }
 
       // Calculer la hauteur maximale disponible dans le workspace
       const workspaceRect = workspaceRef.current?.getBoundingClientRect();
@@ -3354,6 +3400,13 @@ function EditorPageContent() {
   // n'avait jamais lieu. On laisse l'appel aller au bout et on n'applique le
   // résultat que si le projet ouvert est toujours le même.
   const redetectCheckedRef = useRef<string | null>(null);
+  // Suivi « en direct » des modifications non enregistrées : la re-détection
+  // est asynchrone (plusieurs secondes sur un EDC16) et l'utilisateur peut
+  // commencer à éditer pendant qu'elle tourne ; on ne remplace jamais la
+  // liste des maps sous un travail en cours (modifications indexées par
+  // adresse : une adresse qui bouge ferait perdre l'édition à l'enregistrement).
+  const hasUnsavedChangesRef = useRef(false);
+  hasUnsavedChangesRef.current = hasUnsavedChanges;
   useEffect(() => {
     const fileId = projectData?.fileId;
     if (!fileId || !projectData.detectionResults) return;
@@ -3370,6 +3423,12 @@ function EditorPageContent() {
 
         const response = await axios.post(`/api/files/${fileId}/redetect`);
         if (!response.data?.success || !response.data.detectionResults) return;
+        if (hasUnsavedChangesRef.current) {
+          // Édition démarrée pendant la re-détection : on garde les maps
+          // actuelles, la mise à jour se fera à la prochaine ouverture
+          redetectCheckedRef.current = null;
+          return;
+        }
 
         const refreshed = stripSoiTag(response.data.detectionResults);
         setProjectData((prev) => {
@@ -3903,7 +3962,7 @@ function EditorPageContent() {
   }, [projectData, allMapModifications, mapAxisLabels, mapDisplaySettingsStore]);
 
   // Handle modify apply from toolbar (add/fill to active map's selected cells)
-  const handleModifyApply = useCallback((operation: 'add' | 'fill', value: number) => {
+  const handleModifyApply = useCallback((operation: ModifyOperation, value: number) => {
     if (!activeMapAddress) return;
 
     // Send command to MapViewer - it will handle the modification of selected cells
@@ -4046,46 +4105,42 @@ function EditorPageContent() {
           ...Array.from(allMapModifications.keys()),
           ...Array.from(mapAxisLabels.keys()),
         ]);
-        const mapSavePromises = Array.from(mapAddressesToSave).map(async (mapAddress) => {
-          const cells = allMapModifications.get(mapAddress);
-          const axes = mapAxisLabels.get(mapAddress);
-          const payload: Record<string, unknown> = {};
-          if (cells && Object.keys(cells).length > 0) {
-            payload.changedCells = Object.entries(cells).map(([key, value]) => {
-              const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-              return { row: parseInt(rowStr), col: parseInt(colStr), value };
-            });
-          }
-          if (axes && (axes.x || axes.y)) {
-            payload.axisLabels = {
-              ...(axes.x ? { x: axes.x } : {}),
-              ...(axes.y ? { y: axes.y } : {}),
-            };
-          }
-          return axios.post("/api/versioning/map-edits", {
-            versionId: newVersionId,
-            mapAddress,
-            payload,
-          });
-        });
-
-        // Save binary modifications (DTC) to new version
-        const binarySavePromise = binaryModifications.size > 0
-          ? axios.post("/api/versioning/map-edits", {
-              versionId: newVersionId,
-              mapAddress: -1, // Adresse spéciale pour les modifications binaires
-              payload: {
-                type: "binary",
-                changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                  address: addr,
-                  oldValue,
-                  newValue,
-                })),
-              },
-            })
-          : Promise.resolve();
-
-        await Promise.all([...mapSavePromises, binarySavePromise]);
+        const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSave).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: editsToSave });
         skipNextVersionChangeRef.current = true;
         if (projectData?.fileId) {
           await refreshVersions(projectData.fileId);
@@ -4127,46 +4182,42 @@ function EditorPageContent() {
           ...Array.from(allMapModifications.keys()),
           ...Array.from(mapAxisLabels.keys()),
         ]);
-        const mapSavePromises = Array.from(mapAddressesToSaveExisting).map(async (mapAddress) => {
-          const cells = allMapModifications.get(mapAddress);
-          const axes = mapAxisLabels.get(mapAddress);
-          const payload: Record<string, unknown> = {};
-          if (cells && Object.keys(cells).length > 0) {
-            payload.changedCells = Object.entries(cells).map(([key, value]) => {
-              const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-              return { row: parseInt(rowStr), col: parseInt(colStr), value };
-            });
-          }
-          if (axes && (axes.x || axes.y)) {
-            payload.axisLabels = {
-              ...(axes.x ? { x: axes.x } : {}),
-              ...(axes.y ? { y: axes.y } : {}),
-            };
-          }
-          return axios.post("/api/versioning/map-edits", {
-            versionId: currentVersionId,
-            mapAddress,
-            payload,
-          });
-        });
-
-        // Save binary modifications (DTC) to current version
-        const binarySavePromise = binaryModifications.size > 0
-          ? axios.post("/api/versioning/map-edits", {
-              versionId: currentVersionId,
-              mapAddress: -1, // Adresse spéciale pour les modifications binaires
-              payload: {
-                type: "binary",
-                changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                  address: addr,
-                  oldValue,
-                  newValue,
-                })),
-              },
-            })
-          : Promise.resolve();
-
-        await Promise.all([...mapSavePromises, binarySavePromise]);
+        const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSaveExisting).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edits: editsToSave });
         skipNextVersionChangeRef.current = true;
         if (projectData?.fileId) {
           await refreshVersions(projectData.fileId);
@@ -4441,46 +4492,42 @@ function EditorPageContent() {
         ...Array.from(allMapModifications.keys()),
         ...Array.from(mapAxisLabels.keys()),
       ]);
-      const mapSavePromises = Array.from(mapAddressesToSaveCreate).map(async (mapAddress) => {
-        const cells = allMapModifications.get(mapAddress);
-        const axes = mapAxisLabels.get(mapAddress);
-        const payload: Record<string, unknown> = {};
-        if (cells && Object.keys(cells).length > 0) {
-          payload.changedCells = Object.entries(cells).map(([key, value]) => {
-            const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-            return { row: parseInt(rowStr), col: parseInt(colStr), value };
-          });
-        }
-        if (axes && (axes.x || axes.y)) {
-          payload.axisLabels = {
-            ...(axes.x ? { x: axes.x } : {}),
-            ...(axes.y ? { y: axes.y } : {}),
-          };
-        }
-        return axios.post("/api/versioning/map-edits", {
-          versionId: newVersionId,
-          mapAddress,
-          payload,
-        });
-      });
-
-      // 3. Sauvegarder les modifications binaires (DTC) dans cette version
-      const binarySavePromise = binaryModifications.size > 0
-        ? axios.post("/api/versioning/map-edits", {
-            versionId: newVersionId,
-            mapAddress: -1, // Adresse spéciale pour les modifications binaires
-            payload: {
-              type: "binary",
-              changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                address: addr,
-                oldValue,
-                newValue,
-              })),
-            },
-          })
-        : Promise.resolve();
-
-      await Promise.all([...mapSavePromises, binarySavePromise]);
+      const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSaveCreate).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: editsToSave });
 
       // Reset binary modifications after save.
       // Note: mapAxisLabels intentionally kept so the user's axis edits stay
@@ -4563,46 +4610,42 @@ function EditorPageContent() {
         ...Array.from(allMapModifications.keys()),
         ...Array.from(mapAxisLabels.keys()),
       ]);
-      const mapSavePromises = Array.from(mapAddressesToSaveUpdate).map(async (mapAddress) => {
-        const cells = allMapModifications.get(mapAddress);
-        const axes = mapAxisLabels.get(mapAddress);
-        const payload: Record<string, unknown> = {};
-        if (cells && Object.keys(cells).length > 0) {
-          payload.changedCells = Object.entries(cells).map(([key, value]) => {
-            const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-            return { row: parseInt(rowStr), col: parseInt(colStr), value };
-          });
-        }
-        if (axes && (axes.x || axes.y)) {
-          payload.axisLabels = {
-            ...(axes.x ? { x: axes.x } : {}),
-            ...(axes.y ? { y: axes.y } : {}),
-          };
-        }
-        return axios.post("/api/versioning/map-edits", {
-          versionId: currentVersionId,
-          mapAddress,
-          payload,
-        });
-      });
-
-      // Save binary modifications (DTC) to the current version
-      const binarySavePromise = binaryModifications.size > 0
-        ? axios.post("/api/versioning/map-edits", {
-            versionId: currentVersionId,
-            mapAddress: -1, // Adresse spéciale pour les modifications binaires
-            payload: {
-              type: "binary",
-              changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                address: addr,
-                oldValue,
-                newValue,
-              })),
-            },
-          })
-        : Promise.resolve();
-
-      await Promise.all([...mapSavePromises, binarySavePromise]);
+      const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSaveUpdate).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edits: editsToSave });
 
       // Save detection_data to the local store
       if (projectData.detectionResults) {
@@ -5011,6 +5054,7 @@ function EditorPageContent() {
   };
 
   const handleCloseMapWindow = (mapAddress: number) => {
+    userResizedMapsRef.current.delete(mapAddress);
     setOpenMaps((prev) => prev.filter((m) => m.address !== mapAddress));
     setMapViewModes((prev) => {
       const updated = new Map(prev);
@@ -5923,7 +5967,7 @@ function EditorPageContent() {
                             <Folder className={`w-3 h-3 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                           )}
                           <span
-                            className={`text-xs ${folderHasModifiedMap ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent' : ''}`}
+                            className={`text-xs ${folderHasModifiedMap ? (theme === 'light' ? MODIFIED_TEXT_GRADIENT_LIGHT : MODIFIED_TEXT_GRADIENT_DARK) : ''}`}
                             style={folderHasModifiedMap ? undefined : { color: folderTextColor }}
                           >{folder}</span>
                           <span
@@ -5937,7 +5981,7 @@ function EditorPageContent() {
                           >
                             {folderHasModifiedMap && (
                               <>
-                                <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent font-semibold">
+                                <span className={`${theme === 'light' ? MODIFIED_TEXT_GRADIENT_LIGHT : MODIFIED_TEXT_GRADIENT_DARK} font-semibold`}>
                                   {folderModifiedCount}
                                 </span>
                                 <span className="mx-0.5 opacity-60">/</span>
@@ -5959,7 +6003,7 @@ function EditorPageContent() {
 
                               // Texte : dégradé du logo si modifié (bg-clip-text), sinon normal.
                               // L'icône (SVG currentColor) ne peut pas prendre le dégradé -> rouge uni.
-                              const modifiedGradient = 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent';
+                              const modifiedGradient = theme === 'light' ? MODIFIED_TEXT_GRADIENT_LIGHT : MODIFIED_TEXT_GRADIENT_DARK;
                               const textColor = isModified
                                 ? '#ef4444' // icône + fallback sans adresse
                                 : (theme === 'light' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)');
@@ -5976,7 +6020,8 @@ function EditorPageContent() {
                                   }}
                                   className={`flex items-center gap-2 w-full px-2 py-1.5 rounded text-left transition-colors focus:outline-none ${
                                     isOpen
-                                      ? "bg-primary/20"
+                                      // Clair + modifiée : fond rouge plus léger sous le texte rouge
+                                      ? (theme === 'light' && isModified ? "bg-primary/10" : "bg-primary/20")
                                       : (theme === 'light' ? 'hover:bg-black/5' : 'hover:bg-white/5')
                                   }`}
                                   style={{ color: textColor }}
@@ -6053,6 +6098,8 @@ function EditorPageContent() {
             onModifyApply={handleModifyApply}
             modifyValue={modifyValue}
             onModifyValueChange={setModifyValue}
+            modifyOperation={modifyOperation}
+            onModifyOperationChange={setModifyOperation}
             onCompareClick={() => setIsCompareOpen(true)}
           />
         </div>
@@ -6124,11 +6171,9 @@ function EditorPageContent() {
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-blue-600/15 text-blue-700' : 'bg-blue-600/30 text-blue-300'}`}>
                       {hexdumpSize === '8b' ? '8b' : '16b'}
                     </span>
-                    {hexdumpSize === '16b' && (
-                      <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-emerald-600/15 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300'}`}>
-                        {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
-                      </span>
-                    )}
+                    <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-amber-500/20 text-amber-700' : 'bg-amber-500/30 text-amber-300'}`}>
+                      {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
+                    </span>
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-red-600/15 text-red-700' : 'bg-red-600/30 text-red-300'}`}>
                       {hexdumpFormat === 'hex' ? 'Hex' : 'Dec'}
                     </span>
@@ -6605,7 +6650,7 @@ function EditorPageContent() {
                             viewMode={mapViewModes.get(map.address) || "text"}
                             easyViewMode={mapEasyViewStatus.get(map.address) || false}
                             onViewModeChange={(mode) => handleViewModeChange(map.address, mode)}
-                            onAutoSize={(w, h) => handleMapAutoSize(map.address, w, h)}
+                            onAutoSize={(w, h, source) => handleMapAutoSize(map.address, w, h, source)}
                             onDragStart={(e) => handleMapDragStart(map.address, e)}
                             onResizeActiveChange={(active) => {
                               setOverlayCursor('se-resize');
@@ -6666,6 +6711,8 @@ function EditorPageContent() {
                               const parsed = Number(modifyValue.replace(",", "."));
                               return Number.isNaN(parsed) ? 1 : parsed;
                             })()}
+                            incrementIsPercent={modifyOperation === 'percent'}
+                            incrementDisabled={modifyOperation === 'fill'}
                             modifyCommand={map.address === activeMapAddress ? modifyCommand : null}
                             isActive={map.address === activeMapAddress}
                             onViewInHexdump={() => setHexdumpScrollToAddress(map.address)}
@@ -7131,7 +7178,7 @@ function EditorPageContent() {
             setDtcRefreshKey(prev => prev + 1);
 
             // Show DTC notification badge
-            setDtcNotification({ count: dtcs.length, visible: true, fading: false });
+            setDtcNotification({ count: dtcs.length, visible: true, fading: false, mode: 'disabled' });
             // Start fade out after 2.5 seconds
             setTimeout(() => {
               setDtcNotification(prev => ({ ...prev, fading: true }));
@@ -7141,6 +7188,67 @@ function EditorPageContent() {
               setDtcNotification(prev => ({ ...prev, visible: false, fading: false }));
             }, 3000);
 
+          }}
+          onEnableDTCs={(dtcs: DetectedDTC[], codeblocks: CodeblockInfo[]) => {
+            if (!projectData || dtcs.length === 0) return;
+            // Réactivation : on remet l'octet de contrôle à sa valeur d'ORIGINE
+            // (fichier Ori) quand on l'a, sinon à la valeur « actif » connue du
+            // mapping. Une adresse revenue à l'origine sort des modifications
+            // binaires au lieu d'y rester comme une édition.
+            const originalData = originalFileDataRef.current
+              ? new Uint8Array(originalFileDataRef.current)
+              : null;
+            let currentData = new Uint8Array(projectData.file_data) as Uint8Array<ArrayBuffer>;
+            const allChangedAddresses: number[] = [];
+            const ecuFamily = projectData.ecu_type || 'EDC15';
+            const isEdc16 = ecuFamily.toUpperCase().startsWith('EDC16');
+            for (const dtc of dtcs) {
+              const { modifiedData, changedAddresses } = enableDTC(currentData, dtc, codeblocks, ecuFamily);
+              // EDC16 : la table de contrôle partage ses octets entre DTC
+              // (511 codes pour 283 octets ; l'octet « alternatif » d'un code
+              // est l'octet principal d'un autre). Réactiver en écrivant les
+              // deux octets rallumait des DTC non sélectionnés : on ne rétablit
+              // que l'octet PRINCIPAL (le premier renvoyé), qui suffit à
+              // l'état « actif ». Les codes qui partagent ce même octet
+              // rallument ensemble, c'est inhérent au calculateur.
+              const targets = isEdc16 ? changedAddresses.slice(0, 1) : changedAddresses;
+              for (const addr of targets) {
+                const enabledByLib = modifiedData[addr];
+                const originalByte = originalData && addr < originalData.length ? originalData[addr] : undefined;
+                // Octet d'origine si le DTC était actif d'origine, sinon la
+                // valeur « actif » connue du mapping (DTC coupé d'usine)
+                currentData[addr] = originalByte !== undefined && originalByte !== 0x00 ? originalByte : enabledByLib;
+                allChangedAddresses.push(addr);
+              }
+            }
+            setBinaryModifications(prev => {
+              const newMods = new Map(prev);
+              for (const addr of allChangedAddresses) {
+                const originalByte = originalData ? originalData[addr] : undefined;
+                if (originalByte !== undefined && currentData[addr] === originalByte) {
+                  newMods.delete(addr);
+                } else {
+                  newMods.set(addr, {
+                    oldValue: originalByte ?? prev.get(addr)?.oldValue ?? currentData[addr],
+                    newValue: currentData[addr],
+                  });
+                }
+              }
+              return newMods;
+            });
+            setProjectData({
+              ...projectData,
+              file_data: Array.from(currentData),
+            });
+            setHasUnsavedChanges(true);
+            setDtcRefreshKey(prev => prev + 1);
+            setDtcNotification({ count: dtcs.length, visible: true, fading: false, mode: 'enabled' });
+            setTimeout(() => {
+              setDtcNotification(prev => ({ ...prev, fading: true }));
+            }, 2500);
+            setTimeout(() => {
+              setDtcNotification(prev => ({ ...prev, visible: false, fading: false }));
+            }, 3000);
           }}
           isClosing={isDTCClosing}
           theme={theme}
@@ -7289,7 +7397,7 @@ function EditorPageContent() {
             </svg>
           </span>
           <span className="font-medium">
-            {dtcNotification.count} {dtcNotification.count > 1 ? t.notifications.dtcsDisabled : t.notifications.dtcDisabled}
+            {dtcNotification.count} {dtcNotification.mode === 'enabled' ? (dtcNotification.count > 1 ? t.notifications.dtcsEnabled : t.notifications.dtcEnabled) : (dtcNotification.count > 1 ? t.notifications.dtcsDisabled : t.notifications.dtcDisabled)}
           </span>
         </div>
       )}
@@ -7367,6 +7475,12 @@ function EditorPageContent() {
 // +60 px depuis l'ajout du bouton HiLo/LoHi dans la pastille 8b/16b : en
 // dessous, la barre recouvrait les contrôles de fenêtre à largeur minimale.
 const TOOLBAR_MIN_CSS_WIDTH = 1095;
+
+// Dégradé « modifié » de la liste des maps (texte en bg-clip-text). Sur le
+// thème clair, une map ouverte a un fond rouge translucide : le dégradé
+// standard s'y noyait, on l'assombrit pour rester lisible.
+const MODIFIED_TEXT_GRADIENT_DARK = 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent';
+const MODIFIED_TEXT_GRADIENT_LIGHT = 'bg-gradient-to-r from-red-800 via-red-700 to-orange-700 bg-clip-text text-transparent';
 
 export default function EditorPage() {
   return (

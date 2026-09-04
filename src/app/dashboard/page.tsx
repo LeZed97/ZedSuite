@@ -11,13 +11,12 @@ import { useToast } from "@/hooks/use-toast";
 import { ProjectCreator } from "@/components/project-creator";
 import { WindowControls } from "@/components/window-controls";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
-import FloatingLines from "@/components/FloatingLines";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings } from "@/contexts/settings-context";
-import { getCustomWallpaper, subscribeCustomWallpaper } from "@/lib/custom-wallpaper";
+import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
 import {
   Upload,
   FileText,
@@ -442,43 +441,22 @@ function DashboardContent() {
   const { settings, updateSettings, saveSettings } = useSettings();
   const { theme } = useTheme();
 
-  // Image personnalisée (lib/custom-wallpaper) — suivie en direct pour que
-  // le choix fait dans les Paramètres s'applique sans recharger la page
-  const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
-  useEffect(() => {
-    setCustomWallpaper(getCustomWallpaper("dashboard"));
-    return subscribeCustomWallpaper("dashboard", setCustomWallpaper);
-  }, []);
-
-  // Thème + fond d'écran. Choix manuel dans les Paramètres, sinon automatique
-  // selon le thème (défaut → traits animés, clair → blanc, OLED → noir).
-  // Contraintes : thème clair → fond blanc uniquement ; OLED → jamais blanc.
-  // Le fond PERSONNALISÉ (image utilisateur) est utilisable avec TOUS les
-  // thèmes ; sans image enregistrée il retombe sur l'automatique.
-  const stored = settings.dashboardWallpaper;
-  let wallpaper: string =
-    stored === "custom" && customWallpaper
-      ? "custom"
-      : theme === "light"
-        ? (stored === "lines-light" ? "lines-light" : "white")
-        : stored && stored !== "auto"
-          ? stored
-          : theme === "oled"
-            ? "black"
-            : "lines";
-  // Le blanc et les traits clairs n'existent que sur le thème clair
-  if (wallpaper !== "custom") {
-    if (theme !== "light" && (wallpaper === "white" || wallpaper === "lines-light")) {
-      wallpaper = theme === "oled" ? "black" : "lines";
-    }
-    if (!["lines", "lines-light", "editor", "white", "black"].includes(wallpaper)) {
-      wallpaper = theme === "oled" ? "black" : "lines";
-    }
-  }
-  // Les textes s'adaptent à la luminosité du fond effectif (pas au thème seul)
-  // — sur une image personnalisée, on suit le thème choisi.
-  const isLight = wallpaper === "custom" ? theme === "light" : (wallpaper === "white" || wallpaper === "lines-light");
-  const pageBg = wallpaper === "black" ? "#000000" : isLight ? "#eef1f6" : "#0a0b0f";
+  // Fond d'écran (réglage + thème + image personnalisée) : logique partagée
+  // avec la page Paramètres (components/dashboard-background)
+  const { wallpaper, isLight, pageBg, customWallpaper } = useDashboardWallpaper(settings.dashboardWallpaper, theme);
+  // Image personnalisée sur thème sombre : les surfaces translucides se
+  // noient dans une photo claire → tuiles et recherche un peu plus opaques,
+  // en gardant l'image visible derrière comme sur le thème clair (bg-white/60)
+  const onCustomDark = wallpaper === "custom" && !isLight;
+  // Image personnalisée sur thème clair : boutons du haut, pagination et
+  // sélecteur du bas en noir (pas de pastille, sur demande)
+  const onCustomLight = wallpaper === "custom" && isLight;
+  const paginationText = onCustomLight ? "text-slate-900" : "text-slate-700";
+  // Image personnalisée : les gris se perdent sur une photo → tous les textes
+  // secondaires (dates, HW/SW, client, « Versions : », pagination, compteur)
+  // et les icônes en blanc sur thème sombre, en noir sur thème clair
+  const subText = onCustomDark ? "text-white" : onCustomLight ? "text-slate-900" : null;
+  const darkIcon = onCustomDark ? "text-white hover:text-white hover:bg-white/10" : "text-slate-400 hover:text-white hover:bg-white/10";
 
   useEffect(() => {
     loadDashboardData();
@@ -747,100 +725,7 @@ function DashboardContent() {
     // conteneur de référence du sticky de l'en-tête, qui ne collerait
     // jamais — clip coupe le débordement sans créer de contexte de scroll
     <div className="min-h-screen relative" style={{ backgroundColor: pageBg, overflowX: 'clip' }}>
-      {/* Fond d'écran du thème par défaut : les traits animés rouge/blanc */}
-      {wallpaper === "lines" && (
-        <>
-          <div className="fixed inset-0 z-0" style={{ opacity: 0.45 }}>
-            <FloatingLines
-              linesGradient={['#9a3412', '#7f1d1d', '#312e81']}
-              enabledWaves={['top', 'middle', 'bottom']}
-              lineCount={[6, 8, 6]}
-              lineDistance={[5, 5, 6]}
-              animationSpeed={0.8}
-              interactive={false}
-              parallax={false}
-              parallaxStrength={0.15}
-            />
-          </div>
-          {/* Grain de film par-dessus les traits (texture d'origine) */}
-          <div aria-hidden className="fixed inset-0 z-0 pointer-events-none" style={{
-            opacity: 0.05,
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`
-          }} />
-        </>
-      )}
-      {/* Traits animés, déclinaison claire : canvas inversé en CSS, couleurs
-          pré-inversées pour retomber sur orange/rouge/indigo pastel */}
-      {wallpaper === "lines-light" && (
-        <>
-          <div className="fixed inset-0 z-0" style={{ opacity: 0.5, filter: 'invert(1)' }}>
-            <FloatingLines
-              linesGradient={['#046dc3', '#078e8e', '#7e7307']}
-              enabledWaves={['top', 'middle', 'bottom']}
-              lineCount={[6, 8, 6]}
-              lineDistance={[5, 5, 6]}
-              animationSpeed={0.8}
-              interactive={false}
-              parallax={false}
-              parallaxStrength={0.15}
-            />
-          </div>
-          <div aria-hidden className="fixed inset-0 z-0 pointer-events-none" style={{
-            opacity: 0.03,
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`
-          }} />
-        </>
-      )}
-      {/* Image personnalisée de l'utilisateur : EXACTEMENT le rendu de la
-          zone de travail de l'éditeur — image nette en cover, voile du fond
-          (0.35 sombre / 0.22 clair) puis le même fond translucide que le
-          workspace (getWorkspaceBg de l'éditeur), selon le thème. */}
-      {wallpaper === "custom" && customWallpaper && (
-        <>
-          <div
-            aria-hidden
-            className="fixed inset-0 z-0 pointer-events-none"
-            style={{
-              backgroundImage: `url(${customWallpaper})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          />
-          <div
-            aria-hidden
-            className="fixed inset-0 z-0 pointer-events-none"
-            style={{ backgroundColor: isLight ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.18)" }}
-          />
-          {/* Voiles réduits de moitié par rapport au workspace de l'éditeur
-              (sur demande : l'image restait trop assombrie sur le dashboard) */}
-          <div
-            aria-hidden
-            className="fixed inset-0 z-0 pointer-events-none"
-            style={{
-              backgroundColor:
-                theme === "light"
-                  ? "rgba(233,236,241,0.28)"
-                  : theme === "oled"
-                    ? "rgba(0,0,0,0.22)"
-                    : "rgba(18,21,29,0.22)",
-            }}
-          />
-        </>
-      )}
-      {/* Fond d'écran par défaut de l'éditeur : trois halos flous + grain */}
-      {wallpaper === "editor" && (
-        <>
-          <div aria-hidden className="fixed inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: 0.65 }}>
-            <div className="absolute rounded-full" style={{ width: 520, height: 520, left: -120, top: -140, filter: 'blur(90px)', background: 'radial-gradient(circle, #ef444488, transparent 70%)' }} />
-            <div className="absolute rounded-full" style={{ width: 620, height: 620, right: -160, top: 120, filter: 'blur(90px)', background: 'radial-gradient(circle, #2563eb77, transparent 70%)' }} />
-            <div className="absolute rounded-full" style={{ width: 480, height: 480, left: '32%', bottom: -200, filter: 'blur(90px)', background: 'radial-gradient(circle, #7c3aed66, transparent 70%)' }} />
-          </div>
-          <div aria-hidden className="fixed inset-0 z-0 pointer-events-none" style={{
-            opacity: 0.05,
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`
-          }} />
-        </>
-      )}
+      <DashboardBackground wallpaper={wallpaper} theme={theme} isLight={isLight} customWallpaper={customWallpaper} />
 
       {/* Zone fixe au-dessus des tuiles : barre fenêtre + titre/recherche/
           upload. Reste en place au défilement ; les tuiles disparaissent en
@@ -886,20 +771,20 @@ function DashboardContent() {
             <div className="flex items-center pt-1 flex-shrink-0">
               <button
                 onClick={() => setShowAbout(true)}
-                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                 title="Help"
               >
                 <HelpCircle className="w-4 h-4" />
               </button>
               <button
                 onClick={() => router.push('/settings')}
-                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                 title={t.userMenu.settings}
               >
                 <Settings className="w-4 h-4" />
               </button>
               <div className="w-px h-4 bg-white/[0.12] mx-1.5" />
-              <WindowControls />
+              <WindowControls strong={onCustomLight || onCustomDark} />
             </div>
           </div>
         </div>
@@ -909,8 +794,8 @@ function DashboardContent() {
         <div className="relative container mx-auto px-4 pt-3 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-baseline gap-3">
-              <h3 className={`text-sm font-bold uppercase tracking-widest ${isLight ? 'text-slate-900' : 'text-slate-300'}`}>{t.dashboard.recentFiles}</h3>
-              <span className={`text-xs tabular-nums ${isLight ? 'text-slate-700' : 'text-slate-500'}`}>{filteredFiles.length}</span>
+              <h3 className={`text-sm font-bold uppercase tracking-widest ${subText ?? (isLight ? 'text-slate-900' : 'text-slate-300')}`}>{t.dashboard.recentFiles}</h3>
+              <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-700' : 'text-slate-500')}`}>{filteredFiles.length}</span>
             </div>
 
             {/* Search Bar */}
@@ -923,7 +808,7 @@ function DashboardContent() {
                 placeholder={t.dashboard.searchPlaceholder}
                 // Thème clair : fond blanc quasi opaque + placeholder foncé, sinon
                 // le texte se noyait sur un fond d'écran personnalisé sombre
-                className={`w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 transition-colors ${isLight ? 'bg-white/80 border border-black/15 text-slate-900 placeholder:text-slate-600 focus:border-black/30' : 'bg-white/[0.04] border border-white/10 text-white placeholder:text-slate-500 focus:border-white/25'}`}
+                className={`w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 transition-colors ${isLight ? 'bg-white/80 border border-black/15 text-slate-900 placeholder:text-slate-600 focus:border-black/30' : onCustomDark ? 'bg-[#0d1017]/45 border border-white/20 text-white placeholder:text-slate-300 focus:border-white/40' : 'bg-white/[0.04] border border-white/10 text-white placeholder:text-slate-500 focus:border-white/25'}`}
                 spellCheck={false}
               />
             </div>
@@ -970,7 +855,7 @@ function DashboardContent() {
                   return (
                     <div
                       key={file.id}
-                      className={`group flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${isLight ? 'bg-white/60 border border-black/[0.08] hover:bg-white/90 hover:border-black/[0.16] shadow-sm' : 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]'}`}
+                      className={`group flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${isLight ? 'bg-white/60 border border-black/[0.08] hover:bg-white/90 hover:border-black/[0.16] shadow-sm' : onCustomDark ? 'bg-[#0d1017]/45 border border-white/[0.12] hover:bg-[#0d1017]/60 hover:border-white/[0.2]' : 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]'}`}
                       onClick={() => handleOpenProject(file)}
                     >
                       <div className="flex items-center gap-4 flex-1">
@@ -989,12 +874,12 @@ function DashboardContent() {
                             {file.project_name || file.original_name}
                           </h4>
                           <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs text-slate-500">
+                            <span className={`text-xs ${subText ?? 'text-slate-500'}`}>
                               {new Date(file.created).toLocaleDateString("fr-FR")}
                             </span>
                             {file.customer && (
-                              <span className={`flex items-center gap-1 text-xs font-medium ${isLight ? "text-slate-700" : "text-slate-300"}`}>
-                                <User className="w-3 h-3 text-slate-500" />
+                              <span className={`flex items-center gap-1 text-xs font-medium ${subText ?? (isLight ? "text-slate-700" : "text-slate-300")}`}>
+                                <User className={`w-3 h-3 ${subText ?? "text-slate-500"}`} />
                                 {file.customer}
                               </span>
                             )}
@@ -1004,22 +889,22 @@ function DashboardContent() {
                               </span>
                             )}
                             {file.vehicle_brand && (
-                              <span className="text-xs text-slate-400">
+                              <span className={`text-xs ${subText ?? 'text-slate-400'}`}>
                                 {file.vehicle_brand}
                               </span>
                             )}
                             {file.year && (
-                              <span className="text-xs text-slate-400">
+                              <span className={`text-xs ${subText ?? 'text-slate-400'}`}>
                                 {file.year}
                               </span>
                             )}
                             {file.hardware_version && (
-                              <span className="text-xs text-slate-400 ml-4">
+                              <span className={`text-xs ml-4 ${subText ?? 'text-slate-400'}`}>
                                 HW: {file.hardware_version}
                               </span>
                             )}
                             {file.software_version && (
-                              <span className="text-xs text-slate-400">
+                              <span className={`text-xs ${subText ?? 'text-slate-400'}`}>
                                 SW: {file.software_version}
                               </span>
                             )}
@@ -1029,15 +914,15 @@ function DashboardContent() {
 
                       <div className="flex items-center gap-2">
                         <div className={`px-2.5 py-0.5 rounded-full border ${isLight ? 'border-black/[0.10] bg-black/[0.05]' : 'border-white/[0.08] bg-white/[0.05]'}`}>
-                          <span className={`text-xs tabular-nums ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                            {t.dashboard.versions} : <span className={isLight ? 'text-slate-900' : 'text-slate-200'}>{versionCounts[file.id] || 1}</span>
+                          <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-500' : 'text-slate-400')}`}>
+                            {t.dashboard.versions} : <span className={subText ?? (isLight ? 'text-slate-900' : 'text-slate-200')}>{versionCounts[file.id] || 1}</span>
                           </span>
                         </div>
                         {/* Actions groupées dans une pastille — même langage que
                             la pastille Versions, atténuée au repos */}
                         <div className={`flex items-center rounded-full border overflow-hidden opacity-70 group-hover:opacity-100 transition-opacity ${isLight ? 'border-black/[0.12] bg-black/[0.04]' : 'border-white/[0.08] bg-white/[0.04]'}`}>
                           <button
-                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                             title={t.projectInfo?.title || "Project info"}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1059,7 +944,7 @@ function DashboardContent() {
                           </button>
                           <div className={`w-px h-4 ${isLight ? 'bg-black/[0.12]' : 'bg-white/[0.08]'}`} />
                           <button
-                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? 'text-slate-500 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                             title={t.dashboard.openFolder}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1096,8 +981,8 @@ function DashboardContent() {
                         onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
                         className={isLight
-                          ? "text-slate-700 hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                          : "text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"}
+                          ? `${paginationText} hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed`
+                          : `${onCustomDark ? 'text-white' : 'text-slate-400'} hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {t.dashboard.previous}
                       </Button>
@@ -1112,7 +997,7 @@ function DashboardContent() {
                             className={`w-8 h-8 p-0 ${
                               currentPage === page
                                 ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white'
-                                : (isLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/5')
+                                : (isLight ? `${paginationText} hover:text-black hover:bg-black/10` : `${onCustomDark ? 'text-white' : 'text-slate-400'} hover:text-white hover:bg-white/5`)
                             }`}
                           >
                             {page}
@@ -1126,8 +1011,8 @@ function DashboardContent() {
                         onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
                         className={isLight
-                          ? "text-slate-700 hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                          : "text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"}
+                          ? `${paginationText} hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed`
+                          : `${onCustomDark ? 'text-white' : 'text-slate-400'} hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {t.dashboard.next}
                       </Button>
@@ -1136,7 +1021,7 @@ function DashboardContent() {
 
                   {/* Items per page selector */}
                   <div className="flex items-center gap-2 flex-1 justify-end">
-                    <span className={`text-sm ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>{t.dashboard.show}:</span>
+                    <span className={`text-sm ${isLight ? paginationText : (onCustomDark ? 'text-white' : 'text-slate-400')}`}>{t.dashboard.show}:</span>
                     <StyledSelect
                       appearance="auto"
                       value={String(itemsPerPage)}
@@ -1219,7 +1104,7 @@ function DashboardContent() {
           <div
             className="rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border"
             style={{
-              ...MODAL_GLASS,
+              ...(isLight ? MODAL_GLASS_LIGHT : MODAL_GLASS),
               animation: isClosingDeleteConfirmModal ? 'scaleOut 0.2s ease-out forwards' : 'scaleIn 0.2s ease-out forwards'
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1228,24 +1113,24 @@ function DashboardContent() {
               <div className="p-2 rounded-full bg-red-500/20">
                 <AlertTriangle className="w-6 h-6 text-red-500" />
               </div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className={`text-lg font-semibold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 {t.dashboard.deleteConfirmTitle}
               </h3>
             </div>
-            <p className="mb-2 text-white/90">
+            <p className={`mb-2 ${isLight ? 'text-slate-800' : 'text-white/90'}`}>
               {t.dashboard.confirmDelete} &quot;{(() => {
                 const name = fileToDelete.project_name || fileToDelete.original_name || "";
                 return name.length > 45 ? name.slice(0, 45) + "…" : name;
               })()}&quot; ?
             </p>
-            <p className="mb-6 text-white/60 text-sm">
+            <p className={`mb-6 text-sm ${isLight ? 'text-slate-600' : 'text-white/60'}`}>
               {t.dashboard.deleteWarning}
             </p>
             <div className="flex gap-3 justify-end">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 px-4 text-white/70 hover:text-white hover:bg-white/10"
+                className={`h-9 px-4 ${isLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                 onClick={handleCloseDeleteConfirmModal}
               >
                 {t.dashboard.cancel}

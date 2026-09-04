@@ -137,6 +137,26 @@ impl MapDetector {
 
             out.push(map);
         }
+        // EDC16 : les SOI dynamiques sortent des trois détecteurs sous
+        // plusieurs noms (« Start of injection Dynamic », « (Dynamic) »,
+        // « (dynamic) 01 » sur l'U1…). Un seul nom pour tous, numéroté par
+        // adresse croissante : « Start of injection (Dynamic) 01 », « 02 »…
+        if is_edc16 {
+            let is_dynamic_soi = |name: &str| {
+                let l = name.to_ascii_lowercase();
+                l.starts_with("start of injection") && l.contains("dynamic")
+            };
+            let mut idx: Vec<usize> = out
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.name.as_deref().map_or(false, is_dynamic_soi))
+                .map(|(i, _)| i)
+                .collect();
+            idx.sort_by_key(|&i| out[i].address);
+            for (n, &i) in idx.iter().enumerate() {
+                out[i].name = Some(format!("Start of injection (Dynamic) {:02}", n + 1));
+            }
+        }
         out
     }
 

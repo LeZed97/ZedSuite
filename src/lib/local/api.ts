@@ -200,6 +200,13 @@ export async function handleLocalApi(
       const edits = await store.listMapEdits(versionId);
       return ok({ edits });
     }
+    if (path === "/api/versioning/map-edits" && m === "PUT") {
+      const { versionId, edits } = body || {};
+      if (!versionId || !Array.isArray(edits)) return error(400, "bad_request");
+      const list = await store.replaceMapEdits(versionId, edits);
+      if (!list) return error(404, "not_found");
+      return ok({ edits: list });
+    }
     if (path === "/api/versioning/map-edits" && m === "POST") {
       const { versionId, mapAddress, payload } = body || {};
       if (!versionId) return error(400, "bad_request");

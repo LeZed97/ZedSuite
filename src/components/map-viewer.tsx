@@ -376,7 +376,7 @@ interface MapViewerProps {
   viewMode?: ViewMode; // Controlled viewMode from parent
   easyViewMode?: boolean; // Si true, affiche texte + 3D simultanément
   onViewModeChange?: (mode: ViewMode) => void; // Callback to update parent
-  onAutoSize?: (width: number, height: number) => void; // Informe le parent de la taille n├®cessaire en vue texte
+  onAutoSize?: (width: number, height: number, source?: 'auto' | 'user') => void; // Informe le parent de la taille n├®cessaire en vue texte
   onClose?: () => void;
   onDragStart?: (event: React.MouseEvent<HTMLDivElement>) => void;
   currentVersionId?: string | null;
@@ -461,8 +461,10 @@ interface MapViewerProps {
   onApplyToSimilarMaps?: (targetMaps: number[], copyType: 'modifications' | 'all') => void;
   // Value to use for +/- keyboard shortcuts (from toolbar Add input)
   incrementValue?: number;
+  incrementIsPercent?: boolean; // incrementValue est un pourcentage de la valeur courante
+  incrementDisabled?: boolean; // pastille sur « Remplacer » : +/- et Augmenter/Diminuer inactifs
   // Command from toolbar to apply modification (add/fill) to selected cells
-  modifyCommand?: { operation: 'add' | 'fill'; value: number; timestamp: number } | null;
+  modifyCommand?: { operation: 'add' | 'fill' | 'percent'; value: number; timestamp: number } | null;
   // Callback to scroll hexdump to this map's address
   onViewInHexdump?: () => void;
   // Whether this map is the active/focused map (for keyboard shortcuts)
@@ -501,6 +503,8 @@ export function MapViewer({
   allMaps,
   onApplyToSimilarMaps,
   incrementValue = 1,
+  incrementIsPercent = false,
+  incrementDisabled = false,
   modifyCommand,
   onViewInHexdump,
   isActive = false,
@@ -972,6 +976,13 @@ const skipAutoSizeRef = useRef<boolean>(false);
   // les flèches ; Ctrl+flèche étend la sélection (même modificateur que le
   // Ctrl+clic), Ctrl+C / Ctrl+V copient-collent la sélection.
   const keyboardCursorRef = useRef<{ row: number; col: number } | null>(null);
+
+  // Incrément de la pastille de la topbar (touches +/- et menus contextuels) :
+  // valeur absolue, ou pourcentage de la valeur courante quand la pastille est
+  // sur « Pourcentage » (5 → ×1.05 / ×0.95)
+  const applyIncrement = (v: number, sign: 1 | -1): number =>
+    incrementIsPercent ? v * (1 + (sign * incrementValue) / 100) : v + sign * incrementValue;
+  const incrementUnit = incrementIsPercent ? '%' : '';
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ row: number; col: number } | null>(null);
   const [isCtrlDragging, setIsCtrlDragging] = useState<boolean>(false);
@@ -1132,7 +1143,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       lastAutoSizeRef.current = { w: width, h: height };
       hasCalculatedSizeRef.current = true; // Bloquer tous les futurs calculs
 
-      onAutoSizeRef.current?.(width, height);
+      onAutoSizeRef.current?.(width, height, 'auto');
     });
 
     return () => cancelAnimationFrame(rafId);
@@ -1378,7 +1389,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       onResizeActiveChange?.(false);
       // Committer la taille finale dans le state React du parent
       const finalRect = windowEl.getBoundingClientRect();
-      onAutoSizeRef.current?.(Math.round(finalRect.width), Math.round(finalRect.height));
+      onAutoSizeRef.current?.(Math.round(finalRect.width), Math.round(finalRect.height), 'user');
     };
 
     document.addEventListener('mousemove', onMove);
@@ -1657,25 +1668,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
         e.preventDefault();
         if (selectedCells.size > 0) {
-          const cellsArray = Array.from(selectedCells).map(k => {
-            const [row, col] = k.split('-').map(Number);
-            return { row, col };
-          });
-          const minRow = Math.min(...cellsArray.map(c => c.row));
-          const maxRow = Math.max(...cellsArray.map(c => c.row));
-          const minCol = Math.min(...cellsArray.map(c => c.col));
-          const maxCol = Math.max(...cellsArray.map(c => c.col));
-          const values: string[][] = [];
-          for (let r = minRow; r <= maxRow; r++) {
-            const rowValues: string[] = [];
-            for (let c = minCol; c <= maxCol; c++) {
-              const v = selectedCells.has(getCellKey(r, c)) ? mapValues[r]?.[c] : undefined;
-              rowValues.push(v !== undefined ? v.toString() : '');
-            }
-            values.push(rowValues);
-          }
-          writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
-          toast({ title: t.mapViewer.copy, description: `${cellsArray.length} value(s) copied` });
+          const copiedCount = copyCellSelection();
+          if (copiedCount > 0) toast({ title: t.mapViewer.copy, description: `${copiedCount} value(s) copied` });
         } else if (selectedXAxisCells.size > 0) {
           const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
           const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
@@ -1695,26 +1689,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         if (!clip) return;
         let pastedCount = 0;
         if (selectedCells.size > 0) {
-          const cellsArray = Array.from(selectedCells).map(k => {
-            const [row, col] = k.split('-').map(Number);
-            return { row, col };
-          });
-          const startRow = Math.min(...cellsArray.map(c => c.row));
-          const startCol = Math.min(...cellsArray.map(c => c.col));
-          clip.values.forEach((rowValues, rowOffset) => {
-            rowValues.forEach((value, colOffset) => {
-              if (value === '') return;
-              const targetRow = startRow + rowOffset;
-              const targetCol = startCol + colOffset;
-              if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
-                const parsed = Number(value.replace(',', '.'));
-                if (!Number.isNaN(parsed)) {
-                  updateCellValue(targetRow, targetCol, parsed);
-                  pastedCount++;
-                }
-              }
-            });
-          });
+          pastedCount += pasteCellSelection(clip);
         } else if (selectedXAxisCells.size > 0) {
           const startIndex = Array.from(selectedXAxisCells).sort((a, b) => a - b)[0] ?? 0;
           clip.values.forEach((rowValues, offset) => {
@@ -1741,6 +1716,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       }
 
       if (e.key === '+' || e.key === '=' || e.key === 'Add') {
+        if (incrementDisabled) { e.preventDefault(); return; }
         e.preventDefault();
 
         // Modifier les cellules de données sélectionnées
@@ -1750,7 +1726,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             selectedCells.forEach(cellKey => {
               const [rowIdx, colIdx] = cellKey.split('-').map(Number);
               if (next[rowIdx]?.[colIdx] !== undefined) {
-                next[rowIdx][colIdx] += incrementValue;
+                next[rowIdx][colIdx] = applyIncrement(next[rowIdx][colIdx], 1);
               }
             });
             setChangedCells((prevChangedCells) => {
@@ -1778,7 +1754,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedXAxisCells.forEach(idx => {
             mutateDisplayXAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v + incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, 1));
             });
           });
         }
@@ -1786,11 +1762,12 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedYAxisCells.forEach(idx => {
             mutateDisplayYAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v + incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, 1));
             });
           });
         }
       } else if (e.key === '-' || e.key === '_' || e.key === 'Subtract') {
+        if (incrementDisabled) { e.preventDefault(); return; }
         e.preventDefault();
 
         // Modifier les cellules de données sélectionnées
@@ -1800,7 +1777,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             selectedCells.forEach(cellKey => {
               const [rowIdx, colIdx] = cellKey.split('-').map(Number);
               if (next[rowIdx]?.[colIdx] !== undefined) {
-                next[rowIdx][colIdx] -= incrementValue;
+                next[rowIdx][colIdx] = applyIncrement(next[rowIdx][colIdx], -1);
               }
             });
             setChangedCells((prevChangedCells) => {
@@ -1828,7 +1805,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedXAxisCells.forEach(idx => {
             mutateDisplayXAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v - incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, -1));
             });
           });
         }
@@ -1836,7 +1813,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           selectedYAxisCells.forEach(idx => {
             mutateDisplayYAxis(idx, cur => {
               const v = parseFloat(cur);
-              return isNaN(v) ? cur : String(v - incrementValue);
+              return isNaN(v) ? cur : String(applyIncrement(v, -1));
             });
           });
         }
@@ -1850,7 +1827,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // displayTransposed/flips inclus : le handler doit voir l'orientation
     // courante pour écrire au bon axe source après un toggle d'inversion.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
+  }, [selectedCells, selectedXAxisCells, selectedYAxisCells, incrementValue, incrementIsPercent, incrementDisabled, isActive, displayTransposed, displayColsFlipped, displayRowsFlipped, displayMapValues, mapValues, displayXAxisLabels, displayYAxisLabels]);
 
   // Handle modifyCommand from toolbar (Zap button)
   useEffect(() => {
@@ -1870,6 +1847,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
           if (next[rowIdx]?.[colIdx] !== undefined) {
             if (operation === 'add') {
               next[rowIdx][colIdx] += value;
+            } else if (operation === 'percent') {
+              next[rowIdx][colIdx] *= 1 + value / 100;
             } else {
               // fill
               next[rowIdx][colIdx] = value;
@@ -1902,7 +1881,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         mutateDisplayXAxis(idx, cur => {
           const v = parseFloat(cur);
           if (isNaN(v)) return cur;
-          return operation === 'add' ? String(v + value) : String(value);
+          return operation === 'add' ? String(v + value) : operation === 'percent' ? String(v * (1 + value / 100)) : String(value);
         });
       });
     }
@@ -1911,7 +1890,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         mutateDisplayYAxis(idx, cur => {
           const v = parseFloat(cur);
           if (isNaN(v)) return cur;
-          return operation === 'add' ? String(v + value) : String(value);
+          return operation === 'add' ? String(v + value) : operation === 'percent' ? String(v * (1 + value / 100)) : String(value);
         });
       });
     }
@@ -3419,6 +3398,70 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     });
   };
 
+  // ── Copier / coller des cellules en coordonnées d'AFFICHAGE ──
+  // Le bloc copié est mémorisé tel qu'il est vu à l'écran (ligne du haut en
+  // premier, colonne de gauche en premier) et recollé à partir de la cellule
+  // affichée la plus en haut à gauche de la sélection cible, quelle que soit
+  // l'orientation interne (axes inversés, miroir, transposition) de chacune
+  // des deux maps. Avant, tout se faisait en coordonnées mapValues : sur une
+  // map dont les RPM sont affichés décroissants, un bloc copié depuis le haut
+  // se recollait décalé (la ligne du bas arrivait en haut et la ligne du haut
+  // était perdue), et ce décalage variait d'une map/ECU à l'autre.
+  const selectedDisplayCells = (): { row: number; col: number }[] =>
+    Array.from(selectedCells).map((key) => {
+      const [row, col] = key.split('-').map(Number);
+      return toDisplayCoords(row, col);
+    });
+
+  const copyCellSelection = (): number => {
+    const cells = selectedDisplayCells();
+    if (cells.length === 0) return 0;
+    const selectedKeys = new Set(cells.map((c) => `${c.row}-${c.col}`));
+    const minRow = Math.min(...cells.map((c) => c.row));
+    const maxRow = Math.max(...cells.map((c) => c.row));
+    const minCol = Math.min(...cells.map((c) => c.col));
+    const maxCol = Math.max(...cells.map((c) => c.col));
+    const values: string[][] = [];
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowValues: string[] = [];
+      for (let c = minCol; c <= maxCol; c++) {
+        if (selectedKeys.has(`${r}-${c}`)) {
+          const v = displayMapValues[r]?.[c];
+          rowValues.push(v !== undefined ? v.toString() : '');
+        } else {
+          rowValues.push(''); // cellule non sélectionnée dans le rectangle
+        }
+      }
+      values.push(rowValues);
+    }
+    writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
+    return cells.length;
+  };
+
+  const pasteCellSelection = (clip: InternalClipboard): number => {
+    const cells = selectedDisplayCells();
+    if (cells.length === 0) return 0;
+    const startRow = Math.min(...cells.map((c) => c.row));
+    const startCol = Math.min(...cells.map((c) => c.col));
+    const totalRows = displayMapValues.length;
+    const totalCols = displayMapValues[0]?.length ?? 0;
+    let pasted = 0;
+    clip.values.forEach((rowValues, rowOffset) => {
+      rowValues.forEach((value, colOffset) => {
+        if (value === '') return; // trou du rectangle copié
+        const targetRow = startRow + rowOffset;
+        const targetCol = startCol + colOffset;
+        if (targetRow >= totalRows || targetCol >= totalCols) return;
+        const parsed = Number(value.replace(',', '.'));
+        if (Number.isNaN(parsed)) return;
+        const { row, col } = toMapCoords(targetRow, targetCol);
+        updateCellValue(row, col, parsed);
+        pasted++;
+      });
+    });
+    return pasted;
+  };
+
   // Handlers pour la sélection des cellules d'axes X
   const handleXAxisMouseDown = (index: number, e: React.MouseEvent) => {
     e.preventDefault();
@@ -4360,31 +4403,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                       className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
                       onClick={() => {
                         if (contextMenu.type === 'cell') {
-                          const cellsArray = Array.from(selectedCells).map(key => {
-                            const [row, col] = key.split('-').map(Number);
-                            return { row, col };
-                          });
-                          if (cellsArray.length === 0) { setContextMenu(null); return; }
-                          const minRow = Math.min(...cellsArray.map(c => c.row));
-                          const maxRow = Math.max(...cellsArray.map(c => c.row));
-                          const minCol = Math.min(...cellsArray.map(c => c.col));
-                          const maxCol = Math.max(...cellsArray.map(c => c.col));
-                          const values: string[][] = [];
-                          for (let r = minRow; r <= maxRow; r++) {
-                            const rowValues: string[] = [];
-                            for (let c = minCol; c <= maxCol; c++) {
-                              const cellKey = `${r}-${c}`;
-                              if (selectedCells.has(cellKey)) {
-                                const value = mapValues[r]?.[c];
-                                rowValues.push(value !== undefined ? value.toString() : '');
-                              } else {
-                                rowValues.push('');
-                              }
-                            }
-                            values.push(rowValues);
-                          }
-                          writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
-                          toast({ title: t.mapViewer.copy, description: `${cellsArray.length} value(s) copied` });
+                          const copiedCount = copyCellSelection();
+                          if (copiedCount === 0) { setContextMenu(null); return; }
+                          toast({ title: t.mapViewer.copy, description: `${copiedCount} value(s) copied` });
                         } else if (contextMenu.type === 'xAxis') {
                           const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
                           const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
@@ -4413,28 +4434,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                           return;
                         }
                         if (contextMenu.type === 'cell') {
-                          const cellsArray = Array.from(selectedCells).map(key => {
-                            const [row, col] = key.split('-').map(Number);
-                            return { row, col };
-                          });
-                          if (cellsArray.length === 0) { setContextMenu(null); return; }
-                          const startRow = Math.min(...cellsArray.map(c => c.row));
-                          const startCol = Math.min(...cellsArray.map(c => c.col));
-                          let pastedCount = 0;
-                          clip.values.forEach((rowValues, rowOffset) => {
-                            rowValues.forEach((value, colOffset) => {
-                              if (value === '') return;
-                              const targetRow = startRow + rowOffset;
-                              const targetCol = startCol + colOffset;
-                              if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
-                                const parsed = Number(value.replace(',', '.'));
-                                if (!Number.isNaN(parsed)) {
-                                  updateCellValue(targetRow, targetCol, parsed);
-                                  pastedCount++;
-                                }
-                              }
-                            });
-                          });
+                          const pastedCount = pasteCellSelection(clip);
                           toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
                         }
                         setContextMenu(null);
@@ -4509,56 +4509,58 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
                     {/* Increase */}
                     <button
-                      className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                      disabled={incrementDisabled}
+                      className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                       onClick={() => {
                         if (contextMenu.type === 'cell') {
                           selectedCells.forEach(cellKey => {
                             const [row, col] = cellKey.split('-').map(Number);
                             const currentValue = mapValues[row]?.[col] ?? 0;
-                            updateCellValue(row, col, currentValue + incrementValue);
+                            updateCellValue(row, col, applyIncrement(currentValue, 1));
                           });
                         } else if (contextMenu.type === 'xAxis') {
                           selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v + incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, 1)).toString();
                           }));
                         } else if (contextMenu.type === 'yAxis') {
                           selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v + incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, 1)).toString();
                           }));
                         }
                         setContextMenu(null);
                       }}
                     >
-                      {t.mapViewer.increase} (+{incrementValue})
+                      {t.mapViewer.increase} (+{incrementValue}{incrementUnit})
                     </button>
 
                     {/* Decrease */}
                     <button
-                      className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                      disabled={incrementDisabled}
+                      className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                       onClick={() => {
                         if (contextMenu.type === 'cell') {
                           selectedCells.forEach(cellKey => {
                             const [row, col] = cellKey.split('-').map(Number);
                             const currentValue = mapValues[row]?.[col] ?? 0;
-                            updateCellValue(row, col, currentValue - incrementValue);
+                            updateCellValue(row, col, applyIncrement(currentValue, -1));
                           });
                         } else if (contextMenu.type === 'xAxis') {
                           selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v - incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, -1)).toString();
                           }));
                         } else if (contextMenu.type === 'yAxis') {
                           selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                             const v = parseFloat(cur);
-                            return isNaN(v) ? cur : (v - incrementValue).toString();
+                            return isNaN(v) ? cur : (applyIncrement(v, -1)).toString();
                           }));
                         }
                         setContextMenu(null);
                       }}
                     >
-                      {t.mapViewer.decrease} (-{incrementValue})
+                      {t.mapViewer.decrease} (-{incrementValue}{incrementUnit})
                     </button>
 
                     <div className="border-t border-gray-600 my-1" />
@@ -4956,47 +4958,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                 className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
                 onClick={() => {
                   if (contextMenu.type === 'cell') {
-                    // Trouver les bornes de la sélection pour préserver la structure 2D
-                    const cellsArray = Array.from(selectedCells).map(key => {
-                      const [row, col] = key.split('-').map(Number);
-                      return { row, col };
-                    });
-
-                    if (cellsArray.length === 0) {
-                      setContextMenu(null);
-                      return;
-                    }
-
-                    const minRow = Math.min(...cellsArray.map(c => c.row));
-                    const maxRow = Math.max(...cellsArray.map(c => c.row));
-                    const minCol = Math.min(...cellsArray.map(c => c.col));
-                    const maxCol = Math.max(...cellsArray.map(c => c.col));
-
-                    // Créer un tableau 2D avec les valeurs
-                    const values: string[][] = [];
-                    for (let r = minRow; r <= maxRow; r++) {
-                      const rowValues: string[] = [];
-                      for (let c = minCol; c <= maxCol; c++) {
-                        const cellKey = `${r}-${c}`;
-                        if (selectedCells.has(cellKey)) {
-                          const value = mapValues[r]?.[c];
-                          rowValues.push(value !== undefined ? value.toString() : '');
-                        } else {
-                          rowValues.push(''); // Cellule non sélectionnée dans la zone
-                        }
-                      }
-                      values.push(rowValues);
-                    }
-
-                    writeClipboard({
-                      values,
-                      type: 'cell',
-                      rows: maxRow - minRow + 1,
-                      cols: maxCol - minCol + 1
-                    });
-
-                    const totalValues = cellsArray.length;
-                    toast({ title: t.mapViewer.copy, description: `${totalValues} value(s) copied` });
+                    const copiedCount = copyCellSelection();
+                    if (copiedCount === 0) { setContextMenu(null); return; }
+                    toast({ title: t.mapViewer.copy, description: `${copiedCount} value(s) copied` });
                   } else if (contextMenu.type === 'xAxis') {
                     const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
                     const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
@@ -5036,40 +5000,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                   }
 
                   if (contextMenu.type === 'cell') {
-                    // Trouver la cellule de départ (la plus en haut à gauche de la sélection)
-                    const cellsArray = Array.from(selectedCells).map(key => {
-                      const [row, col] = key.split('-').map(Number);
-                      return { row, col };
-                    });
-
-                    if (cellsArray.length === 0) {
-                      setContextMenu(null);
-                      return;
-                    }
-
-                    const startRow = Math.min(...cellsArray.map(c => c.row));
-                    const startCol = Math.min(...cellsArray.map(c => c.col));
-
-                    // Coller les valeurs en cascade à partir de la cellule de départ
-                    let pastedCount = 0;
-                    clip.values.forEach((rowValues, rowOffset) => {
-                      rowValues.forEach((value, colOffset) => {
-                        if (value === '') return; // Ignorer les cellules vides
-
-                        const targetRow = startRow + rowOffset;
-                        const targetCol = startCol + colOffset;
-
-                        // Vérifier que la cellule cible existe
-                        if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
-                          const parsed = Number(value.replace(',', '.'));
-                          if (!Number.isNaN(parsed)) {
-                            updateCellValue(targetRow, targetCol, parsed);
-                            pastedCount++;
-                          }
-                        }
-                      });
-                    });
-
+                    const pastedCount = pasteCellSelection(clip);
                     toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
                   } else if (contextMenu.type === 'xAxis') {
                     const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
@@ -5188,60 +5119,62 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
               {/* Value +1 */}
               <button
-                className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                disabled={incrementDisabled}
+                className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                 onClick={() => {
                   if (contextMenu.type === 'cell') {
                     selectedCells.forEach(cellKey => {
                       const [row, col] = cellKey.split('-').map(Number);
                       const currentValue = mapValues[row]?.[col];
                       if (currentValue !== undefined) {
-                        updateCellValue(row, col, currentValue + incrementValue);
+                        updateCellValue(row, col, applyIncrement(currentValue, 1));
                       }
                     });
                   } else if (contextMenu.type === 'xAxis') {
                     selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed + 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, 1).toString();
                     }));
                   } else if (contextMenu.type === 'yAxis') {
                     selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed + 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, 1).toString();
                     }));
                   }
                   setContextMenu(null);
                 }}
               >
-                {t.mapViewer.increase} (+{incrementValue})
+                {t.mapViewer.increase} (+{incrementValue}{incrementUnit})
               </button>
 
               {/* Value -1 */}
               <button
-                className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
+                disabled={incrementDisabled}
+                className={`px-3 py-1.5 text-left rounded transition-colors ${incrementDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`}
                 onClick={() => {
                   if (contextMenu.type === 'cell') {
                     selectedCells.forEach(cellKey => {
                       const [row, col] = cellKey.split('-').map(Number);
                       const currentValue = mapValues[row]?.[col];
                       if (currentValue !== undefined) {
-                        updateCellValue(row, col, currentValue - incrementValue);
+                        updateCellValue(row, col, applyIncrement(currentValue, -1));
                       }
                     });
                   } else if (contextMenu.type === 'xAxis') {
                     selectedXAxisCells.forEach(index => mutateDisplayXAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed - 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, -1).toString();
                     }));
                   } else if (contextMenu.type === 'yAxis') {
                     selectedYAxisCells.forEach(index => mutateDisplayYAxis(index, cur => {
                       const parsed = Number(cur?.replace(',', '.'));
-                      return Number.isNaN(parsed) ? cur : (parsed - 1).toString();
+                      return Number.isNaN(parsed) ? cur : applyIncrement(parsed, -1).toString();
                     }));
                   }
                   setContextMenu(null);
                 }}
               >
-                {t.mapViewer.decrease} (-{incrementValue})
+                {t.mapViewer.decrease} (-{incrementValue}{incrementUnit})
               </button>
 
               <div className="border-t border-gray-600 my-1" />
@@ -5518,7 +5451,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         // Extract base name (remove address prefix like "E22FA ")
         const getBaseName = (name: string) => {
           // Remove hex address prefix (e.g., "E22FA " -> "Start of Injection")
-          return name.replace(/^[A-Fa-f0-9]{4,6}\s+/, '').trim();
+          // puis le numéro de fin de famille (« Start of injection 03 »,
+          // « Maximum Vehicle Speed 2 », « EGR hysteresis 5 », « GEAR 1-2 »…) :
+          // les maps numérotées d'une même famille doivent être proposées
+          // entre elles (sur demande, EDC16). Les dimensions restent
+          // vérifiées en plus du nom.
+          return name
+            .replace(/^[A-Fa-f0-9]{4,6}\s+/, '')
+            .replace(/\s+\d{1,2}(?:-\d{1,2})?$/, '')
+            .trim();
         };
         const currentBaseName = getBaseName(mapData.name);
 
@@ -5646,6 +5587,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                             }}
                             className="w-4 h-4 accent-red-500 rounded"
                           />
+                          {/* Adresse hexa devant le nom, comme dans la liste des maps (sur demande) */}
+                          <span className="text-[11px] font-mono text-gray-400 flex-shrink-0">{m.address.toString(16).toUpperCase()}</span>
                           <span className="text-[12px] text-white flex-1 truncate">{m.name}</span>
                           <span className="text-[11px] text-gray-500">{dimStr}</span>
                         </label>

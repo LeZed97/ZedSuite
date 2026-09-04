@@ -26,13 +26,39 @@ export async function setAppZoom(factor: number): Promise<void> {
  * « la fenêtre change → on remesure → la fenêtre change » qui bloquait le
  * redimensionnement.
  */
+// Largeur minimale demandée pendant que la fenêtre était maximisée / en
+// plein écran : appliquée au retour en mode fenêtré (voir plus bas).
+let pendingMinWidth: number | null = null;
+let resizeListenerInstalled = false;
+
 export async function setAppMinWidth(cssWidth: number, zoom = 1): Promise<void> {
   try {
     const { getCurrentWindow, LogicalSize } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     const width = Math.max(600, Math.round(cssWidth * zoom));
+    // Jamais de setMinSize ni de setSize en plein écran ou maximisé : sur
+    // Windows, changer la contrainte de taille d'une fenêtre maximisée la
+    // fait SORTIR de cet état et la décale (constaté en élargissant la liste
+    // des maps). On mémorise la largeur voulue et on l'applique au retour en
+    // mode fenêtré, via l'événement de redimensionnement.
+    const [fullscreen, maximized] = await Promise.all([win.isFullscreen(), win.isMaximized()]);
+    if (fullscreen || maximized) {
+      pendingMinWidth = width;
+      if (!resizeListenerInstalled) {
+        resizeListenerInstalled = true;
+        await win.onResized(async () => {
+          if (pendingMinWidth === null) return;
+          const [fs, max] = await Promise.all([win.isFullscreen(), win.isMaximized()]);
+          if (fs || max) return;
+          const w = pendingMinWidth;
+          pendingMinWidth = null;
+          await setAppMinWidth(w, 1);
+        });
+      }
+      return;
+    }
+    pendingMinWidth = null;
     await win.setMinSize(new LogicalSize(width, 700));
-
     // La contrainte seule ne suffit pas : Windows ne l'applique qu'au
     // prochain redimensionnement manuel, une fenêtre déjà plus étroite reste
     // telle quelle. On l'élargit donc explicitement — c'est ce qui permet
@@ -47,4 +73,3 @@ export async function setAppMinWidth(cssWidth: number, zoom = 1): Promise<void> 
     // hors Tauri : silencieux
   }
 }
-

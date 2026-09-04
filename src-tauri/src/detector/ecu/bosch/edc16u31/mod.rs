@@ -1367,8 +1367,12 @@ impl EDC16U31Detector {
                     let count = read(m + 2) as usize;
                     let entries_at = m + 4 + count * 2; // indices come after the axis
                     if (2..=8).contains(&count) && entries_at + count * 2 <= scan_end {
+                        // Program ids are 00..05 on the Passat, but some SW
+                        // (US BEW 038997016R) fill every slot with 01 00:
+                        // accept any small id (one of the count + 1 programs)
+                        // with a zero high byte.
                         let entries_ok = (0..count).all(|i| {
-                            data[entries_at + i * 2] == i as u8 && data[entries_at + i * 2 + 1] == 0
+                            (data[entries_at + i * 2] as usize) <= count && data[entries_at + i * 2 + 1] == 0
                         });
                         if entries_ok {
                             marker = Some((m, count));
@@ -5113,6 +5117,20 @@ impl EDC16U31Detector {
                     map.correction_factor = Some(1.0);  // Selector values are 5,4,3,2,1,0 directly
                     map.is_little_endian = Some(true);  // Duration Selector is Little-Endian
 
+                    // Axe du selecteur : 6 valeurs de SOI (deg, x0.023437, signees) juste
+                    // avant, precedees de l'en-tete [00 06] : le calculateur choisit la map
+                    // Duration selon l'avance (Golf5 : 0, 4, 9, 15, 21, 27 deg ; Passat :
+                    // -2 .. 27 deg). Verifie sur U1/U31/U34 (8 fichiers).
+                    if offset >= 14 && data[offset - 14] == 0x00 && data[offset - 13] == 0x06 {
+                        let axis: Vec<i16> = (0..6)
+                            .map(|k| i16::from_be_bytes([data[offset - 12 + k * 2], data[offset - 11 + k * 2]]))
+                            .collect();
+                        if axis.windows(2).all(|w| w[0] < w[1]) && axis[0] >= -300 && (600..=1600).contains(&axis[5]) {
+                            map.x_axis_address = Some((offset - 12) as u32);
+                            map.x_label = Some("deg CrS".to_string());
+                            map.x_axis_correction = Some(0.023437);
+                        }
+                    }
                     results.push((offset as u32, map));
 
                     offset += 16 + gap as usize;  // Skip selector + gap + signature
@@ -5455,6 +5473,7 @@ impl EDC16U31Detector {
                 m2.category = Some("Fuel Correction".to_string());
                 m2.unit = Some("°C".to_string());
                 m2.correction_factor = Some(0.1);
+                m2.offset = Some(-273.15); // brut = kelvin x10 (3174 -> 44 degC), sans ce decalage la map affichait 317..376 degC
                 m2.y_axis_address = Some(ey0 as u32);
                 m2.y_label = Some("rpm".to_string());
                 m2.y_axis_correction = Some(1.0);
@@ -6093,6 +6112,23 @@ impl EDC16U31Detector {
                     // Y RPM, X IQ — same validation as the main SOI maps
                     if y[0] > 1400 || !(2800..=6000).contains(&y[rows - 1]) || !strictly_inc(&y)
                         || x[0] > 700 || !(2500..=5500).contains(&x[cols - 1]) || !non_dec(&x) {
+                        pos += 2; continue;
+                    }
+                    // Données : doivent ressembler aux SOI principales (avance
+                    // × 0.023437 deg, 0-27 deg). Écarte les 14x13 aux valeurs
+                    // majoritairement négatives ou plates (faux positifs signalés
+                    // au banc, ex. Golf U34 0x1DF17C : -780..50).
+                    let n_vals = rows * cols;
+                    if data_start + n_vals * 2 > data.len() { pos += 2; continue; }
+                    let vals: Vec<i16> = (0..n_vals)
+                        .map(|i| i16::from_be_bytes([data[data_start + i * 2], data[data_start + i * 2 + 1]]))
+                        .collect();
+                    let in_range = vals.iter().filter(|&&v| (-200..=1500).contains(&v)).count();
+                    let negatives = vals.iter().filter(|&&v| v < 0).count();
+                    let max_val = vals.iter().copied().max().unwrap_or(0);
+                    let mean_val = vals.iter().map(|&v| v as i64).sum::<i64>() / n_vals.max(1) as i64;
+                    if in_range * 100 < n_vals * 80 || negatives * 100 > n_vals * 25
+                        || max_val < 300 || mean_val < 100 {
                         pos += 2; continue;
                     }
                     // Same type as the SOI Dynamic maps (verified: same 0.023437
@@ -6962,14 +6998,14 @@ impl EDC16U31Detector {
                     map_name = "Smoke Limiter by MAF";
                     _x_label = "Air mass";
                     x_unit = "mg/stroke";
-                    x_factor = 1.0;
+                    x_factor = 0.1; // masse d'air brute x10 (3000..10000 = 300..1000 mg/coup), comme les maps Lambda
                     maf_map_found = true;
                 } else if !maf_map_found && last_x <= 11000 {
                     // First air mass map - classify as MAF
                     map_name = "Smoke Limiter by MAF";
                     _x_label = "Air mass";
                     x_unit = "mg/stroke";
-                    x_factor = 1.0;
+                    x_factor = 0.1; // masse d'air brute x10 (3000..10000 = 300..1000 mg/coup), comme les maps Lambda
                     maf_map_found = true;
                 } else if lambda_range_count > total_count * 50 / 100 {
                     // Subsequent maps with lambda-like values
@@ -7944,7 +7980,10 @@ impl EDC16U31Detector {
                 // 100 mg/stroke (raw 1000) are unrelated calibration data —
                 // e.g. the constant-12.8 10x10 false positives on JA/KN/
                 // Passat/Superb, absent from every reference list.
-                if max_v < 1000 {
+                // Seuil 3000 : les vraies demandes d'air plafonnent >= 6150 bruts sur
+                // tout le banc, alors que les maps SOI (GEAR) 16x14 (<= 1300) passaient
+                // pour de l'EGR 16 octets trop tot (Golf5 U34 du banc).
+                if max_v < 3000 {
                     pos = data_end;
                     continue;
                 }
@@ -8032,7 +8071,7 @@ impl EDC16U31Detector {
                     max_v = v;
                 }
             }
-            if max_v < 1000
+            if max_v < 3000
                 || detected.contains(&(data_start as u32))
                 || maps.iter().any(|m| m.address == data_start as u32)
             {
@@ -8979,14 +9018,18 @@ impl EDC16U31Detector {
             // Need reasonable number of values
             if values.len() >= 30 && values.len() <= 50 {
                 let num_values = values.len();
-                let data_size = 4 + num_values * 2;
+                // La map émise commence aux DONNÉES (après l'en-tête 03FF 0AAB
+                // 0AAB) : émise à l'en-tête avec size = 4 + n*2, le tableau
+                // affichait 0AAB 0AAB en tête et perdait ses deux dernières
+                // valeurs, et toute édition écrivait 4 octets trop tôt.
+                let data_size = num_values * 2;
 
                 sensor_count += 1;
                 let map_name = format!("Exhaust gas temperature sensor linearisation EGT {}", sensor_count);
-                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, map_address, num_values, 1);
+                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, data_start, num_values, 1);
 
                 let mut map = DetectedMap::new(
-                    map_address as u32,
+                    data_start as u32,
                     data_size,
                     MapDimensions::TwoDimensional { rows: num_values, cols: 1 },
                     DataType::UInt16,
@@ -9014,7 +9057,8 @@ impl EDC16U31Detector {
             let val2 = u16::from_be_bytes([data[i + 2], data[i + 3]]);
 
             // First value should be around 1731 (0x06C3) ± tolerance
-            if val1 < 0x0600 || val1 > 0x0800 {
+            // (le Touareg V10 démarre à 2231 = 0x8B7, −50 °C en K×10)
+            if val1 < 0x0600 || val1 > 0x0900 {
                 continue;
             }
 
@@ -9049,7 +9093,8 @@ impl EDC16U31Detector {
                 let val = u16::from_be_bytes([data[addr], data[addr + 1]]);
 
                 // Check for padding (0x0030)
-                if val == 0x0030 {
+                // … ou sentinelle FFFF/0000 (Touareg V10, BEW U31)
+                    if val == 0x0030 || val == 0xFFFF || val == 0x0000 {
                     found_padding = true;
                     break;
                 }

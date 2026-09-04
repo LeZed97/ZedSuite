@@ -102,9 +102,9 @@ function mapRowsCols(m: ExportMapData): { rows: number; cols: number } {
 }
 
 /**
- * Folder names: the app groups maps by category. The reference packs use
- * numbered folders ("1-Fuel", "2-Limiters", ...), so we number the
- * categories in alphabetical order to keep a stable, WinOLS-friendly tree.
+ * Folder names: the app groups maps by category, one folder per category,
+ * sorted alphabetically. No numeric prefix ("1-Fuel", "2-Limiters"...):
+ * WinOLS sorts folders by name and the prefix broke that ordering.
  */
 function buildFolderNames(maps: ExportMapData[]): Map<string, string> {
   const categories = Array.from(
@@ -112,7 +112,9 @@ function buildFolderNames(maps: ExportMapData[]): Map<string, string> {
   ).sort((a, b) => a.localeCompare(b));
   const folders = new Map<string, string>();
   categories.forEach((cat, i) => {
-    folders.set(cat, `${i + 1}-${cat}`);
+    // Pas de préfixe numérique : WinOLS trie les dossiers par nom et le
+    // « 4-… » cassait le classement (sur demande, tous calculateurs)
+    folders.set(cat, cat);
   });
   return folders;
 }

@@ -16,6 +16,10 @@ import { useTheme } from "@/contexts/theme-context";
 import { useI18n } from "@/contexts/i18n-context";
 import { WindowControls } from "@/components/window-controls";
 
+// Opération de la pastille de modification : ajouter une valeur, remplacer
+// (fill) ou ajouter un POURCENTAGE de la valeur courante
+export type ModifyOperation = 'add' | 'fill' | 'percent';
+
 interface EditorToolbarProps {
   projectName: string;
   hexdumpSize?: "8b" | "16b";
@@ -37,10 +41,13 @@ interface EditorToolbarProps {
   onCloseProject?: () => void;
   // Modify map values
   hasActiveMap?: boolean;
-  onModifyApply?: (operation: 'add' | 'fill', value: number) => void;
+  onModifyApply?: (operation: ModifyOperation, value: number) => void;
   // Controlled modifyValue for keyboard shortcuts in MapViewer
   modifyValue?: string;
   onModifyValueChange?: (value: string) => void;
+  // Opération contrôlée (partagée avec les menus contextuels / touches +/- du MapViewer)
+  modifyOperation?: ModifyOperation;
+  onModifyOperationChange?: (operation: ModifyOperation) => void;
   // Compare versions
   onCompareClick?: () => void;
 }
@@ -66,6 +73,8 @@ export function EditorToolbar({
   onModifyApply,
   modifyValue: controlledModifyValue,
   onModifyValueChange,
+  modifyOperation: controlledModifyOperation,
+  onModifyOperationChange,
   onCompareClick,
 }: EditorToolbarProps) {
   const router = useRouter();
@@ -73,7 +82,17 @@ export function EditorToolbar({
   const { t } = useI18n();
 
   // State for modify controls - use controlled value if provided
-  const [modifyOperation, setModifyOperation] = useState<'add' | 'fill'>('add');
+  const [internalModifyOperation, setInternalModifyOperation] = useState<ModifyOperation>('add');
+  const modifyOperation = controlledModifyOperation ?? internalModifyOperation;
+  const setModifyOperation = (op: ModifyOperation) => {
+    if (onModifyOperationChange) {
+      onModifyOperationChange(op);
+    } else {
+      setInternalModifyOperation(op);
+    }
+  };
+  const operationLabel = (op: ModifyOperation) =>
+    op === 'add' ? t.toolbar.add : op === 'fill' ? t.toolbar.fill : t.toolbar.percent;
   const [internalModifyValue, setInternalModifyValue] = useState<string>('1');
 
   // Custom dropdown for the operation selector (styled like the app's
@@ -329,9 +348,9 @@ export function EditorToolbar({
               onClick={toggleOperationMenu}
               className={`h-7 pl-2 pr-1.5 text-xs rounded-l border-0 outline-none cursor-pointer flex items-center gap-1 transition-colors ${getButtonHoverClass()}`}
               style={{ background: 'transparent', color: getTextColor() }}
-              title={modifyOperation === 'add' ? t.toolbar.add : t.toolbar.fill}
+              title={operationLabel(modifyOperation)}
             >
-              {modifyOperation === 'add' ? t.toolbar.add : t.toolbar.fill}
+              {operationLabel(modifyOperation)}
               <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${isOperationMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -348,7 +367,7 @@ export function EditorToolbar({
                   color: theme === 'light' ? '#000000' : '#ffffff',
                 }}
               >
-                {(['add', 'fill'] as const).map((op) => (
+                {(['add', 'fill', 'percent'] as const).map((op) => (
                   <button
                     key={op}
                     type="button"
@@ -360,7 +379,7 @@ export function EditorToolbar({
                       setOperationMenuPos(null);
                     }}
                   >
-                    {op === 'add' ? t.toolbar.add : t.toolbar.fill}
+                    {operationLabel(op)}
                     {modifyOperation === op && <Check className="w-3 h-3" />}
                   </button>
                 ))}
@@ -385,7 +404,7 @@ export function EditorToolbar({
               background: theme === 'light' ? 'rgba(0, 0, 0, 0.03)' : 'rgba(255, 255, 255, 0.03)',
               color: getTextColor(),
             }}
-            title={modifyOperation === 'add' ? "Value to add (negative to subtract)" : "Value to fill all cells"}
+            title={modifyOperation === 'add' ? "Value to add (negative to subtract)" : modifyOperation === 'percent' ? "Percent to add (negative to subtract)" : "Value to fill all cells"}
           />
           <Button
             variant="ghost"

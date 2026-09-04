@@ -329,7 +329,70 @@ export async function listMapEdits(versionId: string): Promise<MapEdit[]> {
   }
 }
 
+// Écritures SÉRIALISÉES par version : l'éditeur envoie les edits de chaque
+// map en parallèle (Promise.all), et un read-modify-write concurrent sur
+// edits-<version>.json ne gardait que le dernier écrit — les modifications
+// des autres maps (maps similaires, copier/coller, plusieurs maps éditées à
+// la main) disparaissaient à l'enregistrement.
+const mapEditQueues = new Map<string, Promise<void>>();
+
 export async function addMapEdit(
+  versionId: string,
+  mapAddress: number,
+  payload: any
+): Promise<MapEdit | null> {
+  const previous = mapEditQueues.get(versionId) ?? Promise.resolve();
+  let result: MapEdit | null = null;
+  const run = previous
+    .catch(() => undefined)
+    .then(async () => {
+      result = await addMapEditUnlocked(versionId, mapAddress, payload);
+    });
+  mapEditQueues.set(versionId, run);
+  try {
+    await run;
+  } finally {
+    if (mapEditQueues.get(versionId) === run) mapEditQueues.delete(versionId);
+  }
+  return result;
+}
+
+/** REMPLACE tous les edits d'une version (un enregistrement = l'état complet). */
+export async function replaceMapEdits(
+  versionId: string,
+  edits: { mapAddress: number; payload: any }[]
+): Promise<MapEdit[] | null> {
+  const previous = mapEditQueues.get(versionId) ?? Promise.resolve();
+  let result: MapEdit[] | null = null;
+  const run = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const found = await findVersion(versionId);
+      if (!found) return;
+      const list: MapEdit[] = edits.map((e) => ({
+        id: newId(),
+        version: versionId,
+        map_address: e.mapAddress ?? -1,
+        payload: e.payload ?? {},
+        created: nowIso(),
+      }));
+      await writeTextFile(
+        `${projectDir(found.fileId)}/edits-${versionId}.json`,
+        JSON.stringify(list),
+        BASE
+      );
+      result = list;
+    });
+  mapEditQueues.set(versionId, run);
+  try {
+    await run;
+  } finally {
+    if (mapEditQueues.get(versionId) === run) mapEditQueues.delete(versionId);
+  }
+  return result;
+}
+
+async function addMapEditUnlocked(
   versionId: string,
   mapAddress: number,
   payload: any

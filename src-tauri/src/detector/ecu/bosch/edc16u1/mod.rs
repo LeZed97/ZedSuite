@@ -2457,9 +2457,25 @@ impl EDC16U1Detector {
                                             bad_value_count += 1;
                                         }
                                     }
+                                    // Profil global : une vraie SOI a une avance nette (max
+                                    // >= 300 raw ≈ 7 deg, moyenne >= 100) et peu de négatifs
+                                    // (<= 25 %) — écarte les blocs à valeurs négatives ou plates
+                                    let mut negative_count = 0usize;
+                                    let mut max_val: i16 = i16::MIN;
+                                    let mut sum_val: i64 = 0;
+                                    for i in (0..SOI_MAP_SIZE).step_by(2) {
+                                        let val = i16::from_be_bytes([map_data[i], map_data[i + 1]]);
+                                        if val < 0 { negative_count += 1; }
+                                        if val > max_val { max_val = val; }
+                                        sum_val += val as i64;
+                                    }
+                                    let mean_val = sum_val / total_values.max(1) as i64;
                                     // Relaxed: at least 40% valid and less than 5% bad
                                     let has_valid_soi_values = valid_soi_count >= (total_values * 40 / 100)
-                                                            && bad_value_count <= (total_values * 5 / 100);
+                                                            && bad_value_count <= (total_values * 5 / 100)
+                                                            && negative_count <= (total_values * 25 / 100)
+                                                            && max_val >= 300
+                                                            && mean_val >= 100;
 
                                     if !has_valid_soi_values {
                                         // If we haven't found any valid yet, keep looking
@@ -5196,6 +5212,20 @@ impl EDC16U1Detector {
                     map.correction_factor = Some(1.0);  // Selector values are 5,4,3,2,1,0 directly
                     map.is_little_endian = Some(true);  // Duration Selector is Little-Endian
 
+                    // Axe du selecteur : 6 valeurs de SOI (deg, x0.023437, signees) juste
+                    // avant, precedees de l'en-tete [00 06] : le calculateur choisit la map
+                    // Duration selon l'avance (Golf5 : 0, 4, 9, 15, 21, 27 deg ; Passat :
+                    // -2 .. 27 deg). Verifie sur U1/U31/U34 (8 fichiers).
+                    if offset >= 14 && data[offset - 14] == 0x00 && data[offset - 13] == 0x06 {
+                        let axis: Vec<i16> = (0..6)
+                            .map(|k| i16::from_be_bytes([data[offset - 12 + k * 2], data[offset - 11 + k * 2]]))
+                            .collect();
+                        if axis.windows(2).all(|w| w[0] < w[1]) && axis[0] >= -300 && (600..=1600).contains(&axis[5]) {
+                            map.x_axis_address = Some((offset - 12) as u32);
+                            map.x_label = Some("deg CrS".to_string());
+                            map.x_axis_correction = Some(0.023437);
+                        }
+                    }
                     results.push((offset as u32, map));
 
                     offset += 16 + gap as usize;  // Skip selector + gap + signature
@@ -6416,14 +6446,14 @@ impl EDC16U1Detector {
                     map_name = "Smoke Limiter by MAF";
                     _x_label = "Air mass";
                     x_unit = "mg/stroke";
-                    x_factor = 1.0;
+                    x_factor = 0.1; // masse d'air brute x10 (3000..10000 = 300..1000 mg/coup), comme les maps Lambda
                     maf_map_found = true;
                 } else if !maf_map_found && last_x <= 11000 {
                     // First air mass map - classify as MAF
                     map_name = "Smoke Limiter by MAF";
                     _x_label = "Air mass";
                     x_unit = "mg/stroke";
-                    x_factor = 1.0;
+                    x_factor = 0.1; // masse d'air brute x10 (3000..10000 = 300..1000 mg/coup), comme les maps Lambda
                     maf_map_found = true;
                 } else if lambda_range_count > total_count * 50 / 100 {
                     // Subsequent maps with lambda-like values
@@ -8693,14 +8723,18 @@ impl EDC16U1Detector {
             // Need reasonable number of values
             if values.len() >= 30 && values.len() <= 50 {
                 let num_values = values.len();
-                let data_size = 4 + num_values * 2;
+                // La map émise commence aux DONNÉES (après l'en-tête 03FF 0AAB
+                // 0AAB) : émise à l'en-tête avec size = 4 + n*2, le tableau
+                // affichait 0AAB 0AAB en tête et perdait ses deux dernières
+                // valeurs, et toute édition écrivait 4 octets trop tôt.
+                let data_size = num_values * 2;
 
                 sensor_count += 1;
                 let map_name = format!("Exhaust gas temperature sensor linearisation EGT {}", sensor_count);
-                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, map_address, num_values, 1);
+                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, data_start, num_values, 1);
 
                 let mut map = DetectedMap::new(
-                    map_address as u32,
+                    data_start as u32,
                     data_size,
                     MapDimensions::TwoDimensional { rows: num_values, cols: 1 },
                     DataType::UInt16,
