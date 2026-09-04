@@ -45,6 +45,7 @@ function SettingsContent() {
   const { wallpaper, isLight, pageBg, customWallpaper } = useDashboardWallpaper(settings.dashboardWallpaper, dashboardTheme);
   // Image personnalisée sur thème clair : bouton retour et contrôles de fenêtre en noir
   const onCustomLight = wallpaper === "custom" && isLight;
+  const onCustomDark = wallpaper === "custom" && !isLight;
 
   // ── Application : version + vérification de mise à jour ──
   const [appVersion, setAppVersion] = useState("—");
@@ -314,13 +315,13 @@ function SettingsContent() {
                 variant="ghost"
                 size="icon"
                 onClick={() => router.push("/dashboard")}
-                className={isLight ? (onCustomLight ? "text-slate-900 hover:text-black hover:bg-black/10" : "text-slate-500 hover:text-black hover:bg-black/10") : "text-slate-400 hover:text-white hover:bg-white/10"}
+                className={isLight ? (onCustomLight ? "text-slate-900 hover:text-black hover:bg-black/10" : "text-slate-500 hover:text-black hover:bg-black/10") : (onCustomDark ? "text-white hover:text-white hover:bg-white/10" : "text-slate-400 hover:text-white hover:bg-white/10")}
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               <h1 data-tauri-drag-region className={`text-xl font-bold select-none ${titleColor}`}>{t.settingsPage.title}</h1>
             </div>
-            <WindowControls strong={onCustomLight} />
+            <WindowControls strong={onCustomLight || onCustomDark} />
           </div>
         </div>
       </header>

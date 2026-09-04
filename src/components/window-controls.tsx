@@ -10,7 +10,7 @@ import { Minus, Square, Copy, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useThemeOptional } from "@/contexts/theme-context";
 
-// strong : icônes en noir (thème clair sur image personnalisée, sans pastille)
+// strong : icônes en noir (clair) / blanc (sombre) — image personnalisée, sans pastille
 export function WindowControls({ strong = false }: { strong?: boolean } = {}) {
   const [isMaximized, setIsMaximized] = useState(false);
   const L = (useThemeOptional()?.theme ?? "default") === "light";
@@ -49,7 +49,7 @@ export function WindowControls({ strong = false }: { strong?: boolean } = {}) {
   const baseBtn = `h-8 w-10 flex-shrink-0 flex items-center justify-center rounded-md transition-colors ${
     L
       ? (strong ? "text-slate-900 hover:text-black hover:bg-black/10" : "text-slate-500 hover:text-black hover:bg-black/10")
-      : "text-slate-400 hover:text-white hover:bg-white/10"
+      : (strong ? "text-white hover:text-white hover:bg-white/10" : "text-slate-400 hover:text-white hover:bg-white/10")
   }`;
 
   return (
@@ -71,7 +71,7 @@ export function WindowControls({ strong = false }: { strong?: boolean } = {}) {
       <button
         onClick={() => win().close()}
         className={`h-8 w-10 flex-shrink-0 flex items-center justify-center rounded-md transition-colors hover:text-white hover:bg-red-500/90 ${
-          L ? (strong ? "text-slate-900" : "text-slate-500") : "text-slate-400"
+          L ? (strong ? "text-slate-900" : "text-slate-500") : (strong ? "text-white" : "text-slate-400")
         }`}
         title="Close"
       >

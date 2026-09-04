@@ -452,6 +452,11 @@ function DashboardContent() {
   // sélecteur du bas en noir (pas de pastille, demande Enzo)
   const onCustomLight = wallpaper === "custom" && isLight;
   const paginationText = onCustomLight ? "text-slate-900" : "text-slate-700";
+  // Image personnalisée : les gris se perdent sur une photo → tous les textes
+  // secondaires (dates, HW/SW, client, « Versions : », pagination, compteur)
+  // et les icônes en blanc sur thème sombre, en noir sur thème clair
+  const subText = onCustomDark ? "text-white" : onCustomLight ? "text-slate-900" : null;
+  const darkIcon = onCustomDark ? "text-white hover:text-white hover:bg-white/10" : "text-slate-400 hover:text-white hover:bg-white/10";
 
   useEffect(() => {
     loadDashboardData();
@@ -766,20 +771,20 @@ function DashboardContent() {
             <div className="flex items-center pt-1 flex-shrink-0">
               <button
                 onClick={() => setShowAbout(true)}
-                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                 title="Help"
               >
                 <HelpCircle className="w-4 h-4" />
               </button>
               <button
                 onClick={() => router.push('/settings')}
-                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                 title={t.userMenu.settings}
               >
                 <Settings className="w-4 h-4" />
               </button>
               <div className="w-px h-4 bg-white/[0.12] mx-1.5" />
-              <WindowControls strong={onCustomLight} />
+              <WindowControls strong={onCustomLight || onCustomDark} />
             </div>
           </div>
         </div>
@@ -789,8 +794,8 @@ function DashboardContent() {
         <div className="relative container mx-auto px-4 pt-3 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-baseline gap-3">
-              <h3 className={`text-sm font-bold uppercase tracking-widest ${isLight ? 'text-slate-900' : 'text-slate-300'}`}>{t.dashboard.recentFiles}</h3>
-              <span className={`text-xs tabular-nums ${isLight ? 'text-slate-700' : 'text-slate-500'}`}>{filteredFiles.length}</span>
+              <h3 className={`text-sm font-bold uppercase tracking-widest ${subText ?? (isLight ? 'text-slate-900' : 'text-slate-300')}`}>{t.dashboard.recentFiles}</h3>
+              <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-700' : 'text-slate-500')}`}>{filteredFiles.length}</span>
             </div>
 
             {/* Search Bar */}
@@ -869,12 +874,12 @@ function DashboardContent() {
                             {file.project_name || file.original_name}
                           </h4>
                           <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs text-slate-500">
+                            <span className={`text-xs ${subText ?? 'text-slate-500'}`}>
                               {new Date(file.created).toLocaleDateString("fr-FR")}
                             </span>
                             {file.customer && (
-                              <span className={`flex items-center gap-1 text-xs font-medium ${isLight ? "text-slate-700" : "text-slate-300"}`}>
-                                <User className="w-3 h-3 text-slate-500" />
+                              <span className={`flex items-center gap-1 text-xs font-medium ${subText ?? (isLight ? "text-slate-700" : "text-slate-300")}`}>
+                                <User className={`w-3 h-3 ${subText ?? "text-slate-500"}`} />
                                 {file.customer}
                               </span>
                             )}
@@ -884,22 +889,22 @@ function DashboardContent() {
                               </span>
                             )}
                             {file.vehicle_brand && (
-                              <span className="text-xs text-slate-400">
+                              <span className={`text-xs ${subText ?? 'text-slate-400'}`}>
                                 {file.vehicle_brand}
                               </span>
                             )}
                             {file.year && (
-                              <span className="text-xs text-slate-400">
+                              <span className={`text-xs ${subText ?? 'text-slate-400'}`}>
                                 {file.year}
                               </span>
                             )}
                             {file.hardware_version && (
-                              <span className="text-xs text-slate-400 ml-4">
+                              <span className={`text-xs ml-4 ${subText ?? 'text-slate-400'}`}>
                                 HW: {file.hardware_version}
                               </span>
                             )}
                             {file.software_version && (
-                              <span className="text-xs text-slate-400">
+                              <span className={`text-xs ${subText ?? 'text-slate-400'}`}>
                                 SW: {file.software_version}
                               </span>
                             )}
@@ -909,15 +914,15 @@ function DashboardContent() {
 
                       <div className="flex items-center gap-2">
                         <div className={`px-2.5 py-0.5 rounded-full border ${isLight ? 'border-black/[0.10] bg-black/[0.05]' : 'border-white/[0.08] bg-white/[0.05]'}`}>
-                          <span className={`text-xs tabular-nums ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                            {t.dashboard.versions} : <span className={isLight ? 'text-slate-900' : 'text-slate-200'}>{versionCounts[file.id] || 1}</span>
+                          <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-500' : 'text-slate-400')}`}>
+                            {t.dashboard.versions} : <span className={subText ?? (isLight ? 'text-slate-900' : 'text-slate-200')}>{versionCounts[file.id] || 1}</span>
                           </span>
                         </div>
                         {/* Actions groupées dans une pastille — même langage que
                             la pastille Versions, atténuée au repos */}
                         <div className={`flex items-center rounded-full border overflow-hidden opacity-70 group-hover:opacity-100 transition-opacity ${isLight ? 'border-black/[0.12] bg-black/[0.04]' : 'border-white/[0.08] bg-white/[0.04]'}`}>
                           <button
-                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                             title={t.projectInfo?.title || "Project info"}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -939,7 +944,7 @@ function DashboardContent() {
                           </button>
                           <div className={`w-px h-4 ${isLight ? 'bg-black/[0.12]' : 'bg-white/[0.08]'}`} />
                           <button
-                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                            className={`h-7 w-9 flex items-center justify-center transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                             title={t.dashboard.openFolder}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -977,7 +982,7 @@ function DashboardContent() {
                         disabled={currentPage === 1}
                         className={isLight
                           ? `${paginationText} hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed`
-                          : "text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"}
+                          : `${onCustomDark ? 'text-white' : 'text-slate-400'} hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {t.dashboard.previous}
                       </Button>
@@ -992,7 +997,7 @@ function DashboardContent() {
                             className={`w-8 h-8 p-0 ${
                               currentPage === page
                                 ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white'
-                                : (isLight ? `${paginationText} hover:text-black hover:bg-black/10` : 'text-slate-400 hover:text-white hover:bg-white/5')
+                                : (isLight ? `${paginationText} hover:text-black hover:bg-black/10` : `${onCustomDark ? 'text-white' : 'text-slate-400'} hover:text-white hover:bg-white/5`)
                             }`}
                           >
                             {page}
@@ -1007,7 +1012,7 @@ function DashboardContent() {
                         disabled={currentPage === totalPages}
                         className={isLight
                           ? `${paginationText} hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed`
-                          : "text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"}
+                          : `${onCustomDark ? 'text-white' : 'text-slate-400'} hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {t.dashboard.next}
                       </Button>
@@ -1016,7 +1021,7 @@ function DashboardContent() {
 
                   {/* Items per page selector */}
                   <div className="flex items-center gap-2 flex-1 justify-end">
-                    <span className={`text-sm ${isLight ? paginationText : 'text-slate-400'}`}>{t.dashboard.show}:</span>
+                    <span className={`text-sm ${isLight ? paginationText : (onCustomDark ? 'text-white' : 'text-slate-400')}`}>{t.dashboard.show}:</span>
                     <StyledSelect
                       appearance="auto"
                       value={String(itemsPerPage)}
