@@ -2510,9 +2510,11 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         xLabels.push(...tempXLabels);
       }
     } else {
-      // Fallback to generated labels
+      // Sans axe dans le fichier (sélecteurs, courbes 1×N…) : simple index
+      // 1..N — l'ancien « 0, 5, 10… » ressemblait à de vraies valeurs et
+      // rendait les sélecteurs SOI illisibles.
       for (let i = 0; i < cols; i++) {
-        xLabels.push((i * 5).toFixed(2));
+        xLabels.push(String(i + 1));
       }
     }
     
@@ -2631,9 +2633,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         yLabels.push(...tempYLabels);
       }
     } else {
-      // Fallback to generated labels
+      // Sans axe dans le fichier : simple index 1..N (voir l'axe X)
       for (let i = 0; i < rows; i++) {
-        yLabels.push(String(i * 100 + (i === 0 ? 0 : 21)));
+        yLabels.push(String(i + 1));
       }
     }
     

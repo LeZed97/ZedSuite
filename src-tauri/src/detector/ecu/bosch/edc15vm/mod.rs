@@ -2124,6 +2124,11 @@ impl EDC15VMDetector {
                 sel.correction_factor = Some(0.1);
                 sel.offset = Some(-273.1);
                 sel.confidence = 0.95;
+                // Pas d'axes dans le fichier : X = numéro de la map SOI (1..10),
+                // Y vide — sans ça l'interface affichait « degC / rpm » et un faux
+                // axe 0, 5, 10… qui rendait le sélecteur illisible.
+                sel.x_label = Some("SOI map #".to_string());
+                sel.y_label = Some(String::new());
                 sel.is_little_endian = Some(true);
                 detected_addresses.insert(sel_addr);
                 maps.push(sel);
