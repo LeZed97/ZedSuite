@@ -1657,25 +1657,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
         e.preventDefault();
         if (selectedCells.size > 0) {
-          const cellsArray = Array.from(selectedCells).map(k => {
-            const [row, col] = k.split('-').map(Number);
-            return { row, col };
-          });
-          const minRow = Math.min(...cellsArray.map(c => c.row));
-          const maxRow = Math.max(...cellsArray.map(c => c.row));
-          const minCol = Math.min(...cellsArray.map(c => c.col));
-          const maxCol = Math.max(...cellsArray.map(c => c.col));
-          const values: string[][] = [];
-          for (let r = minRow; r <= maxRow; r++) {
-            const rowValues: string[] = [];
-            for (let c = minCol; c <= maxCol; c++) {
-              const v = selectedCells.has(getCellKey(r, c)) ? mapValues[r]?.[c] : undefined;
-              rowValues.push(v !== undefined ? v.toString() : '');
-            }
-            values.push(rowValues);
-          }
-          writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
-          toast({ title: t.mapViewer.copy, description: `${cellsArray.length} value(s) copied` });
+          const copiedCount = copyCellSelection();
+          if (copiedCount > 0) toast({ title: t.mapViewer.copy, description: `${copiedCount} value(s) copied` });
         } else if (selectedXAxisCells.size > 0) {
           const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
           const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
@@ -1695,26 +1678,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         if (!clip) return;
         let pastedCount = 0;
         if (selectedCells.size > 0) {
-          const cellsArray = Array.from(selectedCells).map(k => {
-            const [row, col] = k.split('-').map(Number);
-            return { row, col };
-          });
-          const startRow = Math.min(...cellsArray.map(c => c.row));
-          const startCol = Math.min(...cellsArray.map(c => c.col));
-          clip.values.forEach((rowValues, rowOffset) => {
-            rowValues.forEach((value, colOffset) => {
-              if (value === '') return;
-              const targetRow = startRow + rowOffset;
-              const targetCol = startCol + colOffset;
-              if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
-                const parsed = Number(value.replace(',', '.'));
-                if (!Number.isNaN(parsed)) {
-                  updateCellValue(targetRow, targetCol, parsed);
-                  pastedCount++;
-                }
-              }
-            });
-          });
+          pastedCount += pasteCellSelection(clip);
         } else if (selectedXAxisCells.size > 0) {
           const startIndex = Array.from(selectedXAxisCells).sort((a, b) => a - b)[0] ?? 0;
           clip.values.forEach((rowValues, offset) => {
@@ -3419,6 +3383,70 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     });
   };
 
+  // ── Copier / coller des cellules en coordonnées d'AFFICHAGE ──
+  // Le bloc copié est mémorisé tel qu'il est vu à l'écran (ligne du haut en
+  // premier, colonne de gauche en premier) et recollé à partir de la cellule
+  // affichée la plus en haut à gauche de la sélection cible, quelle que soit
+  // l'orientation interne (axes inversés, miroir, transposition) de chacune
+  // des deux maps. Avant, tout se faisait en coordonnées mapValues : sur une
+  // map dont les RPM sont affichés décroissants, un bloc copié depuis le haut
+  // se recollait décalé (la ligne du bas arrivait en haut et la ligne du haut
+  // était perdue), et ce décalage variait d'une map/ECU à l'autre.
+  const selectedDisplayCells = (): { row: number; col: number }[] =>
+    Array.from(selectedCells).map((key) => {
+      const [row, col] = key.split('-').map(Number);
+      return toDisplayCoords(row, col);
+    });
+
+  const copyCellSelection = (): number => {
+    const cells = selectedDisplayCells();
+    if (cells.length === 0) return 0;
+    const selectedKeys = new Set(cells.map((c) => `${c.row}-${c.col}`));
+    const minRow = Math.min(...cells.map((c) => c.row));
+    const maxRow = Math.max(...cells.map((c) => c.row));
+    const minCol = Math.min(...cells.map((c) => c.col));
+    const maxCol = Math.max(...cells.map((c) => c.col));
+    const values: string[][] = [];
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowValues: string[] = [];
+      for (let c = minCol; c <= maxCol; c++) {
+        if (selectedKeys.has(`${r}-${c}`)) {
+          const v = displayMapValues[r]?.[c];
+          rowValues.push(v !== undefined ? v.toString() : '');
+        } else {
+          rowValues.push(''); // cellule non sélectionnée dans le rectangle
+        }
+      }
+      values.push(rowValues);
+    }
+    writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
+    return cells.length;
+  };
+
+  const pasteCellSelection = (clip: InternalClipboard): number => {
+    const cells = selectedDisplayCells();
+    if (cells.length === 0) return 0;
+    const startRow = Math.min(...cells.map((c) => c.row));
+    const startCol = Math.min(...cells.map((c) => c.col));
+    const totalRows = displayMapValues.length;
+    const totalCols = displayMapValues[0]?.length ?? 0;
+    let pasted = 0;
+    clip.values.forEach((rowValues, rowOffset) => {
+      rowValues.forEach((value, colOffset) => {
+        if (value === '') return; // trou du rectangle copié
+        const targetRow = startRow + rowOffset;
+        const targetCol = startCol + colOffset;
+        if (targetRow >= totalRows || targetCol >= totalCols) return;
+        const parsed = Number(value.replace(',', '.'));
+        if (Number.isNaN(parsed)) return;
+        const { row, col } = toMapCoords(targetRow, targetCol);
+        updateCellValue(row, col, parsed);
+        pasted++;
+      });
+    });
+    return pasted;
+  };
+
   // Handlers pour la sélection des cellules d'axes X
   const handleXAxisMouseDown = (index: number, e: React.MouseEvent) => {
     e.preventDefault();
@@ -4360,31 +4388,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                       className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
                       onClick={() => {
                         if (contextMenu.type === 'cell') {
-                          const cellsArray = Array.from(selectedCells).map(key => {
-                            const [row, col] = key.split('-').map(Number);
-                            return { row, col };
-                          });
-                          if (cellsArray.length === 0) { setContextMenu(null); return; }
-                          const minRow = Math.min(...cellsArray.map(c => c.row));
-                          const maxRow = Math.max(...cellsArray.map(c => c.row));
-                          const minCol = Math.min(...cellsArray.map(c => c.col));
-                          const maxCol = Math.max(...cellsArray.map(c => c.col));
-                          const values: string[][] = [];
-                          for (let r = minRow; r <= maxRow; r++) {
-                            const rowValues: string[] = [];
-                            for (let c = minCol; c <= maxCol; c++) {
-                              const cellKey = `${r}-${c}`;
-                              if (selectedCells.has(cellKey)) {
-                                const value = mapValues[r]?.[c];
-                                rowValues.push(value !== undefined ? value.toString() : '');
-                              } else {
-                                rowValues.push('');
-                              }
-                            }
-                            values.push(rowValues);
-                          }
-                          writeClipboard({ values, type: 'cell', rows: maxRow - minRow + 1, cols: maxCol - minCol + 1 });
-                          toast({ title: t.mapViewer.copy, description: `${cellsArray.length} value(s) copied` });
+                          const copiedCount = copyCellSelection();
+                          if (copiedCount === 0) { setContextMenu(null); return; }
+                          toast({ title: t.mapViewer.copy, description: `${copiedCount} value(s) copied` });
                         } else if (contextMenu.type === 'xAxis') {
                           const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
                           const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
@@ -4413,28 +4419,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                           return;
                         }
                         if (contextMenu.type === 'cell') {
-                          const cellsArray = Array.from(selectedCells).map(key => {
-                            const [row, col] = key.split('-').map(Number);
-                            return { row, col };
-                          });
-                          if (cellsArray.length === 0) { setContextMenu(null); return; }
-                          const startRow = Math.min(...cellsArray.map(c => c.row));
-                          const startCol = Math.min(...cellsArray.map(c => c.col));
-                          let pastedCount = 0;
-                          clip.values.forEach((rowValues, rowOffset) => {
-                            rowValues.forEach((value, colOffset) => {
-                              if (value === '') return;
-                              const targetRow = startRow + rowOffset;
-                              const targetCol = startCol + colOffset;
-                              if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
-                                const parsed = Number(value.replace(',', '.'));
-                                if (!Number.isNaN(parsed)) {
-                                  updateCellValue(targetRow, targetCol, parsed);
-                                  pastedCount++;
-                                }
-                              }
-                            });
-                          });
+                          const pastedCount = pasteCellSelection(clip);
                           toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
                         }
                         setContextMenu(null);
@@ -4956,47 +4941,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                 className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
                 onClick={() => {
                   if (contextMenu.type === 'cell') {
-                    // Trouver les bornes de la sélection pour préserver la structure 2D
-                    const cellsArray = Array.from(selectedCells).map(key => {
-                      const [row, col] = key.split('-').map(Number);
-                      return { row, col };
-                    });
-
-                    if (cellsArray.length === 0) {
-                      setContextMenu(null);
-                      return;
-                    }
-
-                    const minRow = Math.min(...cellsArray.map(c => c.row));
-                    const maxRow = Math.max(...cellsArray.map(c => c.row));
-                    const minCol = Math.min(...cellsArray.map(c => c.col));
-                    const maxCol = Math.max(...cellsArray.map(c => c.col));
-
-                    // Créer un tableau 2D avec les valeurs
-                    const values: string[][] = [];
-                    for (let r = minRow; r <= maxRow; r++) {
-                      const rowValues: string[] = [];
-                      for (let c = minCol; c <= maxCol; c++) {
-                        const cellKey = `${r}-${c}`;
-                        if (selectedCells.has(cellKey)) {
-                          const value = mapValues[r]?.[c];
-                          rowValues.push(value !== undefined ? value.toString() : '');
-                        } else {
-                          rowValues.push(''); // Cellule non sélectionnée dans la zone
-                        }
-                      }
-                      values.push(rowValues);
-                    }
-
-                    writeClipboard({
-                      values,
-                      type: 'cell',
-                      rows: maxRow - minRow + 1,
-                      cols: maxCol - minCol + 1
-                    });
-
-                    const totalValues = cellsArray.length;
-                    toast({ title: t.mapViewer.copy, description: `${totalValues} value(s) copied` });
+                    const copiedCount = copyCellSelection();
+                    if (copiedCount === 0) { setContextMenu(null); return; }
+                    toast({ title: t.mapViewer.copy, description: `${copiedCount} value(s) copied` });
                   } else if (contextMenu.type === 'xAxis') {
                     const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
                     const values = indices.map(index => [readSourceAxis(displayXAxisToSource(index)) || '']);
@@ -5036,40 +4983,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                   }
 
                   if (contextMenu.type === 'cell') {
-                    // Trouver la cellule de départ (la plus en haut à gauche de la sélection)
-                    const cellsArray = Array.from(selectedCells).map(key => {
-                      const [row, col] = key.split('-').map(Number);
-                      return { row, col };
-                    });
-
-                    if (cellsArray.length === 0) {
-                      setContextMenu(null);
-                      return;
-                    }
-
-                    const startRow = Math.min(...cellsArray.map(c => c.row));
-                    const startCol = Math.min(...cellsArray.map(c => c.col));
-
-                    // Coller les valeurs en cascade à partir de la cellule de départ
-                    let pastedCount = 0;
-                    clip.values.forEach((rowValues, rowOffset) => {
-                      rowValues.forEach((value, colOffset) => {
-                        if (value === '') return; // Ignorer les cellules vides
-
-                        const targetRow = startRow + rowOffset;
-                        const targetCol = startCol + colOffset;
-
-                        // Vérifier que la cellule cible existe
-                        if (targetRow < mapValues.length && targetCol < (mapValues[0]?.length || 0)) {
-                          const parsed = Number(value.replace(',', '.'));
-                          if (!Number.isNaN(parsed)) {
-                            updateCellValue(targetRow, targetCol, parsed);
-                            pastedCount++;
-                          }
-                        }
-                      });
-                    });
-
+                    const pastedCount = pasteCellSelection(clip);
                     toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
                   } else if (contextMenu.type === 'xAxis') {
                     const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
