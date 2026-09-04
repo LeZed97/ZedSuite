@@ -10,6 +10,7 @@ import { ThemeProvider, useTheme, type Theme } from "@/contexts/theme-context";
 import { WindowControls } from "@/components/window-controls";
 import { StyledSelect } from "@/components/styled-select";
 import ZedGradientDefs from "@/components/zed-gradient-defs";
+import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
 import {
   checkForUpdate,
   isTauri,
@@ -40,6 +41,8 @@ function SettingsContent() {
   const { settings, updateSettings, saveSettings } = useSettings();
   // Thème du dashboard : provider monté (mise à jour immédiate de la page)
   const { theme: dashboardTheme, setTheme: setDashboardTheme } = useTheme();
+  // Même fond que le dashboard (réglage utilisateur, image personnalisée comprise)
+  const { wallpaper, isLight, pageBg, customWallpaper } = useDashboardWallpaper(settings.dashboardWallpaper, dashboardTheme);
 
   // ── Application : version + vérification de mise à jour ──
   const [appVersion, setAppVersion] = useState("—");
@@ -89,8 +92,6 @@ function SettingsContent() {
     }
   };
 
-  const isLight = dashboardTheme === "light";
-  const pageBg = dashboardTheme === "oled" ? "#000000" : isLight ? "#eef1f6" : "#0a0b0f";
   const panelStyle = isLight
     ? { backgroundColor: "rgba(255,255,255,0.75)" }
     : { backgroundColor: "rgba(22,25,34,0.55)" };
@@ -301,23 +302,7 @@ function SettingsContent() {
     <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: pageBg }}>
       {/* Dégradé de marque pour les icônes de section (stroke url(#zedIconGradient)) */}
       <ZedGradientDefs />
-      {/* Décor signature de l'app derrière les panneaux de verre (thème
-          sombre uniquement) : halos flous + grain, version atténuée du fond
-          de l'éditeur. La base reste noire/blanche selon le thème ; OLED
-          reste noir pur, le thème clair reste épuré comme le dashboard. */}
-      {dashboardTheme === "default" && (
-        <>
-          <div aria-hidden className="fixed inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: 0.4 }}>
-            <div className="absolute rounded-full" style={{ width: 520, height: 520, left: -120, top: -140, filter: 'blur(90px)', background: 'radial-gradient(circle, #ef444488, transparent 70%)' }} />
-            <div className="absolute rounded-full" style={{ width: 620, height: 620, right: -160, top: 120, filter: 'blur(90px)', background: 'radial-gradient(circle, #2563eb77, transparent 70%)' }} />
-            <div className="absolute rounded-full" style={{ width: 480, height: 480, left: '32%', bottom: -200, filter: 'blur(90px)', background: 'radial-gradient(circle, #7c3aed66, transparent 70%)' }} />
-          </div>
-          <div aria-hidden className="fixed inset-0 z-0 pointer-events-none" style={{
-            opacity: 0.04,
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`
-          }} />
-        </>
-      )}
+      <DashboardBackground wallpaper={wallpaper} theme={dashboardTheme} isLight={isLight} customWallpaper={customWallpaper} />
       {/* Header — frameless-window title bar (drag region) */}
       <header data-tauri-drag-region className="relative z-10">
         <div data-tauri-drag-region className="pl-4 pr-2 py-2.5">
