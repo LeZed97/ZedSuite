@@ -116,7 +116,8 @@ export function DashboardBackground({
           travail de l'éditeur — image nette en cover, voile du fond puis le
           même fond translucide que le workspace, selon le thème. Voiles
           réduits de moitié par rapport à l'éditeur (l'image restait trop
-          assombrie sur le dashboard). */}
+          assombrie sur le dashboard), puis encore de moitié le 04/09 (en
+          clair, le voile blanc noyait les éléments et les boutons du haut). */}
       {wallpaper === "custom" && customWallpaper && (
         <>
           <div
@@ -131,7 +132,7 @@ export function DashboardBackground({
           <div
             aria-hidden
             className="fixed inset-0 z-0 pointer-events-none"
-            style={{ backgroundColor: isLight ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.18)" }}
+            style={{ backgroundColor: isLight ? "rgba(255,255,255,0.055)" : "rgba(0,0,0,0.09)" }}
           />
           <div
             aria-hidden
@@ -139,10 +140,10 @@ export function DashboardBackground({
             style={{
               backgroundColor:
                 theme === "light"
-                  ? "rgba(233,236,241,0.28)"
+                  ? "rgba(233,236,241,0.14)"
                   : theme === "oled"
-                    ? "rgba(0,0,0,0.22)"
-                    : "rgba(18,21,29,0.22)",
+                    ? "rgba(0,0,0,0.11)"
+                    : "rgba(18,21,29,0.11)",
             }}
           />
         </>
