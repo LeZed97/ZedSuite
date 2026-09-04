@@ -6506,14 +6506,14 @@ impl EDC16U34Detector {
                     map_name = "Smoke Limiter by MAF";
                     _x_label = "Air mass";
                     x_unit = "mg/stroke";
-                    x_factor = 1.0;
+                    x_factor = 0.1; // masse d'air brute x10 (3000..10000 = 300..1000 mg/coup), comme les maps Lambda
                     maf_map_found = true;
                 } else if !maf_map_found && last_x <= 11000 {
                     // First air mass map - classify as MAF
                     map_name = "Smoke Limiter by MAF";
                     _x_label = "Air mass";
                     x_unit = "mg/stroke";
-                    x_factor = 1.0;
+                    x_factor = 0.1; // masse d'air brute x10 (3000..10000 = 300..1000 mg/coup), comme les maps Lambda
                     maf_map_found = true;
                 } else if lambda_range_count > total_count * 50 / 100 {
                     // Subsequent maps with lambda-like values
