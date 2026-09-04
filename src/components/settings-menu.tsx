@@ -142,7 +142,7 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center backdrop-blur-sm"
+      className="fixed inset-0 z-[10050] flex items-center justify-center backdrop-blur-sm"
       style={{
         backgroundColor: '#000000a2',
         animation: isClosing ? 'backdropFadeOut 0.2s ease-out forwards' : 'backdropFadeIn 0.2s ease-out forwards'
