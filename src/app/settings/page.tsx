@@ -43,7 +43,7 @@ function SettingsContent() {
   const { theme: dashboardTheme, setTheme: setDashboardTheme } = useTheme();
   // Même fond que le dashboard (réglage utilisateur, image personnalisée comprise)
   const { wallpaper, isLight, pageBg, customWallpaper } = useDashboardWallpaper(settings.dashboardWallpaper, dashboardTheme);
-  // Image personnalisée sur thème clair : bouton retour et contrôles de fenêtre sur pastille blanche
+  // Image personnalisée sur thème clair : bouton retour et contrôles de fenêtre en noir
   const onCustomLight = wallpaper === "custom" && isLight;
 
   // ── Application : version + vérification de mise à jour ──
@@ -314,15 +314,13 @@ function SettingsContent() {
                 variant="ghost"
                 size="icon"
                 onClick={() => router.push("/dashboard")}
-                className={isLight ? (onCustomLight ? "bg-white/60 text-slate-700 hover:text-black hover:bg-white/90" : "text-slate-500 hover:text-black hover:bg-black/10") : "text-slate-400 hover:text-white hover:bg-white/10"}
+                className={isLight ? (onCustomLight ? "text-slate-900 hover:text-black hover:bg-black/10" : "text-slate-500 hover:text-black hover:bg-black/10") : "text-slate-400 hover:text-white hover:bg-white/10"}
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               <h1 data-tauri-drag-region className={`text-xl font-bold select-none ${titleColor}`}>{t.settingsPage.title}</h1>
             </div>
-            <div className={onCustomLight ? "rounded-lg bg-white/60" : ""}>
-              <WindowControls />
-            </div>
+            <WindowControls strong={onCustomLight} />
           </div>
         </div>
       </header>
