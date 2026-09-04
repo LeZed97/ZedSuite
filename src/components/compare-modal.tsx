@@ -1479,18 +1479,14 @@ export function CompareModal({
                 background: theme === "light" ? "rgba(0, 0, 0, 0.03)" : "rgba(255, 255, 255, 0.04)",
               }}
             >
-              {/* Left: Format buttons */}
+              {/* Left: pastille 8b / 16b / HiLo | Hex / Dec — même style que la topbar de l'éditeur */}
               <div className="flex items-center gap-1">
-                <div className="flex items-center rounded px-0.5" style={{ background: getButtonBg() }}>
+                <div className="flex items-center rounded-lg px-1 flex-shrink-0" style={{ background: getButtonBg(), border: `1px solid ${theme === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)'}` }}>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setHexdumpSize("8b")}
-                    className={`h-6 px-2 text-[10px] ${
-                      hexdumpSize === "8b"
-                        ? "bg-blue-600/40 text-white hover:bg-blue-400/40"
-                        : getButtonHoverClass()
-                    }`}
+                    className={`h-7 px-3 text-xs ${hexdumpSize === "8b" ? "bg-blue-600/40 text-white hover:bg-blue-400/40" : getButtonHoverClass()}`}
                     style={{ color: hexdumpSize === "8b" ? (theme === 'light' ? '#000000' : undefined) : getTextColor() }}
                   >
                     8b
@@ -1499,39 +1495,27 @@ export function CompareModal({
                     variant="ghost"
                     size="sm"
                     onClick={() => setHexdumpSize("16b")}
-                    className={`h-6 px-2 text-[10px] ${
-                      hexdumpSize === "16b"
-                        ? "bg-blue-600/40 text-white hover:bg-blue-400/40"
-                        : getButtonHoverClass()
-                    }`}
+                    className={`h-7 px-3 text-xs ${hexdumpSize === "16b" ? "bg-blue-600/40 text-white hover:bg-blue-400/40" : getButtonHoverClass()}`}
                     style={{ color: hexdumpSize === "16b" ? (theme === 'light' ? '#000000' : undefined) : getTextColor() }}
                   >
                     16b
                   </Button>
-                  {/* Ordre des octets de la vue 16 bits : HiLo ↔ LoHi (toujours visible) */}
-                  {(
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setByteOrder(byteOrder === "hilo" ? "lohi" : "hilo")}
-                      title={byteOrder === "hilo" ? "High byte first — click for LoHi" : "Low byte first — click for HiLo"}
-                      className={`h-6 px-2 text-[10px] ${getButtonHoverClass()}`}
-                      style={{ color: getTextColor() }}
-                    >
-                      {byteOrder === "hilo" ? "HiLo" : "LoHi"}
-                    </Button>
-                  )}
-                </div>
-                <div className="flex items-center rounded px-0.5 ml-1" style={{ background: getButtonBg() }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setByteOrder(byteOrder === "hilo" ? "lohi" : "hilo")}
+                    title={byteOrder === "hilo" ? "High byte first — click for LoHi" : "Low byte first — click for HiLo"}
+                    className={`h-7 px-3 text-xs ${getButtonHoverClass()}`}
+                    style={{ color: getTextColor() }}
+                  >
+                    {byteOrder === "hilo" ? "HiLo" : "LoHi"}
+                  </Button>
+                  <div className="w-px h-5 mx-1" style={{ background: theme === 'light' ? '#dee2e6' : 'rgba(255, 255, 255, 0.1)' }}></div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setHexdumpFormat("hex")}
-                    className={`h-6 px-2 text-[10px] ${
-                      hexdumpFormat === "hex"
-                        ? "bg-red-600/40 text-white hover:bg-red-400/40"
-                        : getButtonHoverClass()
-                    }`}
+                    className={`h-7 px-3 text-xs ${hexdumpFormat === "hex" ? "bg-red-600/40 text-white hover:bg-red-400/40" : getButtonHoverClass()}`}
                     style={{ color: hexdumpFormat === "hex" ? (theme === 'light' ? '#000000' : undefined) : getTextColor() }}
                   >
                     Hex
@@ -1540,11 +1524,7 @@ export function CompareModal({
                     variant="ghost"
                     size="sm"
                     onClick={() => setHexdumpFormat("dec")}
-                    className={`h-6 px-2 text-[10px] ${
-                      hexdumpFormat === "dec"
-                        ? "bg-red-600/40 text-white hover:bg-red-400/40"
-                        : getButtonHoverClass()
-                    }`}
+                    className={`h-7 px-3 text-xs ${hexdumpFormat === "dec" ? "bg-red-600/40 text-white hover:bg-red-400/40" : getButtonHoverClass()}`}
                     style={{ color: hexdumpFormat === "dec" ? (theme === 'light' ? '#000000' : undefined) : getTextColor() }}
                   >
                     Dec

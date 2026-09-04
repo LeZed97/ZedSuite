@@ -6124,11 +6124,9 @@ function EditorPageContent() {
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-blue-600/15 text-blue-700' : 'bg-blue-600/30 text-blue-300'}`}>
                       {hexdumpSize === '8b' ? '8b' : '16b'}
                     </span>
-                    {hexdumpSize === '16b' && (
-                      <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-emerald-600/15 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300'}`}>
-                        {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
-                      </span>
-                    )}
+                    <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-emerald-600/15 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300'}`}>
+                      {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
+                    </span>
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-red-600/15 text-red-700' : 'bg-red-600/30 text-red-300'}`}>
                       {hexdumpFormat === 'hex' ? 'Hex' : 'Dec'}
                     </span>
