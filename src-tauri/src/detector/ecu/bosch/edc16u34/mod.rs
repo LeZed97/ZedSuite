@@ -5272,6 +5272,7 @@ impl EDC16U34Detector {
                 m2.category = Some("Fuel Correction".to_string());
                 m2.unit = Some("°C".to_string());
                 m2.correction_factor = Some(0.1);
+                m2.offset = Some(-273.15); // brut = kelvin x10 (3174 -> 44 degC), sans ce decalage la map affichait 317..376 degC
                 m2.y_axis_address = Some(ey0 as u32);
                 m2.y_label = Some("rpm".to_string());
                 m2.y_axis_correction = Some(1.0);
