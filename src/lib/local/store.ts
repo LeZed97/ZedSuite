@@ -357,6 +357,41 @@ export async function addMapEdit(
   return result;
 }
 
+/** REMPLACE tous les edits d'une version (un enregistrement = l'état complet). */
+export async function replaceMapEdits(
+  versionId: string,
+  edits: { mapAddress: number; payload: any }[]
+): Promise<MapEdit[] | null> {
+  const previous = mapEditQueues.get(versionId) ?? Promise.resolve();
+  let result: MapEdit[] | null = null;
+  const run = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const found = await findVersion(versionId);
+      if (!found) return;
+      const list: MapEdit[] = edits.map((e) => ({
+        id: newId(),
+        version: versionId,
+        map_address: e.mapAddress ?? -1,
+        payload: e.payload ?? {},
+        created: nowIso(),
+      }));
+      await writeTextFile(
+        `${projectDir(found.fileId)}/edits-${versionId}.json`,
+        JSON.stringify(list),
+        BASE
+      );
+      result = list;
+    });
+  mapEditQueues.set(versionId, run);
+  try {
+    await run;
+  } finally {
+    if (mapEditQueues.get(versionId) === run) mapEditQueues.delete(versionId);
+  }
+  return result;
+}
+
 async function addMapEditUnlocked(
   versionId: string,
   mapAddress: number,

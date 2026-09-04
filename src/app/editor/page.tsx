@@ -4105,46 +4105,42 @@ function EditorPageContent() {
           ...Array.from(allMapModifications.keys()),
           ...Array.from(mapAxisLabels.keys()),
         ]);
-        const mapSavePromises = Array.from(mapAddressesToSave).map(async (mapAddress) => {
-          const cells = allMapModifications.get(mapAddress);
-          const axes = mapAxisLabels.get(mapAddress);
-          const payload: Record<string, unknown> = {};
-          if (cells && Object.keys(cells).length > 0) {
-            payload.changedCells = Object.entries(cells).map(([key, value]) => {
-              const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-              return { row: parseInt(rowStr), col: parseInt(colStr), value };
-            });
-          }
-          if (axes && (axes.x || axes.y)) {
-            payload.axisLabels = {
-              ...(axes.x ? { x: axes.x } : {}),
-              ...(axes.y ? { y: axes.y } : {}),
-            };
-          }
-          return axios.post("/api/versioning/map-edits", {
-            versionId: newVersionId,
-            mapAddress,
-            payload,
-          });
-        });
-
-        // Save binary modifications (DTC) to new version
-        const binarySavePromise = binaryModifications.size > 0
-          ? axios.post("/api/versioning/map-edits", {
-              versionId: newVersionId,
-              mapAddress: -1, // Adresse spéciale pour les modifications binaires
-              payload: {
-                type: "binary",
-                changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                  address: addr,
-                  oldValue,
-                  newValue,
-                })),
-              },
-            })
-          : Promise.resolve();
-
-        await Promise.all([...mapSavePromises, binarySavePromise]);
+        const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSave).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: editsToSave });
         skipNextVersionChangeRef.current = true;
         if (projectData?.fileId) {
           await refreshVersions(projectData.fileId);
@@ -4186,46 +4182,42 @@ function EditorPageContent() {
           ...Array.from(allMapModifications.keys()),
           ...Array.from(mapAxisLabels.keys()),
         ]);
-        const mapSavePromises = Array.from(mapAddressesToSaveExisting).map(async (mapAddress) => {
-          const cells = allMapModifications.get(mapAddress);
-          const axes = mapAxisLabels.get(mapAddress);
-          const payload: Record<string, unknown> = {};
-          if (cells && Object.keys(cells).length > 0) {
-            payload.changedCells = Object.entries(cells).map(([key, value]) => {
-              const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-              return { row: parseInt(rowStr), col: parseInt(colStr), value };
-            });
-          }
-          if (axes && (axes.x || axes.y)) {
-            payload.axisLabels = {
-              ...(axes.x ? { x: axes.x } : {}),
-              ...(axes.y ? { y: axes.y } : {}),
-            };
-          }
-          return axios.post("/api/versioning/map-edits", {
-            versionId: currentVersionId,
-            mapAddress,
-            payload,
-          });
-        });
-
-        // Save binary modifications (DTC) to current version
-        const binarySavePromise = binaryModifications.size > 0
-          ? axios.post("/api/versioning/map-edits", {
-              versionId: currentVersionId,
-              mapAddress: -1, // Adresse spéciale pour les modifications binaires
-              payload: {
-                type: "binary",
-                changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                  address: addr,
-                  oldValue,
-                  newValue,
-                })),
-              },
-            })
-          : Promise.resolve();
-
-        await Promise.all([...mapSavePromises, binarySavePromise]);
+        const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSaveExisting).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edits: editsToSave });
         skipNextVersionChangeRef.current = true;
         if (projectData?.fileId) {
           await refreshVersions(projectData.fileId);
@@ -4500,46 +4492,42 @@ function EditorPageContent() {
         ...Array.from(allMapModifications.keys()),
         ...Array.from(mapAxisLabels.keys()),
       ]);
-      const mapSavePromises = Array.from(mapAddressesToSaveCreate).map(async (mapAddress) => {
-        const cells = allMapModifications.get(mapAddress);
-        const axes = mapAxisLabels.get(mapAddress);
-        const payload: Record<string, unknown> = {};
-        if (cells && Object.keys(cells).length > 0) {
-          payload.changedCells = Object.entries(cells).map(([key, value]) => {
-            const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-            return { row: parseInt(rowStr), col: parseInt(colStr), value };
-          });
-        }
-        if (axes && (axes.x || axes.y)) {
-          payload.axisLabels = {
-            ...(axes.x ? { x: axes.x } : {}),
-            ...(axes.y ? { y: axes.y } : {}),
-          };
-        }
-        return axios.post("/api/versioning/map-edits", {
-          versionId: newVersionId,
-          mapAddress,
-          payload,
-        });
-      });
-
-      // 3. Sauvegarder les modifications binaires (DTC) dans cette version
-      const binarySavePromise = binaryModifications.size > 0
-        ? axios.post("/api/versioning/map-edits", {
-            versionId: newVersionId,
-            mapAddress: -1, // Adresse spéciale pour les modifications binaires
-            payload: {
-              type: "binary",
-              changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                address: addr,
-                oldValue,
-                newValue,
-              })),
-            },
-          })
-        : Promise.resolve();
-
-      await Promise.all([...mapSavePromises, binarySavePromise]);
+      const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSaveCreate).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: editsToSave });
 
       // Reset binary modifications after save.
       // Note: mapAxisLabels intentionally kept so the user's axis edits stay
@@ -4622,46 +4610,42 @@ function EditorPageContent() {
         ...Array.from(allMapModifications.keys()),
         ...Array.from(mapAxisLabels.keys()),
       ]);
-      const mapSavePromises = Array.from(mapAddressesToSaveUpdate).map(async (mapAddress) => {
-        const cells = allMapModifications.get(mapAddress);
-        const axes = mapAxisLabels.get(mapAddress);
-        const payload: Record<string, unknown> = {};
-        if (cells && Object.keys(cells).length > 0) {
-          payload.changedCells = Object.entries(cells).map(([key, value]) => {
-            const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-            return { row: parseInt(rowStr), col: parseInt(colStr), value };
-          });
-        }
-        if (axes && (axes.x || axes.y)) {
-          payload.axisLabels = {
-            ...(axes.x ? { x: axes.x } : {}),
-            ...(axes.y ? { y: axes.y } : {}),
-          };
-        }
-        return axios.post("/api/versioning/map-edits", {
-          versionId: currentVersionId,
-          mapAddress,
-          payload,
-        });
-      });
-
-      // Save binary modifications (DTC) to the current version
-      const binarySavePromise = binaryModifications.size > 0
-        ? axios.post("/api/versioning/map-edits", {
-            versionId: currentVersionId,
-            mapAddress: -1, // Adresse spéciale pour les modifications binaires
-            payload: {
-              type: "binary",
-              changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
-                address: addr,
-                oldValue,
-                newValue,
-              })),
-            },
-          })
-        : Promise.resolve();
-
-      await Promise.all([...mapSavePromises, binarySavePromise]);
+      const editsToSave: { mapAddress: number; payload: Record<string, unknown> }[] = Array.from(mapAddressesToSaveUpdate).map((mapAddress) => {
+  const cells = allMapModifications.get(mapAddress);
+  const axes = mapAxisLabels.get(mapAddress);
+  const payload: Record<string, unknown> = {};
+  if (cells && Object.keys(cells).length > 0) {
+    payload.changedCells = Object.entries(cells).map(([key, value]) => {
+      const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+      return { row: parseInt(rowStr), col: parseInt(colStr), value };
+    });
+  }
+  if (axes && (axes.x || axes.y)) {
+    payload.axisLabels = {
+      ...(axes.x ? { x: axes.x } : {}),
+      ...(axes.y ? { y: axes.y } : {}),
+    };
+  }
+  return { mapAddress, payload };
+});
+if (binaryModifications.size > 0) {
+  editsToSave.push({
+    mapAddress: -1, // Adresse spéciale pour les modifications binaires
+    payload: {
+      type: "binary",
+      changes: Array.from(binaryModifications.entries()).map(([addr, { oldValue, newValue }]) => ({
+        address: addr,
+        oldValue,
+        newValue,
+      })),
+    },
+  });
+}
+// Une seule écriture qui REMPLACE les edits de la version : une
+// modification retirée (DTC réactivé, cellule revenue à l'origine)
+// ne peut plus être ressuscitée par une ancienne entrée, plus de
+// doublons à chaque enregistrement, plus de course entre écritures.
+await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edits: editsToSave });
 
       // Save detection_data to the local store
       if (projectData.detectionResults) {
