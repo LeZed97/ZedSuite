@@ -5209,6 +5209,8 @@ impl EDC16U1Detector {
                     map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
                     map.confidence = 0.95;
                     map.unit = Some("[-]".to_string());
+                    map.x_label = Some("Duration map #".to_string()); // 6 entrees = index de la map Duration a utiliser (pas d'axe RPM)
+                    map.y_label = Some("".to_string());
                     map.correction_factor = Some(1.0);  // Selector values are 5,4,3,2,1,0 directly
                     map.is_little_endian = Some(true);  // Duration Selector is Little-Endian
 

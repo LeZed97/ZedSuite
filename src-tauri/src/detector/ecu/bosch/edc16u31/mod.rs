@@ -5114,6 +5114,8 @@ impl EDC16U31Detector {
                     map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
                     map.confidence = 0.95;
                     map.unit = Some("[-]".to_string());
+                    map.x_label = Some("Duration map #".to_string()); // 6 entrees = index de la map Duration a utiliser (pas d'axe RPM)
+                    map.y_label = Some("".to_string());
                     map.correction_factor = Some(1.0);  // Selector values are 5,4,3,2,1,0 directly
                     map.is_little_endian = Some(true);  // Duration Selector is Little-Endian
 
@@ -7966,7 +7968,10 @@ impl EDC16U31Detector {
                 // 100 mg/stroke (raw 1000) are unrelated calibration data —
                 // e.g. the constant-12.8 10x10 false positives on JA/KN/
                 // Passat/Superb, absent from every reference list.
-                if max_v < 1000 {
+                // Seuil 3000 : les vraies demandes d'air plafonnent >= 6150 bruts sur
+                // tout le banc, alors que les maps SOI (GEAR) 16x14 (<= 1300) passaient
+                // pour de l'EGR 16 octets trop tot (Golf5 U34 d'Enzo).
+                if max_v < 3000 {
                     pos = data_end;
                     continue;
                 }
@@ -8054,7 +8059,7 @@ impl EDC16U31Detector {
                     max_v = v;
                 }
             }
-            if max_v < 1000
+            if max_v < 3000
                 || detected.contains(&(data_start as u32))
                 || maps.iter().any(|m| m.address == data_start as u32)
             {

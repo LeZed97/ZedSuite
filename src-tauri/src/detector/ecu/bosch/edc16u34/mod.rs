@@ -4915,6 +4915,8 @@ impl EDC16U34Detector {
                     map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
                     map.confidence = 0.95;
                     map.unit = Some("[-]".to_string());
+                    map.x_label = Some("Duration map #".to_string()); // 6 entrees = index de la map Duration a utiliser (pas d'axe RPM)
+                    map.y_label = Some("".to_string());
                     map.correction_factor = Some(1.0);  // Selector values are 5,4,3,2,1,0 directly
                     map.is_little_endian = Some(true);  // Duration Selector is Little-Endian
 
@@ -7484,7 +7486,10 @@ impl EDC16U34Detector {
                 // 100 mg/stroke (raw 1000) are unrelated calibration data —
                 // e.g. the constant-12.8 10x10 false positives (Passat2l,
                 // Jetta1.9, Eos, Golf2l...), absent from every Stage X list.
-                if max_v < 1000 {
+                // Seuil 3000 : les vraies demandes d'air plafonnent >= 6150 bruts sur
+                // tout le banc, alors que les maps SOI (GEAR) 16x14 (<= 1300) passaient
+                // pour de l'EGR 16 octets trop tot (Golf5 U34 d'Enzo).
+                if max_v < 3000 {
                     pos = data_end;
                     continue;
                 }
@@ -7572,7 +7577,7 @@ impl EDC16U34Detector {
                     max_v = v;
                 }
             }
-            if max_v < 1000
+            if max_v < 3000
                 || detected.contains(&(data_start as u32))
                 || maps.iter().any(|m| m.address == data_start as u32)
             {
@@ -7727,7 +7732,9 @@ impl EDC16U34Detector {
                     };
                     (78..=90).contains(&distance)
                 });
-                if chained && nearby_count >= 2 {
+                // axe non monotone (ex. 9500 x4 ... 2200, 2500) = pas une hysteresis, meme au stride du cluster
+                let axis_monotone = egr_hyst_candidates[i].1.windows(2).all(|w| w[0] <= w[1]);
+                if chained && nearby_count >= 2 && axis_monotone {
                     valid_candidates
                         .push((egr_hyst_candidates[i].0, egr_hyst_candidates[i].1.clone()));
                 }
