@@ -26,6 +26,8 @@ export interface FileRecord {
   date?: string;
   notes?: string;
   map_display_settings?: any;
+  /** Tri de la liste des maps choisi par l'utilisateur (mémorisé avec le projet) */
+  map_sort_mode?: "address" | "name" | "name-desc";
   created: string;
   updated: string;
 }

@@ -88,7 +88,8 @@ impl MapDetector {
     ///   affichés — « Duration 06+ », « Duration (Dynamic) » et « Duration
     ///   min. injection break after main injection » sont masquées (comme
     ///   sur EDC15, où seules les 6 durations existent) ;
-    /// - EDC16 : « BIP Basic Characteristic » masquée ;
+    /// - (les trois maps BIP EDC16 sont affichées depuis la 1.1.3, dossier
+    ///   Injection system — demande des utilisateurs) ;
     /// - EDC16 : dossier « Fuel Correction » reversé dans « Injection
     ///   system », dossiers « Airflow » et « DPF » reversés dans « Other ».
     fn finalize_maps(maps: Vec<DetectedMap>, is_edc16: bool) -> Vec<DetectedMap> {
@@ -106,10 +107,6 @@ impl MapDetector {
             if (lower.contains("inverse") && lower.contains("driver"))
                 || lower.contains("maf linearisation")
             {
-                continue;
-            }
-
-            if is_edc16 && lower.starts_with("bip basic characteristic") {
                 continue;
             }
 

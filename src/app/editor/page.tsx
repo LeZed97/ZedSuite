@@ -1581,6 +1581,18 @@ function EditorPageContent() {
 
   // Translucent workspace so the ambient halos give it depth (OLED opaque black)
   const getWorkspaceBg = () => {
+    // Image personnalisée : voile divisé par deux (même dosage que le
+    // dashboard, sur demande) pour ne pas trop assombrir la photo
+    if (editorWallpaper === 'custom') {
+      switch (theme) {
+        case 'light':
+          return 'rgba(233,236,241,0.28)';
+        case 'oled':
+          return 'rgba(0,0,0,0.22)';
+        default:
+          return 'rgba(18,21,29,0.22)';
+      }
+    }
     switch (theme) {
       case 'light':
         return 'rgba(233,236,241,0.55)';
@@ -1658,6 +1670,12 @@ function EditorPageContent() {
     setMapSortMode((prev) => {
       const next = prev === "address" ? "name" : prev === "name" ? "name-desc" : "address";
       if (projectName) localStorage.setItem(`mapSortMode:${projectName}`, next);
+      // Mémorisé AVEC le projet (files.map_sort_mode) : retrouvé à la
+      // réouverture et repris par l'export du mappack
+      const fileId = projectData?.fileId;
+      if (fileId) {
+        axios.patch(`/api/files/${fileId}`, { map_sort_mode: next }).catch(() => {});
+      }
       return next;
     });
   };
@@ -3192,6 +3210,12 @@ function EditorPageContent() {
             }
             if (response.data.mappack_exported !== undefined) {
               setMappackExported(response.data.mappack_exported === true);
+            }
+
+            // Tri de la liste des maps mémorisé avec le projet
+            const storedSort = response.data.map_sort_mode;
+            if (storedSort === "address" || storedSort === "name" || storedSort === "name-desc") {
+              setMapSortMode(storedSort);
             }
 
             // Restore per-project map display customizations from the backend
@@ -5426,7 +5450,7 @@ function EditorPageContent() {
           <div
             aria-hidden
             className="absolute inset-0 z-0 pointer-events-none"
-            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.35)' }}
+            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.18)' }}
           />
         </>
       )}
@@ -5652,8 +5676,10 @@ function EditorPageContent() {
             <Button
               variant="ghost"
               size="sm"
-              className={`flex-1 h-10 flex flex-col items-center justify-center gap-0.5 p-0 hover:bg-red-500/20 text-red-400 ${
-                theme === 'light' ? 'hover:text-black' : ''
+              // Thème clair : rouge plus foncé, sinon le bouton grisé (opacity-50
+              // du disabled) devenait quasi invisible sur fond clair
+              className={`flex-1 h-10 flex flex-col items-center justify-center gap-0.5 p-0 hover:bg-red-500/20 ${
+                theme === 'light' ? 'text-red-700 hover:text-black' : 'text-red-400'
               }`}
               onClick={handleDelete}
               // La version Ori ne peut pas être supprimée : bouton grisé,
@@ -5757,9 +5783,9 @@ function EditorPageContent() {
                 >
                   <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${expandedFolders.has("all") ? "rotate-90" : ""}`} style={{ color: getTextColor() }} />
                   {expandedFolders.has("all") ? (
-                    <FolderOpen className="w-4 h-4 text-yellow-500 transition-colors" />
+                    <FolderOpen className={`w-4 h-4 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                   ) : (
-                    <Folder className="w-4 h-4 text-yellow-500 transition-colors" />
+                    <Folder className={`w-4 h-4 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                   )}
                   <span className="text-sm" style={{ color: theme === 'light' ? '#000000' : 'rgba(255, 255, 255, 0.7)' }}>{t.sidebar.mappack}</span>
                 </button>
@@ -5772,8 +5798,8 @@ function EditorPageContent() {
                     title={t.mappackHealth.title}
                     className={`flex-shrink-0 px-1.5 h-5 flex items-center rounded-full text-[10px] font-semibold tabular-nums transition-colors ${
                       missingExpected.length === 0
-                        ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/30'
-                        : 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/30'
+                        ? (theme === 'light' ? 'bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/35' : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/30')
+                        : (theme === 'light' ? 'bg-orange-500/20 text-orange-700 hover:bg-orange-500/35' : 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/30')
                     }`}
                   >
                     {mappackConfidence}%
@@ -5892,9 +5918,9 @@ function EditorPageContent() {
                             </svg>
                           )}
                           {expandedFolders.has(folder) ? (
-                            <FolderOpen className="w-3 h-3 text-yellow-500 transition-colors" />
+                            <FolderOpen className={`w-3 h-3 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                           ) : (
-                            <Folder className="w-3 h-3 text-yellow-500 transition-colors" />
+                            <Folder className={`w-3 h-3 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                           )}
                           <span
                             className={`text-xs ${folderHasModifiedMap ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent' : ''}`}
@@ -6098,6 +6124,11 @@ function EditorPageContent() {
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-blue-600/15 text-blue-700' : 'bg-blue-600/30 text-blue-300'}`}>
                       {hexdumpSize === '8b' ? '8b' : '16b'}
                     </span>
+                    {hexdumpSize === '16b' && (
+                      <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-emerald-600/15 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300'}`}>
+                        {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
+                      </span>
+                    )}
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-red-600/15 text-red-700' : 'bg-red-600/30 text-red-300'}`}>
                       {hexdumpFormat === 'hex' ? 'Hex' : 'Dec'}
                     </span>
@@ -7172,8 +7203,8 @@ function EditorPageContent() {
               <span
                 className={`px-2.5 py-0.5 rounded-full text-sm font-bold tabular-nums ${
                   missingExpected.length === 0
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : 'bg-orange-500/15 text-orange-400'
+                    ? (theme === 'light' ? 'bg-emerald-500/20 text-emerald-700' : 'bg-emerald-500/15 text-emerald-400')
+                    : (theme === 'light' ? 'bg-orange-500/20 text-orange-700' : 'bg-orange-500/15 text-orange-400')
                 }`}
               >
                 {mappackConfidence}%
@@ -7183,10 +7214,10 @@ function EditorPageContent() {
               {t.mappackHealth.intro}
             </p>
             {missingExpected.length === 0 ? (
-              <p className="text-sm mb-4 text-emerald-400">{t.mappackHealth.allGood}</p>
+              <p className={`text-sm mb-4 ${theme === 'light' ? 'text-emerald-700' : 'text-emerald-400'}`}>{t.mappackHealth.allGood}</p>
             ) : (
               <>
-                <p className="text-sm mb-2 text-orange-400 font-medium">{t.mappackHealth.missingIntro}</p>
+                <p className={`text-sm mb-2 font-medium ${theme === 'light' ? 'text-orange-700' : 'text-orange-400'}`}>{t.mappackHealth.missingIntro}</p>
                 <div className="rounded-md border mb-3 px-3 py-1.5" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
                   {missingExpected.map((e) => (
                     <div key={e.label} className="flex items-center justify-between py-1 text-sm">
