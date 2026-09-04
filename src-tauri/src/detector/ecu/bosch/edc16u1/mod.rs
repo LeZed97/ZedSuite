@@ -612,6 +612,14 @@ impl EDC16U1Detector {
                 detected_addresses.insert(map.address);
                 detected_ranges.insert(range);
                 all_maps.push(map);
+            } else if let Some(conflict) = detected_ranges
+                .iter()
+                .find(|&&(s, e)| range.0 < e && range.1 > s)
+            {
+                log::debug!(
+                    "⏭️ [EDC16] BIP {:?} at 0x{:X} rejected: overlaps reserved range 0x{:X}-0x{:X}",
+                    map.name, map.address, conflict.0, conflict.1
+                );
             }
         }
 
@@ -4960,10 +4968,11 @@ impl EDC16U1Detector {
                 }
                 q += 2;
             }
-            let Some((ax1_start, ax2_start, d3)) = part3 else { offset += 2; continue; };
-
-            log::debug!("🎯 [EDC16] Found BIP block: temp corr 0x{:X}, basic 0x{:X}, multiple 0x{:X}",
-                d1, d2, d3);
+            // Partie 3 OPTIONNELLE : sur EDC16U1 le 10×10 n'existe pas sous cette
+            // forme — les parties 1 et 2 (correction température, caractéristique
+            // de base) sont émises quand même au lieu d'être jetées avec.
+            log::debug!("🎯 [EDC16] Found BIP block: temp corr 0x{:X}, basic 0x{:X}, multiple {:?}",
+                d1, d2, part3.map(|(_, _, d3)| d3));
 
             if !detected.contains(&(d1 as u32)) {
                 let mut map = DetectedMap::new(
@@ -5000,7 +5009,8 @@ impl EDC16U1Detector {
                 map.x_axis_correction = Some(1.0);
                 maps.push(map);
             }
-            if !detected.contains(&(d3 as u32)) {
+            if let Some((ax1_start, ax2_start, d3)) = part3 {
+              if !detected.contains(&(d3 as u32)) {
                 let mut map = DetectedMap::new(
                     d3 as u32,
                     200,
@@ -5019,8 +5029,11 @@ impl EDC16U1Detector {
                 map.x_label = Some("raw".to_string());
                 map.x_axis_correction = Some(1.0);
                 maps.push(map);
+              }
+              offset = d3 + 200;
+            } else {
+                offset = p2_end;
             }
-            offset = d3 + 200;
         }
 
         log::debug!("🔧 [EDC16] BIP detection: found {} maps", maps.len());
