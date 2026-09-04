@@ -5798,8 +5798,8 @@ function EditorPageContent() {
                     title={t.mappackHealth.title}
                     className={`flex-shrink-0 px-1.5 h-5 flex items-center rounded-full text-[10px] font-semibold tabular-nums transition-colors ${
                       missingExpected.length === 0
-                        ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/30'
-                        : 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/30'
+                        ? (theme === 'light' ? 'bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/35' : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/30')
+                        : (theme === 'light' ? 'bg-orange-500/20 text-orange-700 hover:bg-orange-500/35' : 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/30')
                     }`}
                   >
                     {mappackConfidence}%
@@ -7203,8 +7203,8 @@ function EditorPageContent() {
               <span
                 className={`px-2.5 py-0.5 rounded-full text-sm font-bold tabular-nums ${
                   missingExpected.length === 0
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : 'bg-orange-500/15 text-orange-400'
+                    ? (theme === 'light' ? 'bg-emerald-500/20 text-emerald-700' : 'bg-emerald-500/15 text-emerald-400')
+                    : (theme === 'light' ? 'bg-orange-500/20 text-orange-700' : 'bg-orange-500/15 text-orange-400')
                 }`}
               >
                 {mappackConfidence}%
@@ -7214,10 +7214,10 @@ function EditorPageContent() {
               {t.mappackHealth.intro}
             </p>
             {missingExpected.length === 0 ? (
-              <p className="text-sm mb-4 text-emerald-400">{t.mappackHealth.allGood}</p>
+              <p className={`text-sm mb-4 ${theme === 'light' ? 'text-emerald-700' : 'text-emerald-400'}`}>{t.mappackHealth.allGood}</p>
             ) : (
               <>
-                <p className="text-sm mb-2 text-orange-400 font-medium">{t.mappackHealth.missingIntro}</p>
+                <p className={`text-sm mb-2 font-medium ${theme === 'light' ? 'text-orange-700' : 'text-orange-400'}`}>{t.mappackHealth.missingIntro}</p>
                 <div className="rounded-md border mb-3 px-3 py-1.5" style={{ borderColor: theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)' }}>
                   {missingExpected.map((e) => (
                     <div key={e.label} className="flex items-center justify-between py-1 text-sm">
