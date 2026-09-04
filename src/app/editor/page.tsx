@@ -5676,8 +5676,10 @@ function EditorPageContent() {
             <Button
               variant="ghost"
               size="sm"
-              className={`flex-1 h-10 flex flex-col items-center justify-center gap-0.5 p-0 hover:bg-red-500/20 text-red-400 ${
-                theme === 'light' ? 'hover:text-black' : ''
+              // Thème clair : rouge plus foncé, sinon le bouton grisé (opacity-50
+              // du disabled) devenait quasi invisible sur fond clair
+              className={`flex-1 h-10 flex flex-col items-center justify-center gap-0.5 p-0 hover:bg-red-500/20 ${
+                theme === 'light' ? 'text-red-700 hover:text-black' : 'text-red-400'
               }`}
               onClick={handleDelete}
               // La version Ori ne peut pas être supprimée : bouton grisé,
