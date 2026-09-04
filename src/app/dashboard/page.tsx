@@ -791,10 +791,10 @@ function DashboardContent() {
           }} />
         </>
       )}
-      {/* Image personnalisée de l'utilisateur : plein écran en cover, FLOUTÉE
-          (le dashboard n'a pas les surfaces de verre de l'éditeur, sans flou
-          les tuiles étaient illisibles) + léger voile suivant le thème.
-          scale(1.06) cache la frange claire du flou sur les bords. */}
+      {/* Image personnalisée de l'utilisateur : EXACTEMENT le rendu de la
+          zone de travail de l'éditeur — image nette en cover, voile du fond
+          (0.35 sombre / 0.22 clair) puis le même fond translucide que le
+          workspace (getWorkspaceBg de l'éditeur), selon le thème. */}
       {wallpaper === "custom" && customWallpaper && (
         <>
           <div
@@ -804,14 +804,26 @@ function DashboardContent() {
               backgroundImage: `url(${customWallpaper})`,
               backgroundSize: "cover",
               backgroundPosition: "center",
-              filter: "blur(14px)",
-              transform: "scale(1.06)",
             }}
           />
           <div
             aria-hidden
             className="fixed inset-0 z-0 pointer-events-none"
-            style={{ backgroundColor: isLight ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.35)" }}
+            style={{ backgroundColor: isLight ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.18)" }}
+          />
+          {/* Voiles réduits de moitié par rapport au workspace de l'éditeur
+              (demande Enzo : l'image restait trop assombrie sur le dashboard) */}
+          <div
+            aria-hidden
+            className="fixed inset-0 z-0 pointer-events-none"
+            style={{
+              backgroundColor:
+                theme === "light"
+                  ? "rgba(233,236,241,0.28)"
+                  : theme === "oled"
+                    ? "rgba(0,0,0,0.22)"
+                    : "rgba(18,21,29,0.22)",
+            }}
           />
         </>
       )}
@@ -897,19 +909,21 @@ function DashboardContent() {
         <div className="relative container mx-auto px-4 pt-3 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-baseline gap-3">
-              <h3 className={`text-sm font-bold uppercase tracking-widest ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>{t.dashboard.recentFiles}</h3>
-              <span className="text-xs tabular-nums text-slate-500">{filteredFiles.length}</span>
+              <h3 className={`text-sm font-bold uppercase tracking-widest ${isLight ? 'text-slate-900' : 'text-slate-300'}`}>{t.dashboard.recentFiles}</h3>
+              <span className={`text-xs tabular-nums ${isLight ? 'text-slate-700' : 'text-slate-500'}`}>{filteredFiles.length}</span>
             </div>
 
             {/* Search Bar */}
             <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isLight ? 'text-slate-600' : 'text-slate-500'}`} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.dashboard.searchPlaceholder}
-                className={`w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 transition-colors ${isLight ? 'bg-black/[0.04] border border-black/10 text-slate-900 placeholder:text-slate-400 focus:border-black/25' : 'bg-white/[0.04] border border-white/10 text-white placeholder:text-slate-500 focus:border-white/25'}`}
+                // Thème clair : fond blanc quasi opaque + placeholder foncé, sinon
+                // le texte se noyait sur un fond d'écran personnalisé sombre
+                className={`w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 transition-colors ${isLight ? 'bg-white/80 border border-black/15 text-slate-900 placeholder:text-slate-600 focus:border-black/30' : 'bg-white/[0.04] border border-white/10 text-white placeholder:text-slate-500 focus:border-white/25'}`}
                 spellCheck={false}
               />
             </div>
@@ -1081,7 +1095,9 @@ function DashboardContent() {
                         variant="ghost"
                         onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
-                        className="text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={isLight
+                          ? "text-slate-700 hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                          : "text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"}
                       >
                         {t.dashboard.previous}
                       </Button>
@@ -1096,7 +1112,7 @@ function DashboardContent() {
                             className={`w-8 h-8 p-0 ${
                               currentPage === page
                                 ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                : (isLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-slate-400 hover:text-white hover:bg-white/5')
                             }`}
                           >
                             {page}
@@ -1109,7 +1125,9 @@ function DashboardContent() {
                         variant="ghost"
                         onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
-                        className="text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={isLight
+                          ? "text-slate-700 hover:text-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                          : "text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"}
                       >
                         {t.dashboard.next}
                       </Button>
@@ -1118,7 +1136,7 @@ function DashboardContent() {
 
                   {/* Items per page selector */}
                   <div className="flex items-center gap-2 flex-1 justify-end">
-                    <span className={`text-sm ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{t.dashboard.show}:</span>
+                    <span className={`text-sm ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>{t.dashboard.show}:</span>
                     <StyledSelect
                       appearance="auto"
                       value={String(itemsPerPage)}

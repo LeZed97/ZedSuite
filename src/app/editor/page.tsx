@@ -1581,6 +1581,18 @@ function EditorPageContent() {
 
   // Translucent workspace so the ambient halos give it depth (OLED opaque black)
   const getWorkspaceBg = () => {
+    // Image personnalisée : voile divisé par deux (même dosage que le
+    // dashboard, demande Enzo) pour ne pas trop assombrir la photo
+    if (editorWallpaper === 'custom') {
+      switch (theme) {
+        case 'light':
+          return 'rgba(233,236,241,0.28)';
+        case 'oled':
+          return 'rgba(0,0,0,0.22)';
+        default:
+          return 'rgba(18,21,29,0.22)';
+      }
+    }
     switch (theme) {
       case 'light':
         return 'rgba(233,236,241,0.55)';
@@ -5438,7 +5450,7 @@ function EditorPageContent() {
           <div
             aria-hidden
             className="absolute inset-0 z-0 pointer-events-none"
-            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.35)' }}
+            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.18)' }}
           />
         </>
       )}
@@ -5769,9 +5781,9 @@ function EditorPageContent() {
                 >
                   <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${expandedFolders.has("all") ? "rotate-90" : ""}`} style={{ color: getTextColor() }} />
                   {expandedFolders.has("all") ? (
-                    <FolderOpen className="w-4 h-4 text-yellow-500 transition-colors" />
+                    <FolderOpen className={`w-4 h-4 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                   ) : (
-                    <Folder className="w-4 h-4 text-yellow-500 transition-colors" />
+                    <Folder className={`w-4 h-4 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                   )}
                   <span className="text-sm" style={{ color: theme === 'light' ? '#000000' : 'rgba(255, 255, 255, 0.7)' }}>{t.sidebar.mappack}</span>
                 </button>
@@ -5904,9 +5916,9 @@ function EditorPageContent() {
                             </svg>
                           )}
                           {expandedFolders.has(folder) ? (
-                            <FolderOpen className="w-3 h-3 text-yellow-500 transition-colors" />
+                            <FolderOpen className={`w-3 h-3 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                           ) : (
-                            <Folder className="w-3 h-3 text-yellow-500 transition-colors" />
+                            <Folder className={`w-3 h-3 transition-colors ${theme === 'light' ? 'text-amber-600' : 'text-yellow-500'}`} />
                           )}
                           <span
                             className={`text-xs ${folderHasModifiedMap ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent' : ''}`}
@@ -6110,6 +6122,11 @@ function EditorPageContent() {
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-blue-600/15 text-blue-700' : 'bg-blue-600/30 text-blue-300'}`}>
                       {hexdumpSize === '8b' ? '8b' : '16b'}
                     </span>
+                    {hexdumpSize === '16b' && (
+                      <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-emerald-600/15 text-emerald-700' : 'bg-emerald-600/30 text-emerald-300'}`}>
+                        {hexdumpByteOrder === 'hilo' ? 'HiLo' : 'LoHi'}
+                      </span>
+                    )}
                     <span className={`px-2 py-1 rounded font-medium ${L ? 'bg-red-600/15 text-red-700' : 'bg-red-600/30 text-red-300'}`}>
                       {hexdumpFormat === 'hex' ? 'Hex' : 'Dec'}
                     </span>
