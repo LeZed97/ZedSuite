@@ -18,10 +18,11 @@ fn main() {
     let path = &args[1];
     let data = fs::read(path).expect("lecture du fichier");
     let ident = zedsuite_lib::detector::ECUIdentifier::identify(&data);
-    let ecu_type = args
-        .get(2)
-        .cloned()
-        .or_else(|| ident.ecu_type.as_ref().map(|t| format!("{:?}", t)));
+    let ecu_type = Some(
+        args.get(2)
+            .cloned()
+            .unwrap_or_else(|| format!("{:?}", ident.ecu_type)),
+    );
     let request = DetectMapsArgs {
         file_data_base64: base64::engine::general_purpose::STANDARD.encode(&data),
         file_name: path.clone(),

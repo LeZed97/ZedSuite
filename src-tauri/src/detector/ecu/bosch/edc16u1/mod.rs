@@ -8693,14 +8693,18 @@ impl EDC16U1Detector {
             // Need reasonable number of values
             if values.len() >= 30 && values.len() <= 50 {
                 let num_values = values.len();
-                let data_size = 4 + num_values * 2;
+                // La map émise commence aux DONNÉES (après l'en-tête 03FF 0AAB
+                // 0AAB) : émise à l'en-tête avec size = 4 + n*2, le tableau
+                // affichait 0AAB 0AAB en tête et perdait ses deux dernières
+                // valeurs, et toute édition écrivait 4 octets trop tôt.
+                let data_size = num_values * 2;
 
                 sensor_count += 1;
                 let map_name = format!("Exhaust gas temperature sensor linearisation EGT {}", sensor_count);
-                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, map_address, num_values, 1);
+                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, data_start, num_values, 1);
 
                 let mut map = DetectedMap::new(
-                    map_address as u32,
+                    data_start as u32,
                     data_size,
                     MapDimensions::TwoDimensional { rows: num_values, cols: 1 },
                     DataType::UInt16,

@@ -8504,14 +8504,18 @@ impl EDC16U34Detector {
             // Need reasonable number of values
             if values.len() >= 30 && values.len() <= 50 {
                 let num_values = values.len();
-                let data_size = 4 + num_values * 2;
+                // La map émise commence aux DONNÉES (après l'en-tête 03FF 0AAB
+                // 0AAB) : émise à l'en-tête avec size = 4 + n*2, le tableau
+                // affichait 0AAB 0AAB en tête et perdait ses deux dernières
+                // valeurs, et toute édition écrivait 4 octets trop tôt.
+                let data_size = num_values * 2;
 
                 sensor_count += 1;
                 let map_name = format!("Exhaust gas temperature sensor linearisation EGT {}", sensor_count);
-                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, map_address, num_values, 1);
+                log::debug!("🎯 [EDC16] Found {} at 0x{:X} ({}x{})", map_name, data_start, num_values, 1);
 
                 let mut map = DetectedMap::new(
-                    map_address as u32,
+                    data_start as u32,
                     data_size,
                     MapDimensions::TwoDimensional { rows: num_values, cols: 1 },
                     DataType::UInt16,
@@ -8539,7 +8543,8 @@ impl EDC16U34Detector {
             let val2 = u16::from_be_bytes([data[i + 2], data[i + 3]]);
 
             // First value should be around 1731 (0x06C3) ± tolerance
-            if val1 < 0x0600 || val1 > 0x0800 {
+            // (le Touareg V10 démarre à 2231 = 0x8B7, −50 °C en K×10)
+            if val1 < 0x0600 || val1 > 0x0900 {
                 continue;
             }
 
@@ -8574,7 +8579,8 @@ impl EDC16U34Detector {
                 let val = u16::from_be_bytes([data[addr], data[addr + 1]]);
 
                 // Check for padding (0x0030)
-                if val == 0x0030 {
+                // … ou sentinelle FFFF/0000 (Touareg V10, BEW U31)
+                    if val == 0x0030 || val == 0xFFFF || val == 0x0000 {
                     found_padding = true;
                     break;
                 }
