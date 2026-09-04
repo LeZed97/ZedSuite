@@ -1104,7 +1104,7 @@ function DashboardContent() {
           <div
             className="rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border"
             style={{
-              ...MODAL_GLASS,
+              ...(isLight ? MODAL_GLASS_LIGHT : MODAL_GLASS),
               animation: isClosingDeleteConfirmModal ? 'scaleOut 0.2s ease-out forwards' : 'scaleIn 0.2s ease-out forwards'
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1113,24 +1113,24 @@ function DashboardContent() {
               <div className="p-2 rounded-full bg-red-500/20">
                 <AlertTriangle className="w-6 h-6 text-red-500" />
               </div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className={`text-lg font-semibold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 {t.dashboard.deleteConfirmTitle}
               </h3>
             </div>
-            <p className="mb-2 text-white/90">
+            <p className={`mb-2 ${isLight ? 'text-slate-800' : 'text-white/90'}`}>
               {t.dashboard.confirmDelete} &quot;{(() => {
                 const name = fileToDelete.project_name || fileToDelete.original_name || "";
                 return name.length > 45 ? name.slice(0, 45) + "…" : name;
               })()}&quot; ?
             </p>
-            <p className="mb-6 text-white/60 text-sm">
+            <p className={`mb-6 text-sm ${isLight ? 'text-slate-600' : 'text-white/60'}`}>
               {t.dashboard.deleteWarning}
             </p>
             <div className="flex gap-3 justify-end">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 px-4 text-white/70 hover:text-white hover:bg-white/10"
+                className={`h-9 px-4 ${isLight ? 'text-slate-700 hover:text-black hover:bg-black/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                 onClick={handleCloseDeleteConfirmModal}
               >
                 {t.dashboard.cancel}
