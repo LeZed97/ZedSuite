@@ -5114,11 +5114,23 @@ impl EDC16U31Detector {
                     map.category = Some(MapCategory::InjectionSystem.display_name().to_string());
                     map.confidence = 0.95;
                     map.unit = Some("[-]".to_string());
-                    map.x_label = Some("Duration map #".to_string()); // 6 entrees = index de la map Duration a utiliser (pas d'axe RPM)
-                    map.y_label = Some("".to_string());
                     map.correction_factor = Some(1.0);  // Selector values are 5,4,3,2,1,0 directly
                     map.is_little_endian = Some(true);  // Duration Selector is Little-Endian
 
+                    // Axe du selecteur : 6 valeurs de SOI (deg, x0.023437, signees) juste
+                    // avant, precedees de l'en-tete [00 06] : le calculateur choisit la map
+                    // Duration selon l'avance (Golf5 : 0, 4, 9, 15, 21, 27 deg ; Passat :
+                    // -2 .. 27 deg). Verifie sur U1/U31/U34 (8 fichiers).
+                    if offset >= 14 && data[offset - 14] == 0x00 && data[offset - 13] == 0x06 {
+                        let axis: Vec<i16> = (0..6)
+                            .map(|k| i16::from_be_bytes([data[offset - 12 + k * 2], data[offset - 11 + k * 2]]))
+                            .collect();
+                        if axis.windows(2).all(|w| w[0] < w[1]) && axis[0] >= -300 && (600..=1600).contains(&axis[5]) {
+                            map.x_axis_address = Some((offset - 12) as u32);
+                            map.x_label = Some("deg CrS".to_string());
+                            map.x_axis_correction = Some(0.023437);
+                        }
+                    }
                     results.push((offset as u32, map));
 
                     offset += 16 + gap as usize;  // Skip selector + gap + signature
