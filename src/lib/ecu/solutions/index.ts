@@ -100,7 +100,11 @@ export function findSequence(
  * de vitesse véhicule 0 → 260 km/h en 16 bits petit-boutiste.
  */
 export function generateLaunchControlYAxisBytes(): number[] {
-  const bytes: number[] = [0x00, 0x0e];
+  // Compteur d'axe en 16 bits petit-boutiste, comme le reste du fichier
+  // EDC15 (l'axe neutralisé d'origine commence par 02 00 = 2 valeurs) :
+  // 14 valeurs = 0E 00. Écrit 00 0E, le compteur valait 3584 et le launch
+  // control restait inactif sur la voiture (issue #3, 038906019HJ).
+  const bytes: number[] = [0x0e, 0x00];
   const values = [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260];
 
   for (const value of values) {

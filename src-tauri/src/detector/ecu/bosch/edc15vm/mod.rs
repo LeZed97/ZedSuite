@@ -575,6 +575,29 @@ impl EDC15VMDetector {
                 map.x_axis_offset = Some(0.0);
                 map.y_axis_offset = Some(0.0);
             }
+            // « IQ by MAP limiter » : l'axe X est la pression de
+            // suralimentation en mbar (800..2200), mais sur les softs à SOI
+            // unique (012L, 012M, jetta…) il porte un identifiant de famille
+            // « quantité injectée » : l'annotation par ID l'affichait en
+            // mg/st ×0.01 (8.00..20.00 au lieu de 800..2000 mbar, issue #4).
+            // « IQ by MAF limiter » : débit d'air en mg/st ×0.1, comme sur
+            // l'EDC15P. Mêmes libellés que le P pour les deux.
+            if let Some(name) = map.name.as_deref() {
+                if name.starts_with("IQ by MAP limiter") {
+                    map.x_label = Some("mbar".to_string());
+                    map.x_axis_correction = Some(1.0);
+                    map.x_axis_offset = Some(0.0);
+                    map.description = Some(
+                        "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)".to_string(),
+                    );
+                } else if name.starts_with("IQ by MAF limiter") {
+                    map.x_label = Some("mg/st".to_string());
+                    map.x_axis_correction = Some(0.1);
+                    map.x_axis_offset = Some(0.0);
+                    map.description =
+                        Some("Max IQ | X: Airflow (mg/st) | Y: Engine speed (rpm)".to_string());
+                }
+            }
             // Description détaillée « grandeur | X: nom (unité) | Y: … », dans
             // le même format que l'EDC15P.
             if map.description.is_none() {
@@ -1552,7 +1575,10 @@ impl EDC15VMDetector {
                     map.name = Some("Start of injection (N108 SOI)".to_string());
                     map.category = Some("Start of injection".to_string());
                     map.unit = Some("deg CrS".to_string());
-                    map.correction_factor = Some(0.023437);
+                    // Facteur 0.01 comme EDCSuite (SOICorrection) et comme les SOI
+                    // multi-température du VM : avec 0.023437 (EDC15P) la
+                    // N108 affichait 26..37 ° au lieu de 11..16 ° (012M, issue #4).
+                    map.correction_factor = Some(0.01);
                     map.is_little_endian = Some(true);
                     map.y_axis_address = Some((i + 4) as u32);
                     map.y_axis_correction = Some(1.0);
@@ -1571,36 +1597,23 @@ impl EDC15VMDetector {
                 }
             }
 
-            for (idx, &(d0, y0, x0, l1, l2)) in found.iter().enumerate() {
-                let mut map = DetectedMap::new(
-                    d0 as u32,
-                    l1 * l2 * 2,
-                    MapDimensions::TwoDimensional { rows: l1, cols: l2 },
-                    DataType::Int16,
-                );
-                map.name = Some(if idx == 0 {
-                    "Start of injection (SOI)".to_string()
-                } else {
-                    format!("Start of injection (SOI) {}", idx + 1)
-                });
-                map.category = Some("Start of injection".to_string());
-                map.unit = Some("deg CrS".to_string());
-                map.correction_factor = Some(0.023437);
-                map.is_little_endian = Some(true);
-                map.y_axis_address = Some(y0 as u32);
-                map.y_axis_correction = Some(1.0);
-                map.x_axis_address = Some(x0 as u32);
-                map.x_axis_correction = Some(0.01);
-                map.confidence = 0.88;
+            // Les 14x7 juste avant le limiteur ne sont PAS des SOI : grille
+            // grossière (7 IQ x 14 régimes), valeurs 0..10° nulles à forte
+            // charge, EDCSuite ne les liste pas — tout indique des
+            // corrections d'avance qui s'ajoutent à la N108. Affichées comme
+            // « Start of injection (SOI) », elles faisaient croire à une SOI
+            // fausse (issue #4, 012M). Masquées en attendant un retour
+            // utilisateur ; leurs adresses restent réservées pour qu'aucun
+            // autre passage ne les nomme.
+            for &(d0, _y0, _x0, l1, l2) in found.iter() {
                 log::debug!(
-                    "EDC15VM: single-SOI {}x{} at 0x{:X} (limiter 0x{:X})",
+                    "EDC15VM: correction SOI {}x{} at 0x{:X} (limiter 0x{:X}) — masquée",
                     l1,
                     l2,
                     d0,
                     la
                 );
                 detected_addresses.insert(d0 as u32);
-                maps.push(map);
             }
         }
     }
@@ -1908,40 +1921,54 @@ impl EDC15VMDetector {
             .collect();
         for svbl_addr in svbl_addrs {
             {
-                // Switch activation is typically 0x4C (76) bytes before SVBL
-                // Search in the range [svbl - 0x100, svbl)
+                // Même structure que le switch MAP/MAF de l'EDC15P
+                // (41 02 xx xx 00 01 01 00, valeur à +2) avec l'identifiant
+                // 41 01 sur le VM : 41 01 xx xx 00 01 01 00, dans les 0x100
+                // octets qui précèdent la SVBL (012FN/012GN : svbl - 0x4E).
+                // L'ancienne heuristique « mot ≤ 1 à svbl - 0x4C » tombait
+                // dans une zone vide sur les softs 012L/jetta (faux switch à
+                // zéro) et rejetait un vrai switch en mode MAP (257) —
+                // issue #4. Valeur : 0 = MAF, 257 = MAP, comme sur l'EDC15P.
                 if svbl_addr < 0x100 {
                     continue;
                 }
                 let search_start = svbl_addr - 0x100;
-                // Look for a 1x1 value (0 or 1) that makes sense as a switch
-                // The C# code identifies this by specific structure, we use proximity to SVBL
-                let candidate = svbl_addr - 0x4C; // 0x71B3C - 0x4C = 0x71AF0
-                if candidate + 2 <= data.len() {
+                let search_end = svbl_addr.min(data.len().saturating_sub(8));
+                let mut found: Option<usize> = None;
+                let mut t = search_start;
+                while t + 8 <= search_end + 8 && t + 8 <= data.len() {
+                    if data[t] == 0x41
+                        && data[t + 1] == 0x01
+                        && data[t + 4] == 0x00
+                        && data[t + 5] == 0x01
+                        && data[t + 6] == 0x01
+                        && data[t + 7] == 0x00
+                    {
+                        found = Some(t + 2);
+                        break;
+                    }
+                    t += 1;
+                }
+                if let Some(candidate) = found {
                     let val = u16::from_le_bytes([data[candidate], data[candidate + 1]]);
-                    if val <= 1 {
-                        let addr = candidate as u32;
-                        if !detected_addresses.contains(&addr) {
-                            let mut map = DetectedMap::new(
-                                addr,
-                                2,
-                                MapDimensions::TwoDimensional { rows: 1, cols: 1 },
-                                DataType::UInt16,
-                            );
-                            // Même présentation que le switch MAP/MAF de
-                            // l'EDC15P : le mode courant + la valeur à écrire
-                            // pour basculer, directement dans la description.
-                            let mode = if val == 0 { "MAF" } else { "MAP" };
-                            map.name = Some("MAP/MAF switch".to_string());
-                            map.category = Some("Smoke limitation".to_string());
-                            // Comme la SVBL : pas de valeur dans la description
-                            map.description = Some("Sensor mode (0=MAF, 1=MAP)".to_string());
-                            map.confidence = 0.90;
-                            map.correction_factor = Some(1.0);
-                            log::debug!("EDC15VM: Switch activation smoke at 0x{:X} = {}", addr, val);
-                            detected_addresses.insert(addr);
-                            maps.push(map);
-                        }
+                    let addr = candidate as u32;
+                    if !detected_addresses.contains(&addr) {
+                        let mut map = DetectedMap::new(
+                            addr,
+                            2,
+                            MapDimensions::TwoDimensional { rows: 1, cols: 1 },
+                            DataType::UInt16,
+                        );
+                        let mode = if val == 0 { "MAF" } else if val == 257 { "MAP" } else { "Unknown" };
+                        map.name = Some("MAP/MAF switch".to_string());
+                        map.category = Some("Smoke limitation".to_string());
+                        // Même présentation que le switch de l'EDC15P
+                        map.description = Some(format!("Sensor mode: {} (0=MAF, 257=MAP)", mode));
+                        map.confidence = 0.95;
+                        map.correction_factor = Some(1.0);
+                        log::debug!("EDC15VM: MAP/MAF switch at 0x{:X} = {}", addr, val);
+                        detected_addresses.insert(addr);
+                        maps.push(map);
                     }
                 }
             }

@@ -1617,13 +1617,17 @@ impl EDC15PDetector {
             let axis_id_high = (axis_id >> 8) as u8;
             
             // Axe de 6 seuils d'avance (identifiant EC sur les softs récents,
-            // C4/EC/E9… sur les premiers PD) : valeurs croissantes dans la
-            // plage SOI brute (78 - 0.023437 × v ≈ -25..+40 °)
+            // C4/EC/E9… sur les premiers PD) : valeurs dans la plage SOI brute
+            // (78 - 0.023437 × v ≈ -25..+40 °). L'ordre croissant n'est PAS
+            // exigé : un fichier tuné peut avoir un seuil modifié qui casse la
+            // monotonie (multimap Golf 4, codeblock 3 : 2688 2901 3754 3328)
+            // et le motif de valeurs 0/256/512/768/1024/1280 suffit à
+            // identifier le sélecteur.
             let axis_ok = self.is_axis_id(axis_id) && axis_len == 6 && {
                 let vals: Vec<u16> = (0..6)
                     .map(|i| u16::from_le_bytes([data[axis_offset + 4 + i * 2], data[axis_offset + 5 + i * 2]]))
                     .collect();
-                vals.windows(2).all(|w| w[0] < w[1]) && vals.iter().all(|&v| (1500..=4500).contains(&v))
+                vals.iter().all(|&v| (1500..=4500).contains(&v))
             };
             if !axis_ok {
                 log::debug!("⏭️ Skipping pattern at 0x{:X} - invalid axis (ID=0x{:04X} high=0x{:02X}, len={})", offset, axis_id, axis_id_high, axis_len);
@@ -3431,14 +3435,18 @@ impl EDC15PDetector {
             let map_offsets = [24_u32, 28, 68];
             for (idx, off) in map_offsets.iter().enumerate() {
                 let addr = base_u32 + off;
+                // Non signé, facteur 0.1 : 29960 = 2996 mbar (capteur 3 bar),
+                // 40200 = 4020 mbar (4 bar), 0xFF12 = 6529.8 mbar en stock
+                // (pas de plafond). Lu en signé, 40200 s'affichait -25336
+                // (issue #4).
                 add_map(
                     addr,
                     &format!("VCDS Diagnostic MAP Limit {}", idx + 1),
-                    1.0,
+                    0.1,
                     0.0,
-                    "MAP sensor limit for VCDS display in mbar. Values: -238(stock 2.5bar), 29960(3bar sensor), 40200(4bar sensor). Negative=relative to atmospheric",
+                    "MAP sensor clamp for the VCDS display (mbar). 2996 = 3 bar sensor, 4020 = 4 bar sensor, 6529.8 (stock) = no clamp",
                     "mbar",
-                    true // signed - important for negative values like -238
+                    false
                 );
             }
             // Torque limit (offset adjusted: 188 - 4 = 184)

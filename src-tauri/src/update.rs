@@ -240,7 +240,14 @@ pub async fn download_and_install_update(
     drop(file);
 
     log::warn!("[update] launching installer: {}", path.display());
+    // Options de l'installateur NSIS de Tauri :
+    //   /P       mode passif : aucune page, seulement la barre de progression,
+    //            une instance encore ouverte est fermée sans question ;
+    //   /UPDATE  mise à jour par-dessus la version en place, sans la page
+    //            « désinstaller la version précédente » (réglages conservés) ;
+    //   /R       relance l'app une fois l'installation terminée.
     std::process::Command::new(&path)
+        .args(["/P", "/UPDATE", "/R"])
         .spawn()
         .map_err(|e| format!("installer launch: {e}"))?;
 

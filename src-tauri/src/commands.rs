@@ -79,7 +79,7 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
-pub const DETECTOR_VERSION: u32 = 37;
+pub const DETECTOR_VERSION: u32 = 38;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -435,7 +435,10 @@ fn build_expected_report_edc15vm(maps: &[DetectedMap]) -> Option<Vec<ExpectedMap
         ("SVRL - RPM Limiter", 1, 1, "SVRL"),
         ("IQ by MAP limiter", 1, 1, "IQ by MAP"),
         ("IQ by MAF limiter", 1, 1, "IQ by MAF"),
-        ("MAP/MAF switch", 1, 1, "MAP/MAF switch"),
+        // Pas de règle « MAP/MAF switch » sur le VM : la structure
+        // 41 01 xx xx 00 01 01 00 n'existe que sur une partie des softs
+        // VP37 (012FN, 012GN, 110 ch), pas sur 012L/jetta où l'on ne sait
+        // pas où est le drapeau — plutôt aucun switch qu'un faux à zéro.
         ("Start of injection (>=1)", 1, 1, "Start of injection"),
         ("SVBL (Single value boost limiter)", 1, 1, "SVBL"),
         ("Boost target map", 1, 1, "Boost target map"),

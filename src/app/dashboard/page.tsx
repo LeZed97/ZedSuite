@@ -13,7 +13,7 @@ import { WindowControls } from "@/components/window-controls";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
-import { setAppZoom, setAppMinWidth, editorMinLogicalWidth } from "@/lib/webview-zoom";
+import { setAppZoom, setAppMinWidth, editorFloorLogicalWidth } from "@/lib/webview-zoom";
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings } from "@/contexts/settings-context";
 import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
@@ -416,10 +416,10 @@ function DashboardContent() {
 
   useEffect(() => {
     setAppZoom(0.9);
-    // Même taille minimale que l'éditeur (barre d'outils + liste des maps,
-    // au zoom mémorisé) pour que la fenêtre ne change pas de contrainte
+    // Même taille minimale que l'éditeur (barre d'outils + liste des maps
+    // au zoom le plus bas) pour que la fenêtre ne change pas de contrainte
     // d'une page à l'autre.
-    setAppMinWidth(editorMinLogicalWidth(), 1);
+    setAppMinWidth(editorFloorLogicalWidth(), 1);
     return () => {
       setAppZoom(1);
     };

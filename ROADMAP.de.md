@@ -11,6 +11,7 @@ Funktionswunsch oder Fehler: ein Issue auf [GitHub](https://github.com/LeZed97/Z
 - EDC16U1: Identifizierung der Touareg V10, bei denen heute nur eine der beiden Nummern gefunden wird (sechs Dateien der Testreihe).
 - Bessere EDC15VM-Erkennung: einige Dateien sind noch nicht vollständig abgedeckt, vor allem die 2.5 V6. Für die von Nutzern gemeldeten Softwarestände und Bearbeitungsfehler gibt es bereits Korrekturen.
 - EDC15VM: am Fahrzeug prüfen, ob die SVRL-Kennfelder wirklich aktiv sind, wenn die Erkennung sie findet.
+- Erkennung der PID-Kennfelder der Ladedruckregelung, zuerst auf EDC15P.
 
 ## Von Nutzern gewünscht, in Prüfung
 

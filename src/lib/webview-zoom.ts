@@ -84,11 +84,83 @@ export function editorMinLogicalWidth(
   return Math.round((EDITOR_TOOLBAR_MIN_CSS_WIDTH + sidebarWidth) * (zoomPercent / 100));
 }
 
+/** Largeur logique de l'écran courant (null hors Tauri). */
+export async function monitorLogicalWidth(): Promise<number | null> {
+  try {
+    const { currentMonitor } = await import("@tauri-apps/api/window");
+    const monitor = await currentMonitor();
+    if (!monitor) return null;
+    return monitor.size.toLogical(monitor.scaleFactor).width;
+  } catch {
+    return null;
+  }
+}
+
+/** Marge gardée entre la fenêtre et le bord de l'écran (px logiques). */
+const SCREEN_MARGIN = 16;
+
+/** Zoom le plus bas que l'éditeur accepte (60 %). */
+export const EDITOR_MIN_ZOOM = 0.6;
+
+/** Largeur logique minimale de la fenêtre : la barre d'outils + la liste
+ *  des maps au zoom le plus bas. En dessous, le zoom automatique ne peut
+ *  plus faire tenir la barre. */
+export function editorFloorLogicalWidth(sidebarWidth = EDITOR_SIDEBAR_DEFAULT_WIDTH): number {
+  return Math.round((EDITOR_TOOLBAR_MIN_CSS_WIDTH + sidebarWidth) * EDITOR_MIN_ZOOM);
+}
+
+/** Largeur logique intérieure de la fenêtre (null hors Tauri). */
+export async function windowLogicalWidth(): Promise<number | null> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    const factor = await win.scaleFactor();
+    return (await win.innerSize()).toLogical(factor).width;
+  } catch {
+    return null;
+  }
+}
+
+/** Appelle `cb` avec la largeur logique à chaque redimensionnement de la
+ *  fenêtre (ancrage Windows, plein écran, poignée). Renvoie la fonction de
+ *  désabonnement ; ne fait rien hors Tauri. */
+export async function onWindowResized(cb: (logicalWidth: number) => void): Promise<() => void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    return await win.onResized(async ({ payload }) => {
+      try {
+        const factor = await win.scaleFactor();
+        cb(payload.toLogical(factor).width);
+      } catch {
+        // fenêtre fermée entre-temps
+      }
+    });
+  } catch {
+    return () => {};
+  }
+}
+
+/** Zoom effectif pour que `cssWidth` px CSS tiennent dans l'écran : le zoom
+ *  demandé est réduit sur les écrans étroits (portables 1920x1200 à 150 %,
+ *  1366x768…) au lieu de laisser la fenêtre déborder de l'écran, barre
+ *  d'outils et boutons de fenêtre inaccessibles (issue #5). */
+export async function fitZoomToScreen(cssWidth: number, zoom: number): Promise<number> {
+  const screen = await monitorLogicalWidth();
+  if (!screen || cssWidth <= 0) return zoom;
+  const max = (screen - SCREEN_MARGIN) / cssWidth;
+  return Math.max(0.5, Math.min(zoom, max));
+}
+
 export async function setAppMinWidth(cssWidth: number, zoom = 1): Promise<void> {
   try {
     const { getCurrentWindow, LogicalSize } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
-    const width = Math.max(600, Math.round(cssWidth * zoom));
+    let width = Math.max(600, Math.round(cssWidth * zoom));
+    // Jamais plus large que l'écran : une taille minimale supérieure à
+    // l'écran forçait une fenêtre qui débordait (issue #5).
+    const screen = await monitorLogicalWidth();
+    if (screen) width = Math.min(width, Math.max(600, screen - SCREEN_MARGIN));
     // Jamais de setMinSize ni de setSize en plein écran ou maximisé : sur
     // Windows, changer la contrainte de taille d'une fenêtre maximisée la
     // fait SORTIR de cet état et la décale (constaté en élargissant la liste

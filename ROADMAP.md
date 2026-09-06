@@ -11,6 +11,7 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - EDC16U1: identification of the Touareg V10 files, where only one of the two ECU numbers is found today (six files on the bench).
 - Better EDC15VM detection: a few files are still not fully covered, the 2.5 V6 in particular. Fixes are already in for the software numbers users sent me and for the editing bugs they reported.
 - EDC15VM: check on the car that the SVRL maps are really active when the detector finds them.
+- Detection of the turbo boost control PID maps, on EDC15P first.
 
 ## Asked by users, under review
 

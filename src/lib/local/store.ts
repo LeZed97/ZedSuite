@@ -295,6 +295,61 @@ export async function updateVersion(
   return version;
 }
 
+// ── Imported version binaries ─────────────────────────────────────
+// A version created by importing a file keeps that file on disk as
+// `version-<id>.bin` in the project folder. Without it the imported bytes
+// only lived in memory and the version reopened on the original file.
+
+export async function writeVersionBinary(
+  versionId: string,
+  bytes: Uint8Array
+): Promise<void> {
+  const found = await findVersion(versionId);
+  if (!found) throw new Error("version_not_found");
+  await writeFile(`${projectDir(found.fileId)}/version-${versionId}.bin`, bytes, BASE);
+}
+
+export async function readVersionBinary(
+  versionId: string
+): Promise<Uint8Array | null> {
+  const found = await findVersion(versionId);
+  if (!found) return null;
+  const path = `${projectDir(found.fileId)}/version-${versionId}.bin`;
+  if (!(await exists(path, BASE))) return null;
+  return await readFile(path, BASE);
+}
+
+// Maps that only exist in an imported version: the codeblocks a multimap
+// adds on top of the original file. Kept as `version-<id>-maps.json` and
+// merged into the map list only while that version is open.
+export async function writeVersionExtraMaps(
+  versionId: string,
+  maps: unknown[]
+): Promise<void> {
+  const found = await findVersion(versionId);
+  if (!found) throw new Error("version_not_found");
+  await writeTextFile(
+    `${projectDir(found.fileId)}/version-${versionId}-maps.json`,
+    JSON.stringify(maps),
+    BASE
+  );
+}
+
+export async function readVersionExtraMaps(
+  versionId: string
+): Promise<unknown[] | null> {
+  const found = await findVersion(versionId);
+  if (!found) return null;
+  const path = `${projectDir(found.fileId)}/version-${versionId}-maps.json`;
+  if (!(await exists(path, BASE))) return null;
+  try {
+    const parsed = JSON.parse(await readTextFile(path, BASE));
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteVersion(
   versionId: string
 ): Promise<{ ok: boolean; error?: string }> {
@@ -314,6 +369,16 @@ export async function deleteVersion(
     await remove(`${projectDir(fileId)}/edits-${versionId}.json`, BASE);
   } catch {
     // No edits file for this version — nothing to clean up
+  }
+  try {
+    await remove(`${projectDir(fileId)}/version-${versionId}.bin`, BASE);
+  } catch {
+    // Not an imported version — no binary to clean up
+  }
+  try {
+    await remove(`${projectDir(fileId)}/version-${versionId}-maps.json`, BASE);
+  } catch {
+    // No extra maps for this version
   }
   return { ok: true };
 }

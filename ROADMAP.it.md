@@ -11,6 +11,7 @@ Per chiedere una funzione o segnalare un bug: apri una issue su [GitHub](https:/
 - EDC16U1: identificazione dei Touareg V10, per i quali oggi viene trovato solo uno dei due numeri (sei file del banco di prova).
 - Miglioramento del rilevamento EDC15VM: alcuni file non sono ancora coperti del tutto, in particolare i 2.5 V6. Sono già state apportate correzioni per i numeri di software inviati dagli utenti e per i bug di modifica segnalati.
 - EDC15VM: verificare sul veicolo che le mappe SVRL siano davvero attive quando il rilevamento le trova.
+- Rilevamento delle mappe PID del controllo della pressione del turbo, prima su EDC15P.
 
 ## Chiesto dagli utenti, in valutazione
 

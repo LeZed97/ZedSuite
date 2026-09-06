@@ -36,8 +36,12 @@ import {
   setAppZoom,
   reapplyAppZoom,
   setAppMinWidth,
-  editorMinLogicalWidth,
+  editorFloorLogicalWidth,
+  windowLogicalWidth,
+  onWindowResized,
+  EDITOR_MIN_ZOOM,
   EDITOR_SIDEBAR_DEFAULT_WIDTH,
+  EDITOR_TOOLBAR_MIN_CSS_WIDTH,
 } from "@/lib/webview-zoom";
 import { DTCModal } from "@/components/dtc-modal";
 import { SolutionsModal } from "@/components/solutions-modal";
@@ -57,7 +61,8 @@ import { PromptModal } from "@/components/prompt-modal";
 import { correctChecksumByEcuType, isChecksumSupported, ChecksumResult } from "@/lib/ecu/bosch/checksums";
 import { disableDTC, enableDTC, detectDTCs, type DetectedDTC, type CodeblockInfo } from "@/lib/ecu/bosch/dtc";
 import { saveBytesToFile } from "@/lib/local/save-file";
-import { identifyEcu, bytesToBase64, detectorVersion } from "@/lib/local/detector";
+import { identifyEcu, bytesToBase64, detectorVersion, detectMaps } from "@/lib/local/detector";
+import * as localStore from "@/lib/local/store";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { useSettings } from "@/contexts/settings-context";
 import { getCustomWallpaper, subscribeCustomWallpaper } from "@/lib/custom-wallpaper";
@@ -80,6 +85,8 @@ interface MapData {
   description?: string;
   map_type?: string;
   codeblock_id?: number;
+  /** Version importée qui porte cette map (codeblock absent de l'origine). */
+  from_version?: string;
   codeblock_start_address?: number;
   codeblock_end_address?: number;
   dimensions?: {
@@ -1954,19 +1961,14 @@ function EditorPageContent() {
     return Number.isFinite(saved) && saved >= 60 && saved <= 150 ? saved : 100;
   });
   useEffect(() => {
-    setAppZoom(editorZoom / 100);
     localStorage.setItem("zedsuite-editor-zoom", String(editorZoom));
-    // Filet de sécurité : si le « retour à 100 % » du dashboard (ou d'un
-    // remontage de l'éditeur) arrive après coup, on ré-applique le zoom
-    // mémorisé une fois la navigation retombée.
-    const retries = [400, 1500].map((delay) =>
-      window.setTimeout(() => reapplyAppZoom(editorZoom / 100), delay),
-    );
-    return () => {
-      retries.forEach((id) => window.clearTimeout(id));
-      setAppZoom(1);
-    };
   }, [editorZoom]);
+  // Largeur logique de la fenêtre, suivie en direct : le zoom appliqué
+  // s'adapte pour que la barre d'outils et la liste des maps tiennent
+  // toujours dans la fenêtre (ancrage Windows à 50 % de l'écran, portable à
+  // 150 %…). Le zoom réglé par l'utilisateur reste le maximum.
+  const [windowLogicalW, setWindowLogicalW] = useState<number | null>(null);
+  // sidebarWidth est déclaré plus bas ; l'effet de mesure est près de setAppMinWidth.
   const changeEditorZoom = (delta: number) =>
     setEditorZoom((z) => Math.min(150, Math.max(60, z + delta)));
 
@@ -2202,9 +2204,95 @@ function EditorPageContent() {
   // Ne dépend que de valeurs pilotées par l'utilisateur (zoom, largeur de la
   // barre) : le redimensionnement de la fenêtre ne les modifie pas, donc pas
   // de boucle.
+  // Taille minimale de la fenêtre = barre d'outils + liste des maps au zoom
+  // le plus bas : en dessous le zoom automatique ne peut plus suivre.
   useEffect(() => {
-    setAppMinWidth(editorMinLogicalWidth(sidebarWidth, editorZoom), 1);
-  }, [sidebarWidth, editorZoom]);
+    setAppMinWidth(editorFloorLogicalWidth(sidebarWidth), 1);
+  }, [sidebarWidth]);
+
+  // Mesure de la fenêtre : au montage puis à chaque redimensionnement.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void windowLogicalWidth().then((w) => {
+      if (!cancelled && w) setWindowLogicalW(w);
+    });
+    void onWindowResized((w) => {
+      if (!cancelled) setWindowLogicalW(w);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Quand la fenêtre devient trop étroite pour la barre d'outils, le zoom
+  // RÉGLÉ est abaissé (jamais sous 60 %) : il suit le rétrécissement mais ne
+  // remonte pas tout seul quand la fenêtre est ré-agrandie — c'est le bouton
+  // + qui le remonte (règle du 07/09).
+  useEffect(() => {
+    if (!windowLogicalW) return;
+    const fit = (windowLogicalW - 8) / (EDITOR_TOOLBAR_MIN_CSS_WIDTH + sidebarWidth);
+    const cap = Math.max(Math.round(EDITOR_MIN_ZOOM * 100), Math.floor(fit * 100));
+    setEditorZoom((z) => (z > cap ? cap : z));
+  }, [windowLogicalW, sidebarWidth]);
+  const effectiveZoom = editorZoom / 100;
+  useEffect(() => {
+    setAppZoom(effectiveZoom);
+    // Filet de sécurité : si le « retour à 100 % » du dashboard (ou d'un
+    // remontage de l'éditeur) arrive après coup, on ré-applique le zoom
+    // une fois la navigation retombée.
+    const retries = [400, 1500].map((delay) =>
+      window.setTimeout(() => reapplyAppZoom(effectiveZoom), delay),
+    );
+    return () => {
+      retries.forEach((id) => window.clearTimeout(id));
+      setAppZoom(1);
+    };
+  }, [effectiveZoom]);
+
+  // Fenêtres de maps et hexdump : ramenées dans la zone de travail quand
+  // celle-ci rétrécit (ancrage de l'app à 50 % de l'écran, zoom) — sinon la
+  // croix de fermeture d'une map large (torque limiter 21 colonnes) sortait
+  // de l'écran et la fenêtre ne pouvait plus être ramenée assez à gauche.
+  useEffect(() => {
+    const el = workspaceRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    type Layout = { x: number; y: number; width: number; height: number };
+    // realW : largeur rendue (minWidth CSS) ; une fenêtre plus large que la
+    // zone reste déplaçable vers la gauche, son bord droit au plus au bord.
+    const fit = <T extends Layout>(l: T, W: number, H: number, realW?: number): T => {
+      const width = Math.max(240, Math.min(l.width, W - 8));
+      const height = Math.max(140, Math.min(l.height, H - 8));
+      const w = Math.max(width, realW ?? 0);
+      const x = Math.min(Math.max(Math.min(0, W - w), l.x), Math.max(0, W - w));
+      const y = Math.min(Math.max(0, l.y), Math.max(0, H - height));
+      return l.width === width && l.height === height && l.x === x && l.y === y ? l : { ...l, x, y, width, height };
+    };
+    const observer = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 100 || rect.height < 100) return;
+      setMapLayouts((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        prev.forEach((l, addr) => {
+          const real = el.querySelector<HTMLElement>(`[data-map-address="${addr}"]`)?.offsetWidth;
+          const f = fit(l, rect.width, rect.height, real ?? undefined);
+          if (f !== l) {
+            next.set(addr, f);
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+      setHexdumpLayout((prev) => fit(prev, rect.width, rect.height));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Sync sidebar width to CSS variable for global Toaster positioning
   useEffect(() => {
@@ -2301,6 +2389,64 @@ function EditorPageContent() {
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     e.preventDefault();
+  };
+
+  /** Liste des maps sans celles rattachées à une version importée. */
+  const baseMapsOf = (maps: MapData[]): MapData[] => maps.filter((m) => !m.from_version);
+
+  /** Liste de base + maps propres à la version ouverte. */
+  const mergeExtraMaps = (maps: MapData[], extras: MapData[]): MapData[] => [...baseMapsOf(maps), ...extras];
+
+  /** Maps d'un fichier importé (multimap) situées dans une zone mémoire que
+   *  l'origine ne couvre pas : le codeblock ajouté. Les numéros de codeblock
+   *  ne sont pas comparables d'un fichier à l'autre (un multimap renumérote
+   *  ses blocs : polo ORI 2/5 → multimap 1/2/3), on raisonne donc sur les
+   *  PLAGES D'ADRESSES des blocs de l'origine. Re-détecter un fichier tuné
+   *  bloc par bloc apporterait surtout du bruit ; le bloc ajouté est net.
+   *  Le numéro affiché pour le bloc ajouté est celui du fichier importé s'il
+   *  est libre, sinon le premier numéro libre. */
+  const detectExtraCodeblockMaps = async (bytes: number[], versionId: string): Promise<MapData[]> => {
+    const base = baseMapsOf(projectData?.detectionResults?.maps || []);
+    const baseAddresses = new Set(base.map((m) => m.address));
+    const ranges = new Map<number, { lo: number; hi: number }>();
+    for (const m of base) {
+      if (m.codeblock_id === undefined || m.codeblock_id === null) continue;
+      const r = ranges.get(m.codeblock_id);
+      ranges.set(m.codeblock_id, {
+        lo: Math.min(r?.lo ?? m.address, m.address),
+        hi: Math.max(r?.hi ?? m.address + m.size, m.address + m.size),
+      });
+    }
+    const inBaseRange = (a: number) => Array.from(ranges.values()).some((r) => a >= r.lo && a < r.hi);
+    const results = await detectMaps({
+      fileDataBase64: bytesToBase64(new Uint8Array(bytes)),
+      fileName: projectData?.original_name || projectData?.file_name || "import.bin",
+      ecuType: projectData?.ecu_type || undefined,
+    });
+    const found = (results.maps || []) as MapData[];
+    const extras = found.filter((m) => !baseAddresses.has(m.address) && !inBaseRange(m.address));
+    const usedIds = new Set(ranges.keys());
+    const idMap = new Map<number, number>();
+    let next = 1;
+    const freeId = () => {
+      while (usedIds.has(next)) next++;
+      usedIds.add(next);
+      return next;
+    };
+    return extras.map((m) => {
+      let cb = m.codeblock_id;
+      if (cb !== undefined && cb !== null) {
+        if (!idMap.has(cb)) {
+          if (usedIds.has(cb)) idMap.set(cb, freeId());
+          else {
+            usedIds.add(cb);
+            idMap.set(cb, cb);
+          }
+        }
+        cb = idMap.get(cb);
+      }
+      return { ...m, codeblock_id: cb, from_version: versionId };
+    });
   };
 
   const handleImport = async () => {
@@ -2458,6 +2604,39 @@ function EditorPageContent() {
         // This allows switching back to this version and seeing the correct data
         if (newVersionId) {
           versionFileDataRef.current.set(newVersionId, [...fileData]);
+          // Écrit dans le dossier du projet (version-<id>.bin). Avant, les
+          // octets importés ne vivaient qu'en mémoire : après fermeture du
+          // projet, la version se rouvrait sur le fichier d'origine.
+          try {
+            await localStore.writeVersionBinary(newVersionId, new Uint8Array(fileData));
+          } catch (e) {
+            console.error("import: version binary not saved", e);
+            toast({ title: t.errors.importError, description: t.errors.importFailed, variant: "destructive" });
+          }
+          // Multimap importé sur une origine à moins de codeblocks : les maps
+          // du codeblock ajouté n'existent pas dans la liste détectée sur
+          // l'origine (issue #8). On détecte le fichier importé et on garde
+          // les maps des codeblocks que l'origine n'a pas, rattachées à cette
+          // version : visibles quand elle est ouverte, absentes sur l'Ori.
+          try {
+            const extras = await detectExtraCodeblockMaps(fileData, newVersionId);
+            if (extras.length > 0) {
+              await localStore.writeVersionExtraMaps(newVersionId, extras);
+              setProjectData((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      detectionResults: {
+                        ...prev.detectionResults,
+                        maps: mergeExtraMaps(prev.detectionResults?.maps || [], extras),
+                      },
+                    }
+                  : prev,
+              );
+            }
+          } catch (e) {
+            console.error("import: extra codeblock detection failed", e);
+          }
         }
 
         // CRITICAL: Update the file data with the imported file's data
@@ -2736,7 +2915,19 @@ function EditorPageContent() {
     const version = versions.find(v => v.id === versionId);
     if (!version || version.name === "Ori") return [...original];
 
-    const base = versionFileDataRef.current.get(versionId) ?? original;
+    let base = versionFileDataRef.current.get(versionId);
+    if (!base) {
+      try {
+        const disk = await localStore.readVersionBinary(versionId);
+        if (disk) {
+          base = Array.from(disk);
+          versionFileDataRef.current.set(versionId, base);
+        }
+      } catch {
+        // pas de binaire importé pour cette version
+      }
+    }
+    if (!base) base = original;
     const data = new Uint8Array(base);
     try {
       const res = await axios.get(`/api/versioning/map-edits?versionId=${versionId}`);
@@ -3079,13 +3270,26 @@ function EditorPageContent() {
   };
 
   // Gestion des layouts (drag/resize)
-  const clampPosition = (x: number, y: number, width: number, height: number) => {
+  /** Largeur réellement rendue d'une fenêtre de map (minWidth CSS compris). */
+  const mapWindowRealWidth = (address: number): number | null => {
+    const el = workspaceRef.current?.querySelector<HTMLElement>(`[data-map-address="${address}"]`);
+    return el ? el.offsetWidth : null;
+  };
+
+  // `realWidth` = largeur rendue (le minWidth CSS calculé sur les colonnes
+  // peut dépasser layout.width). Une fenêtre plus large que la zone de
+  // travail peut être glissée vers la GAUCHE, derrière la liste des maps,
+  // jusqu'à ce que son bord droit — et la croix de fermeture — arrive au
+  // bord de la zone (sur demande, maps larges type torque limiter 21 col.).
+  const clampPosition = (x: number, y: number, width: number, height: number, realWidth?: number) => {
     const workspaceRect = workspaceRef.current?.getBoundingClientRect();
     if (!workspaceRect) return { x, y };
-    const maxX = Math.max(0, workspaceRect.width - width);
+    const w = Math.max(width, realWidth ?? 0);
+    const minX = Math.min(0, workspaceRect.width - w);
+    const maxX = Math.max(0, workspaceRect.width - w);
     const maxY = Math.max(0, workspaceRect.height - height);
     return {
-      x: Math.min(Math.max(0, x), maxX),
+      x: Math.min(Math.max(minX, x), maxX),
       y: Math.min(Math.max(0, y), maxY),
     };
   };
@@ -3162,8 +3366,17 @@ function EditorPageContent() {
     const baseHeight = tableHeight + chromeHeight + paddingHeight;
     const dynamicMinHeight = Math.max(140, baseHeight); // réduit pour les maps très basses
 
-    const width = Math.max(240, Math.min(3200, baseWidth));
-    const height = Math.min(1800, Math.max(dynamicMinHeight, baseHeight));
+    let width = Math.max(240, Math.min(3200, baseWidth));
+    let height = Math.min(1800, Math.max(dynamicMinHeight, baseHeight));
+    // Jamais plus grand que la zone de travail : une map large (21 colonnes)
+    // ouvrait une fenêtre dont la croix de fermeture sortait de l'écran et
+    // que l'on ne pouvait pas ramener assez à gauche (issue #5). La fenêtre
+    // se redimensionne ensuite librement, le contenu défile à l'intérieur.
+    const workspaceSize = workspaceRef.current?.getBoundingClientRect();
+    if (workspaceSize) {
+      width = Math.max(240, Math.min(width, workspaceSize.width - 8));
+      height = Math.max(140, Math.min(height, workspaceSize.height - 8));
+    }
 
 
     const gap = 4;
@@ -3220,7 +3433,8 @@ function EditorPageContent() {
     const dy = e.clientY - startY;
     const currentLayout = mapLayouts.get(address);
     if (!currentLayout) return;
-    const { x, y } = clampPosition(originX + dx, originY + dy, currentLayout.width, currentLayout.height);
+    const realW = mapWindowRealWidth(address) ?? currentLayout.width;
+    const { x, y } = clampPosition(originX + dx, originY + dy, currentLayout.width, currentLayout.height, realW);
     setMapLayouts((prev) => {
       const next = new Map(prev);
       const layout = next.get(address);
@@ -3705,7 +3919,29 @@ function EditorPageContent() {
         });
 
         // Check if this version has imported file data stored
-        const importedFileData = versionFileDataRef.current.get(versionId);
+        let importedFileData = versionFileDataRef.current.get(versionId);
+        if (!importedFileData) {
+          // Version importée dans une session précédente : octets sur disque
+          try {
+            const disk = await localStore.readVersionBinary(versionId);
+            if (disk) {
+              importedFileData = Array.from(disk);
+              versionFileDataRef.current.set(versionId, importedFileData);
+            }
+          } catch (e) {
+            console.error("version binary read failed", e);
+          }
+        }
+        // Maps propres à cette version (codeblock ajouté par un multimap)
+        let extraMaps: MapData[] = [];
+        try {
+          const stored = await localStore.readVersionExtraMaps(versionId);
+          if (stored && stored.length > 0) {
+            extraMaps = (stored as MapData[]).map((m) => ({ ...m, from_version: versionId }));
+          }
+        } catch (e) {
+          console.error("version extra maps read failed", e);
+        }
 
         // If this is an imported version, detect differences from original file
         // This ensures maps modified in the imported file are shown in red
@@ -3773,6 +4009,12 @@ function EditorPageContent() {
           return {
             ...prevData,
             file_data: Array.from(baseData),
+            // Liste de base (origine) + maps propres à la version ouverte ;
+            // celles d'une autre version importée sont retirées.
+            detectionResults: {
+              ...prevData.detectionResults,
+              maps: mergeExtraMaps(prevData.detectionResults?.maps || [], extraMaps),
+            },
           };
         });
 
@@ -4264,7 +4506,10 @@ function EditorPageContent() {
     payload.changedCells = Object.entries(cells).map(([key, value]) => {
       const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
       return { row: parseInt(rowStr), col: parseInt(colStr), value };
-    });
+    // Les écarts d'une version importée sont indexés par offset d'octet
+    // (« 12 »), pas par cellule : ils vivent dans version-<id>.bin, pas
+    // dans les édits (avant, ils partaient en {row: 12, col: NaN}).
+    }).filter((c) => Number.isFinite(c.row) && Number.isFinite(c.col));
   }
   if (axes && (axes.x || axes.y)) {
     payload.axisLabels = {
@@ -4343,7 +4588,10 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
     payload.changedCells = Object.entries(cells).map(([key, value]) => {
       const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
       return { row: parseInt(rowStr), col: parseInt(colStr), value };
-    });
+    // Les écarts d'une version importée sont indexés par offset d'octet
+    // (« 12 »), pas par cellule : ils vivent dans version-<id>.bin, pas
+    // dans les édits (avant, ils partaient en {row: 12, col: NaN}).
+    }).filter((c) => Number.isFinite(c.row) && Number.isFinite(c.col));
   }
   if (axes && (axes.x || axes.y)) {
     payload.axisLabels = {
@@ -4647,7 +4895,10 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     payload.changedCells = Object.entries(cells).map(([key, value]) => {
       const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
       return { row: parseInt(rowStr), col: parseInt(colStr), value };
-    });
+    // Les écarts d'une version importée sont indexés par offset d'octet
+    // (« 12 »), pas par cellule : ils vivent dans version-<id>.bin, pas
+    // dans les édits (avant, ils partaient en {row: 12, col: NaN}).
+    }).filter((c) => Number.isFinite(c.row) && Number.isFinite(c.col));
   }
   if (axes && (axes.x || axes.y)) {
     payload.axisLabels = {
@@ -4767,7 +5018,10 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
     payload.changedCells = Object.entries(cells).map(([key, value]) => {
       const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
       return { row: parseInt(rowStr), col: parseInt(colStr), value };
-    });
+    // Les écarts d'une version importée sont indexés par offset d'octet
+    // (« 12 »), pas par cellule : ils vivent dans version-<id>.bin, pas
+    // dans les édits (avant, ils partaient en {row: 12, col: NaN}).
+    }).filter((c) => Number.isFinite(c.row) && Number.isFinite(c.col));
   }
   if (axes && (axes.x || axes.y)) {
     payload.axisLabels = {
@@ -6186,7 +6440,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             onEasyViewModeChange={setEasyViewMode}
             onPreviewClick={handlePreviewToggle}
             onSettingsClick={() => setIsSettingsOpen(true)}
-            zoomPercent={editorZoom}
+            zoomPercent={Math.round(effectiveZoom * 100)}
             onZoomIn={() => changeEditorZoom(10)}
             onZoomOut={() => changeEditorZoom(-10)}
             onCloseProject={handleCloseProject}
