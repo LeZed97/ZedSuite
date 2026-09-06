@@ -144,24 +144,44 @@ le test `confirmed_cp31_layout_constants` te rappellera d'élargir la fenêtre.
 
 ---
 
-## Checksum
+## Checksum — le « cadeau » n'en était pas un
 
-`src/lib/ecu/bosch/checksums/index.ts` route sur `ecuType.includes('EDC16')`
-et `src/lib/ecu-endianness.ts` sur `includes("EDC16")` : le nom `EDC16CP31`
-matche les deux, **rien à écrire**.
+Le routage, lui, est bien gratuit : `src/lib/ecu/bosch/checksums/index.ts`
+route sur `ecuType.includes('EDC16')` et `src/lib/ecu-endianness.ts` sur
+`includes("EDC16")` ; le nom `EDC16CP31` matche les deux.
 
-Le module cherche le descripteur Bosch `FA DE CA FE CA FE AF FE` à
-`region_start + 0x3C`, lit les bornes dans les deux dwords précédents et
-absorbe l'écart dans le dernier dword.
+**Mais le module lui-même rejetait la région CP31**, et l'éditeur affichait
+« Checksum non supporté » sur un fichier dont le checksum est parfaitement
+lisible. Une version antérieure de ce document affirmait le contraire — elle
+partait du fait que le descripteur est trouvable, sans avoir exécuté le code
+de recherche de région. C'était faux.
 
-> **Vérification validée** sur le dump CP31 réel : descripteur unique à
-> `0x19003C`, région `0x190000..0x1FCFFB` (446 460 octets, 111 615 dwords),
-> somme des dwords big-endian = **exactement `0xD01FE500`**, mot de checksum
-> `0x0375D4D9` à `0x1FCFF8`.
+`findEdc16Regions()` exigeait que la région soit alignée sur `0x100` **aux
+deux bouts**. C'est vrai des six paires VAG du corpus d'origine, ce n'est pas
+une propriété du format :
+
+| | début | `end + 1` | verdict |
+|---|---|---|---|
+| VAG U31/U34 | `0x100000` (%0x100 = 0) | `0x200000` (%0x100 = 0) | acceptée |
+| CP31 OM642 | `0x190000` (%0x100 = 0) | `0x1FCFFC` (**%0x100 = 0xFC**) | **rejetée** |
+
+La fin n'a besoin d'être alignée que sur un dword — le checksum est le dernier
+dword de la région. `REGION_END_ALIGNMENT` passe donc à 4, et la rigueur
+perdue est compensée par deux garde-fous ajoutés au même endroit : une
+longueur minimale de 4 Ko, et l'exigence que la signature vive **dans** la
+région qu'elle annonce. L'alignement du début reste à `0x100` : c'est lui qui
+contraint réellement la position de la signature.
+
+> **Vérification ET correction validées** sur le dump CP31 réel : descripteur
+> unique à `0x19003C`, région `0x190000..0x1FCFFB` (446 460 octets,
+> 111 615 dwords), somme des dwords big-endian = **exactement `0xD01FE500`**,
+> mot de checksum `0x0375D4D9` à `0x1FCFF8`. Fichier d'origine → `OK, found 1,
+> fixed 0`. Un octet modifié dans la Boost Target → `FAIL, fixed 1`, et la
+> région revalide après correction.
 >
-> **Reste à valider la correction** (et pas seulement la vérification) sur une
-> paire stock / modifié : édite une map, corrige, vérifie que la somme retombe
-> sur la constante.
+> Non-régression VAG vérifiée sur régions synthétiques : fin alignée `0x100`
+> toujours acceptée ; fin non alignée sur 4, début non aligné sur `0x100`,
+> région de moins de 4 Ko et signature isolée dans du bruit toutes rejetées.
 
 ---
 
@@ -210,11 +230,7 @@ C'est le seul vrai manque. Aujourd'hui `occurrence_rate: 1.0` veut dire
 Le 4 cylindres n'a **pas** été regardé. Ses zones seront différentes. Ne pas
 supposer que ça marche parce que c'est aussi du CP31.
 
-### 3. Valider la correction de checksum sur une paire stock / modifié
-
-Voir plus haut.
-
-### 4. Les courbes 1D
+### 3. Les courbes 1D
 
 Seules les maps 2D (`Kf`) sont détectées. Le dump contient ~1685 blocs `Kl`
 candidats : limiteur de régime, limiteurs de couple par rapport, courbes de

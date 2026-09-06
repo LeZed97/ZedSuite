@@ -5,6 +5,7 @@
  * Currently supported:
  * - EDC15P / EDC15V / EDC15VM / EDC15M / EDC15C (Bosch VAG TDI, algorithme v4.1)
  * - EDC16U1 / EDC16U31 / EDC16U34 (Bosch VAG)
+ * - EDC16CP31 (Bosch Mercedes OM642/OM646)
  */
 
 export { correctEDC15PChecksum, verifyEDC15PChecksum, ChecksumResult } from './edc15p-checksum';
@@ -43,8 +44,9 @@ export function correctChecksumByEcuType(
     return correctEDC15PChecksum(fileData);
   }
 
-  // EDC16 family (U1 / U31 / U34) — region descriptors are self-describing,
-  // so an unrecognized layout returns null rather than a bogus correction.
+  // EDC16 family (U1 / U31 / U34 / CP31) — region descriptors are
+  // self-describing, so an unrecognized layout returns null rather than a
+  // bogus correction.
   if (ecuTypeUpper.includes('EDC16')) {
     return correctEDC16Checksum(fileData);
   }
