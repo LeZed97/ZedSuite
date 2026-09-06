@@ -3,6 +3,7 @@
 
 use crate::models::{DetectedMap, MapDimensions, DataType};
 use std::collections::{HashSet, HashMap};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Represents a codeblock in EDC15 files
 /// EDC15P files typically have 2-3 codeblocks, each containing similar maps
@@ -14,6 +15,10 @@ struct Codeblock {
 }
 
 pub mod complete_patterns;
+pub mod early;
+pub mod layout;
+
+use layout::{Edc15pGeneration, Edc15pLayout};
 
 #[allow(unused_imports)]
 use complete_patterns::EDC15PMapPattern;
@@ -23,13 +28,30 @@ use complete_patterns::EDC15PMapPattern;
 /// Implements the CheckMap algorithm from VAGEDCSuite EDC15PFileParser.cs
 pub struct EDC15PDetector {
     patterns: Vec<EDC15PMapPattern>,
+    /// Disposition mémoire du fichier en cours (posée au début de `detect`) :
+    /// génération et codeblocks, consultée par les passes qui raisonnent
+    /// par bloc (dédoublonnage, numérotation, sélecteurs).
+    layout: std::sync::Mutex<Option<Edc15pLayout>>,
+    /// Disposition précoce : familles d'identifiants d'axes supplémentaires
+    early_ids: AtomicBool,
 }
 
 impl EDC15PDetector {
     pub fn new() -> Self {
         Self {
             patterns: EDC15PMapPattern::load_patterns(),
+            layout: std::sync::Mutex::new(None),
+            early_ids: AtomicBool::new(false),
         }
+    }
+
+    /// Disposition du fichier en cours (plages EDCSuite classiques à défaut).
+    fn layout(&self) -> Edc15pLayout {
+        self.layout
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone())
+            .unwrap_or_else(|| Edc15pLayout::detect(&[]))
     }
 
     /// Detect maps using dynamic CheckMap algorithm
@@ -39,6 +61,15 @@ impl EDC15PDetector {
         
         let mut maps = Vec::new();
         let mut detected_addresses = HashSet::new();
+
+        // Disposition mémoire (génération + codeblocks) : les plages fixes
+        // 0x4C000/0x5C000/0x6C000 ne valent que pour la disposition standard.
+        let layout = Edc15pLayout::detect(data);
+        log::debug!("EDC15P layout: {:?} {:?}", layout.generation, layout.blocks);
+        if let Ok(mut guard) = self.layout.lock() {
+            *guard = Some(layout.clone());
+        }
+        self.early_ids.store(layout.generation == Edc15pGeneration::Early, Ordering::Relaxed);
 
         // PRIORITY: Detect multi-smoke limiters FIRST (before generic detection)
         // This ensures we find all 3 smoke limiters per codeblock instead of just 1
@@ -74,6 +105,13 @@ impl EDC15PDetector {
                 if skip > 20 {
                     skip = 20; // Limit skip to find more maps
                 }
+                // Une « map » née d'un identifiant d'axe 0000 (axe vide) ne doit
+                // pas faire sauter l'en-tête réel qui la suit : sur les 019AJ/019AN
+                // un [00 00][0A 00] précède de 4 octets l'en-tête EA38 de l'EGR,
+                // qui n'était jamais balayé (la map à 0x718A8 manquait).
+                if data[t] == 0x00 && data[t + 1] == 0x00 {
+                    skip = 2;
+                }
                 t += skip;
             } else {
                 t += 2;
@@ -107,6 +145,14 @@ impl EDC15PDetector {
         
         // Classify maps using NameKnownMaps logic from zededc15pfile.cs
         let mut classified = self.name_known_maps(data, maps_with_codeblocks.clone());
+
+        // Générations précoces (1999-2002) : identifiants d'axes différents,
+        // les maps restées génériques sont classées par forme et valeurs d'axes
+        if !layout.is_standard() {
+            early::classify_early_generation(data, &layout, &mut classified);
+        }
+        // Hystérésis EGR (paire de courbes 20 points par codeblock), toutes générations
+        early::detect_egr_hysteresis(data, &layout, &mut classified);
         
         // Distinguish IQ by MAF and IQ by MAP based on X axis values
         classified = self.distinguish_iq_limiter_maps(data, classified);
@@ -121,7 +167,7 @@ impl EDC15PDetector {
         classified = self.filter_false_soi_maps(classified);
         
         // Fix Injector duration maps - renumber and swap axes
-        classified = self.fix_injector_duration_maps(classified);
+        classified = self.fix_injector_duration_maps(data, classified);
         
         // DISABLED: Inversed driver wish detection removed - no longer needed
         // classified = self.filter_zeroed_inversed_driver_wish(classified, data);
@@ -1061,7 +1107,7 @@ impl EDC15PDetector {
     fn detect_start_iq_maps(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
         // Search for pattern: [0xEC** axis ID][08 00][8 values][0xC1** axis ID][09 00][9 values][map data]
 
-        let mut t = 0x20000; // Start at typical data section
+        let mut t = self.layout().scan_start().min(0x20000); // début des calibrations
 
         while t < data.len().saturating_sub(200) {
             // Check for Y axis first (RPM): high byte 0xEC
@@ -1128,6 +1174,7 @@ impl EDC15PDetector {
                                         codeblock_start_address: None,
                                         codeblock_end_address: None,
                                         map_selector: None,
+                                        rows_reversed: None,
                                     };
 
                                     detected_addresses.insert(map_offset as u32);
@@ -1331,31 +1378,15 @@ impl EDC15PDetector {
         let pattern: [u8; 6] = [0x27, 0x00, 0x00, 0x64, 0x00, 0x01];
         let mask: [u8; 6] = [1, 1, 1, 1, 1, 0];
         
-        // Codeblock boundaries (typical offsets)
-        let _codeblock_ranges: [(u32, u32); 3] = [
-            (0x4C000, 0x5C000),  // Codeblock 1
-            (0x5C000, 0x6C000),  // Codeblock 2
-            (0x6C000, 0x7C000),  // Codeblock 3
-        ];
-        
-        let mut found_per_codeblock: [bool; 3] = [false; 3];
+        let layout = self.layout();
+        let mut found_per_codeblock: Vec<bool> = vec![false; layout.blocks.len()];
         
         let mut offset = 0;
         while offset < data.len().saturating_sub(6) {
             if let Some(found_offset) = self.find_sequence_with_mask(data, offset, &pattern, &mask) {
                 let lfb_address = (found_offset + 5) as u32;
                 
-                // Determine which codeblock this belongs to
-                // Use typical codeblock offset of 0x10000
-                let codeblock_idx = if lfb_address >= 0x4C000 && lfb_address < 0x5C000 {
-                    Some(0)  // Codeblock 1
-                } else if lfb_address >= 0x5C000 && lfb_address < 0x6C000 {
-                    Some(1)  // Codeblock 2
-                } else if lfb_address >= 0x6C000 && lfb_address < 0x7C000 {
-                    Some(2)  // Codeblock 3
-                } else {
-                    None
-                };
+                let codeblock_idx = layout.block_index(lfb_address);
                 
                 if let Some(cb_idx) = codeblock_idx {
                     // Only add if we haven't found one in this codeblock yet
@@ -1379,7 +1410,7 @@ impl EDC15PDetector {
                         map.subcategory = Some("Switches".to_string());
                         map.description = Some(format!("Left foot brake: {} (1=ON, 0=OFF)", state));
                         map.confidence = 0.95;
-                        map.codeblock_id = Some(cb_idx as u32 + 1);
+                        map.codeblock_id = Some(layout.blocks[cb_idx].id);
                         
                         detected_addresses.insert(lfb_address);
                         found_per_codeblock[cb_idx] = true;
@@ -1401,31 +1432,15 @@ impl EDC15PDetector {
         let pattern: [u8; 8] = [0x41, 0x02, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00];
         let mask: [u8; 8] = [1, 1, 0, 0, 1, 1, 1, 1];
         
-        // Codeblock boundaries (typical offsets)
-        let _codeblock_ranges: [(u32, u32); 3] = [
-            (0x4C000, 0x5C000),  // Codeblock 1
-            (0x5C000, 0x6C000),  // Codeblock 2
-            (0x6C000, 0x7C000),  // Codeblock 3
-        ];
-        
-        let mut found_per_codeblock: [bool; 3] = [false; 3];
+        let layout = self.layout();
+        let mut found_per_codeblock: Vec<bool> = vec![false; layout.blocks.len()];
         
         let mut offset = 0;
         while offset < data.len().saturating_sub(8) {
             if let Some(found_offset) = self.find_sequence_with_mask(data, offset, &pattern, &mask) {
                 let switch_address = (found_offset + 2) as u32;
                 
-                // Determine which codeblock this belongs to
-                // Use typical codeblock offset of 0x10000
-                let codeblock_idx = if switch_address >= 0x4C000 && switch_address < 0x5C000 {
-                    Some(0)  // Codeblock 1
-                } else if switch_address >= 0x5C000 && switch_address < 0x6C000 {
-                    Some(1)  // Codeblock 2
-                } else if switch_address >= 0x6C000 && switch_address < 0x7C000 {
-                    Some(2)  // Codeblock 3
-                } else {
-                    None
-                };
+                let codeblock_idx = layout.block_index(switch_address);
                 
                 if let Some(cb_idx) = codeblock_idx {
                     // Only add if we haven't found one in this codeblock yet
@@ -1449,7 +1464,7 @@ impl EDC15PDetector {
                         map.category = Some("Smoke limitation".to_string());
                         map.description = Some(format!("Sensor mode: {} (0=MAF, 257=MAP)", mode));
                         map.confidence = 0.95;
-                        map.codeblock_id = Some(cb_idx as u32 + 1);
+                        map.codeblock_id = Some(layout.blocks[cb_idx].id);
                         
                         detected_addresses.insert(switch_address);
                         found_per_codeblock[cb_idx] = true;
@@ -1560,7 +1575,8 @@ impl EDC15PDetector {
         let mut found_count = 0;
         let mut candidates: Vec<(u32, bool)> = Vec::new(); // (address, has_valid_axis)
         
-        for offset in (0x40000..data.len().saturating_sub(24)).step_by(2) {
+        let layout = self.layout();
+        for offset in (layout.scan_start()..data.len().saturating_sub(24)).step_by(2) {
             // Check if values 2-6 match expected pattern (index 1-5)
             // First value (index 0) can be 0 or modified by tuning
             let mut is_match = true;
@@ -1600,49 +1616,43 @@ impl EDC15PDetector {
             let axis_len = u16::from_le_bytes([data[axis_offset + 2], data[axis_offset + 3]]);
             let axis_id_high = (axis_id >> 8) as u8;
             
-            // MUST have EC axis ID with length 6
-            if axis_id_high != 0xEC || axis_len != 6 {
-                log::debug!("⏭️ Skipping pattern at 0x{:X} - invalid axis (ID=0x{:04X}, len={})", offset, axis_id, axis_len);
+            // Axe de 6 seuils d'avance (identifiant EC sur les softs récents,
+            // C4/EC/E9… sur les premiers PD) : valeurs croissantes dans la
+            // plage SOI brute (78 - 0.023437 × v ≈ -25..+40 °)
+            let axis_ok = self.is_axis_id(axis_id) && axis_len == 6 && {
+                let vals: Vec<u16> = (0..6)
+                    .map(|i| u16::from_le_bytes([data[axis_offset + 4 + i * 2], data[axis_offset + 5 + i * 2]]))
+                    .collect();
+                vals.windows(2).all(|w| w[0] < w[1]) && vals.iter().all(|&v| (1500..=4500).contains(&v))
+            };
+            if !axis_ok {
+                log::debug!("⏭️ Skipping pattern at 0x{:X} - invalid axis (ID=0x{:04X} high=0x{:02X}, len={})", offset, axis_id, axis_id_high, axis_len);
                 continue;
             }
             
             candidates.push((offset as u32, true));
         }
         
-        // Only keep ONE selector per codeblock (the one closest to known relative offset)
-        // Typical offset within codeblock: 0x545C (relative to codeblock start)
-        // Codeblock starts: 0x4C000 (CB2), 0x5C000 (CB3), 0x6C000 (CB5)
-        let mut cb_best: [Option<u32>; 3] = [None; 3]; // One for each codeblock (2, 3, 5 -> indices 0, 1, 2)
-        
+        // Un seul sélecteur par codeblock : le plus proche de l'offset relatif
+        // habituel (0x945C sur la disposition standard), sinon le premier
+        let target_relative = 0x945Ci32;
+        let mut cb_best: Vec<Option<u32>> = vec![None; layout.blocks.len()];
         for (addr, _) in &candidates {
-            let flashbank = self.get_flashbank_from_address(*addr);
-            // Calculate relative offset within codeblock
-            let codeblock_start = match flashbank {
-                Some(1) => 0x4C000u32,
-                Some(2) => 0x5C000u32,
-                Some(3) => 0x6C000u32,
-                _ => continue,
-            };
-            let relative = (*addr).saturating_sub(codeblock_start) as i32;
-            let target_relative = 0x945Ci32 - 0x4C000i32; // Known offset: 0x5545C - 0x4C000 = 0x845C
+            let Some(idx) = layout.block_index(*addr) else { continue };
+            let block_start = layout.blocks[idx].start;
+            let relative = (*addr).saturating_sub(block_start) as i32;
             let distance = (relative - target_relative).abs();
-            
-            if let Some(fb) = flashbank {
-                let cb_idx = (fb - 1) as usize;
-                if cb_idx < 3 {
-                    if cb_best[cb_idx].is_none() {
-                        cb_best[cb_idx] = Some(*addr);
-                    } else {
-                        let existing_addr = cb_best[cb_idx].unwrap();
-                        let existing_relative = existing_addr.saturating_sub(codeblock_start) as i32;
-                        if distance < (existing_relative - target_relative).abs() {
-                            cb_best[cb_idx] = Some(*addr);
-                        }
+            match cb_best[idx] {
+                None => cb_best[idx] = Some(*addr),
+                Some(existing) => {
+                    let existing_relative = existing.saturating_sub(block_start) as i32;
+                    if layout.is_standard() && distance < (existing_relative - target_relative).abs() {
+                        cb_best[idx] = Some(*addr);
                     }
                 }
             }
         }
-        
+
         let final_addrs: Vec<u32> = cb_best.into_iter().flatten().collect();
         
         for map_addr in final_addrs {
@@ -1701,6 +1711,24 @@ impl EDC15PDetector {
                                 valid_boost_values += 1;
                             }
                         }
+                    }
+                    // Un axe température (Kelvin ×10) = correction de boost par
+                    // température, pas une consigne (019A : [DC14 16 boost][DC12
+                    // 10 temps] à 0x7C8A4 partait en « Boost target » puis
+                    // évinçait la vraie consigne au dédoublonnage)
+                    let axis_is_temperature = |addr: Option<u32>| -> bool {
+                        let Some(a) = addr else { return false };
+                        let a = a as usize;
+                        if a < 4 || a + 2 > data.len() { return false; }
+                        let len = u16::from_le_bytes([data[a - 2], data[a - 1]]) as usize;
+                        if len == 0 || len > 32 || a + len * 2 > data.len() { return false; }
+                        (0..len).all(|i| {
+                            let v = u16::from_le_bytes([data[a + 2 * i], data[a + 2 * i + 1]]);
+                            (2200..=4300).contains(&v)
+                        })
+                    };
+                    if axis_is_temperature(map.x_axis_address) || axis_is_temperature(map.y_axis_address) {
+                        continue;
                     }
                     // If most values are in boost range, classify as Boost target
                     if valid_boost_values > 100 {
@@ -1895,6 +1923,7 @@ impl EDC15PDetector {
                         codeblock_start_address: None,
                         codeblock_end_address: None,
                         map_selector: None,
+                        rows_reversed: None,
                     };
 
                     detected_addresses.insert(map_start as u32);
@@ -2020,6 +2049,7 @@ impl EDC15PDetector {
                     codeblock_start_address: None,
                     codeblock_end_address: None,
                     map_selector: None,
+                    rows_reversed: None,
                 };
 
                 detected_addresses.insert(map_start as u32);
@@ -2120,6 +2150,7 @@ impl EDC15PDetector {
                 codeblock_start_address: None,
                 codeblock_end_address: None,
                 map_selector: None,
+                rows_reversed: None,
             };
 
             detected_addresses.insert(map_start as u32);
@@ -2168,7 +2199,8 @@ impl EDC15PDetector {
         }
 
         // Early exit if file too small
-        if data.len() < 0x4C000 + 500 {
+        let layout = self.layout();
+        if data.len() < layout.scan_start() + 500 {
             if let Some(ref mut f) = log_file {
                 let _ = writeln!(f, "File too small, skipping");
             }
@@ -2176,7 +2208,7 @@ impl EDC15PDetector {
         }
 
         // Look for smoke limiter structure: Y axis 0xF9, X axis 0xDA, optional Z axis (temperature selector)
-        let mut t = 0x4C000; // Start from typical codeblock area
+        let mut t = layout.scan_start(); // premier codeblock de la disposition
         let mut found_count = 0;
         let mut y_f9_count = 0;
         let end_pos = data.len().saturating_sub(500);
@@ -2331,10 +2363,11 @@ impl EDC15PDetector {
                                                             y_axis_inverted: None,
                                                             is_little_endian: None,
                                                             confidence: 0.95,
-                                                            codeblock_id: if map_addr >= 0x4C000 && map_addr < 0x5C000 { Some(2) } else if map_addr >= 0x5C000 && map_addr < 0x6C000 { Some(3) } else if map_addr >= 0x6C000 && map_addr < 0x7C000 { Some(5) } else { None },
+                                                            codeblock_id: layout.block_id(map_addr as u32),
                                                             codeblock_start_address: None,
                                                             codeblock_end_address: None,
                                                             map_selector: None,
+                                                            rows_reversed: None,
                                                         };
 
                                                         maps.push(smoke_map);
@@ -2379,10 +2412,11 @@ impl EDC15PDetector {
                                         y_axis_inverted: None,
                                         is_little_endian: None,
                                         confidence: 0.95,
-                                        codeblock_id: if map_addr >= 0x4C000 && map_addr < 0x5C000 { Some(2) } else if map_addr >= 0x5C000 && map_addr < 0x6C000 { Some(3) } else if map_addr >= 0x6C000 && map_addr < 0x7C000 { Some(5) } else { None },
+                                        codeblock_id: layout.block_id(map_addr as u32),
                                         codeblock_start_address: None,
                                         codeblock_end_address: None,
                                         map_selector: None,
+                                        rows_reversed: None,
                                     };
 
                                     maps.push(smoke_map);
@@ -2445,6 +2479,12 @@ impl EDC15PDetector {
         }
         
         let idstrip = (axis_id / 256) as u8;
+        // Disposition précoce (1999, 038906019A) : familles absentes des
+        // fichiers suivants (C3, DC, DF, E1, FC), sans lesquelles les IQ by
+        // MAF/MAP, la correction de boost et les 10x10 du bloc sont invisibles
+        if self.early_ids.load(Ordering::Relaxed) && matches!(idstrip, 0xC3 | 0xDC | 0xDF | 0xE1 | 0xFC) {
+            return true;
+        }
         // EXACTLY like VAGEDCSuite EDC15PFileParser.cs line 6226-6237
         if idstrip == 0xDB { return true; }
         if matches!(idstrip, 0xC0 | 0xC1 | 0xC2 | 0xC4 | 0xC5) { return true; }
@@ -3045,27 +3085,11 @@ impl EDC15PDetector {
     /// - Flashbank 1 (codeblock 5): 0x40000-0x5FFFF
     /// - Flashbank 2 (codeblock 2 manual): 0x60000-0x7FFFF
     fn get_flashbank_from_address(&self, address: u32) -> Option<u32> {
-        // EDC15P codeblocks are 0x10000 (64KB) blocks starting at 0x4C000
-        // Based on EDCSuite:
-        // - Codeblock 2: 0x4C000 - 0x5BFFF
-        // - Codeblock 3: 0x5C000 - 0x6BFFF
-        // - Codeblock 5: 0x6C000 - 0x7BFFF
-        // We use internal IDs 1, 2, 3 for deduplication (one map per codeblock)
-        if address >= 0x4C000 && address < 0x5C000 {
-            Some(1) // Codeblock 2 (EDCSuite)
-        } else if address >= 0x5C000 && address < 0x6C000 {
-            Some(2) // Codeblock 3 (EDCSuite)
-        } else if address >= 0x6C000 && address < 0x7C000 {
-            Some(3) // Codeblock 5 (EDCSuite)
-        } else if address >= 0x40000 && address < 0x4C000 {
-            Some(1) // Early addresses in first codeblock
-        } else if address >= 0x7C000 && address < 0x80000 {
-            Some(3) // Late addresses in last codeblock
-        } else {
-            None
-        }
+        // Indice de bloc (1..n) dans la disposition détectée — sert de clé de
+        // dédoublonnage « une map par codeblock »
+        self.layout().block_index(address).map(|i| i as u32 + 1)
     }
-    
+
     /// Distinguish IQ by MAF and IQ by MAP based on X axis values
     /// Both are detected with the same pattern "IQ by MAF limiter", this function renames to "IQ by MAP limiter" when appropriate
     fn distinguish_iq_limiter_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
@@ -3144,9 +3168,14 @@ impl EDC15PDetector {
             let map_name = map.name.as_ref().map(|s| s.as_str()).unwrap_or("");
             
             // Check if this map type should be deduplicated by prefix
+            // (« EGR hysteresis 1/2 » : clé = nom complet, sinon le préfixe
+            // « EGR » les fondrait avec la map EGR du bloc)
             let mut matched_type: Option<String> = None;
+            if map_name.starts_with("EGR hysteresis") {
+                matched_type = Some(map_name.to_string());
+            }
             for type_prefix in &unique_per_flashbank {
-                if map_name.starts_with(type_prefix) {
+                if matched_type.is_none() && map_name.starts_with(type_prefix) {
                     matched_type = Some(type_prefix.to_string());
                     break;
                 }
@@ -3199,8 +3228,11 @@ impl EDC15PDetector {
             
             // Check if this map type should be deduplicated by prefix
             let mut matched_key: Option<String> = None;
+            if map_name.starts_with("EGR hysteresis") {
+                matched_key = Some(map_name.to_string());
+            }
             for type_prefix in &unique_per_flashbank {
-                if map_name.starts_with(type_prefix) {
+                if matched_key.is_none() && map_name.starts_with(type_prefix) {
                     matched_key = Some(type_prefix.to_string());
                     break;
                 }
@@ -3580,7 +3612,8 @@ impl EDC15PDetector {
         // First, check if we have SOI maps with temperatures already (from detect_soi_maps_by_selector)
         // These maps have map_selector set AND their name contains "°C"
         // Support 3 codeblocks (CB2, CB3, CB5 = internal IDs 1, 2, 3)
-        let mut has_temp_soi = [false, false, false]; // For codeblocks 2, 3, 5
+        let n_blocks = self.layout().blocks.len().max(3);
+        let mut has_temp_soi = vec![false; n_blocks];
         
         for map in &maps {
             // Check if this is a temperature-based SOI map (has map_selector from detect_soi_maps_by_selector)
@@ -3590,7 +3623,7 @@ impl EDC15PDetector {
             if is_temp_soi {
                 let flashbank = self.get_flashbank_from_address(map.address);
                 if let Some(fb) = flashbank {
-                    if fb >= 1 && fb <= 3 {
+                    if fb >= 1 && (fb as usize) <= n_blocks {
                         has_temp_soi[(fb - 1) as usize] = true;
                     }
                 }
@@ -3598,7 +3631,7 @@ impl EDC15PDetector {
             }
         }
         
-        log::debug!("🌡️ SOI maps with temperatures: CB2={}, CB3={}, CB5={}", has_temp_soi[0], has_temp_soi[1], has_temp_soi[2]);
+        log::debug!("🌡️ SOI maps with temperatures per block: {:?}", has_temp_soi);
         
         // Filter maps
         let mut result: Vec<DetectedMap> = Vec::new();
@@ -3616,7 +3649,7 @@ impl EDC15PDetector {
                     // Case 2: No temperature in name - FILTER if we have temperature-based SOI maps for this codeblock
                     let flashbank = self.get_flashbank_from_address(map.address);
                     let has_temps = flashbank.map_or(false, |fb| {
-                        fb >= 1 && fb <= 3 && has_temp_soi[(fb - 1) as usize]
+                        fb >= 1 && (fb as usize) <= n_blocks && has_temp_soi[(fb - 1) as usize]
                     });
                     
                     if has_temps {
@@ -3649,13 +3682,18 @@ impl EDC15PDetector {
     /// - 480 bytes (16x15) = Injector duration 01-04 (by address order)
     /// - 570 bytes (19x15) = Injector duration 01-04 (by address order) - alternate size
     /// - 198 bytes (11x9) = Injector duration 05
-    fn fix_injector_duration_maps(&self, maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
-        let valid_sizes = [200, 480, 570, 198, 220];
+    fn fix_injector_duration_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
+        // Identifiant de l'axe régime du fichier, pour orienter toutes les
+        // durées comme la référence 019GD : lignes = IQ, colonnes = régime
+        let rpm_id = early::rpm_axis_id(data, &maps);
+        // 180 (10x9) : Injector duration 05 des premiers PD (019A, 019AJ)
+        let valid_sizes = [200, 480, 570, 198, 220, 180];
         let mut result: Vec<DetectedMap> = Vec::new();
         
         // Collect ALL Injector duration maps by codeblock with addresses sorted
         // Support 3 codeblocks (internal IDs 1, 2, 3 = EDCSuite CB2, CB3, CB5)
-        let mut cb_addrs: [Vec<(u32, usize)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        let n_blocks = self.layout().blocks.len().max(3);
+        let mut cb_addrs: Vec<Vec<(u32, usize)>> = vec![Vec::new(); n_blocks];
         
         // First pass: collect all injector duration map addresses
         for map in &maps {
@@ -3665,7 +3703,7 @@ impl EDC15PDetector {
                     
                     let flashbank = self.get_flashbank_from_address(map.address);
                     if let Some(fb) = flashbank {
-                        if fb >= 1 && fb <= 3 {
+                        if fb >= 1 && (fb as usize) <= n_blocks {
                             cb_addrs[(fb - 1) as usize].push((map.address, map.size));
                         }
                     }
@@ -3701,7 +3739,7 @@ impl EDC15PDetector {
                         dur_mid_count += 1;
                         format!("{:02}", dur_mid_count) // 01, 02, 03, 04
                     },
-                    198 | 220 => "05".to_string(),
+                    180 | 198 | 220 => "05".to_string(),
                     _ => continue,
                 };
                 mapping.insert(*addr, num);
@@ -3711,8 +3749,7 @@ impl EDC15PDetector {
         
         let cb_numbering: Vec<_> = cb_addrs.iter().map(|a| create_numbering(a)).collect();
         
-        log::debug!("🔧 Injector durations: CB2={}, CB3={}, CB5={}", 
-            cb_addrs[0].len(), cb_addrs[1].len(), cb_addrs[2].len());
+        log::debug!("🔧 Injector durations per block: {:?}", cb_addrs.iter().map(|a| a.len()).collect::<Vec<_>>());
         
         // Second pass: process all maps
         for mut map in maps {
@@ -3726,7 +3763,7 @@ impl EDC15PDetector {
                     
                     let flashbank = self.get_flashbank_from_address(map.address);
                     let numbering = flashbank.and_then(|fb| {
-                        if fb >= 1 && fb <= 3 { Some(&cb_numbering[(fb - 1) as usize]) } else { None }
+                        if fb >= 1 && (fb as usize) <= n_blocks { Some(&cb_numbering[(fb - 1) as usize]) } else { None }
                     });
                     
                     if let Some(numbering) = numbering {
@@ -3743,6 +3780,62 @@ impl EDC15PDetector {
                             // Duration 01-05 have signed values (negative timing advance)
                             if num != "00" {
                                 map.data_type = DataType::Int16;
+                            }
+                            // Variantes classées par taille sans pattern (198/220 de
+                            // l'AXR 6L) : description et unité restées génériques
+                            // (« Detected map | X: 0xC5C0 (len=10)… ») → mêmes textes
+                            // que les durées issues des patterns
+                            let generic_desc = map
+                                .description
+                                .as_deref()
+                                .map_or(true, |d| d.starts_with("Detected map"));
+                            if generic_desc {
+                                map.description = Some("Duration | X: Engine speed (rpm) | Y: IQ (mg/st)".to_string());
+                            }
+                            if map.unit.is_none() {
+                                map.unit = Some("Duration".to_string());
+                            }
+
+                            // Orientation uniforme (référence 019GD, affichage
+                            // vérifié) : lignes = IQ, colonnes = régime, X = IQ
+                            // (01-05) ou régime (00). Les softs où l'axe IQ vient
+                            // en premier avec 19 régimes (019AJ) sortaient
+                            // transposés de la règle 570 → cellules brouillées.
+                            if let Some(rpm_id) = rpm_id {
+                                let read = |addr: Option<u32>| -> Option<(u32, u16, usize)> {
+                                    let a = addr?;
+                                    let o = a as usize;
+                                    if o < 4 || o + 2 > data.len() {
+                                        return None;
+                                    }
+                                    let id = u16::from_le_bytes([data[o - 4], data[o - 3]]);
+                                    let len = u16::from_le_bytes([data[o - 2], data[o - 1]]) as usize;
+                                    if len == 0 || len > 32 {
+                                        return None;
+                                    }
+                                    Some((a, id, len))
+                                };
+                                if let (Some(xa), Some(ya)) = (read(map.x_axis_address), read(map.y_axis_address)) {
+                                    let (rpm, iq) = if xa.1 == rpm_id && ya.1 != rpm_id {
+                                        (Some(xa), Some(ya))
+                                    } else if ya.1 == rpm_id && xa.1 != rpm_id {
+                                        (Some(ya), Some(xa))
+                                    } else {
+                                        (None, None)
+                                    };
+                                    if let (Some(rpm), Some(iq)) = (rpm, iq) {
+                                        if iq.2 * rpm.2 * 2 == map.size {
+                                            map.dimensions = MapDimensions::TwoDimensional { rows: iq.2, cols: rpm.2 };
+                                            if num == "00" {
+                                                map.x_axis_address = Some(rpm.0);
+                                                map.y_axis_address = Some(iq.0);
+                                            } else {
+                                                map.x_axis_address = Some(iq.0);
+                                                map.y_axis_address = Some(rpm.0);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             
                             log::debug!("    ✅ Axes: X(IQ)=0x{:X}, Y(RPM)=0x{:X}", 
@@ -3762,6 +3855,11 @@ impl EDC15PDetector {
     /// IMPORTANT: This function should classify ALL maps, including generic ones (with "3D Map Size:")
     fn name_known_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
         let mut classified = Vec::new();
+        // Hors disposition standard, les maps génériques sont conservées pour
+        // la passe de classement par valeurs d'axes (early.rs) ; le filtre
+        // final de `detect` les retire de toute façon.
+        let layout = self.layout();
+        let keep_generic = !layout.is_standard();
         // Clone maps for counting (we need to iterate over maps and also count from all maps)
         let all_maps = maps.clone();
         // Track codeblocks where EGR has already been classified
@@ -4057,15 +4155,7 @@ impl EDC15PDetector {
                     // EGR setpoint (13x16) - allow swapped axis order and RPM ID variant 0xE9
                     let has_expected_dims = (x_len == 13 && y_len == 16) || (x_len == 16 && y_len == 13);
                     if has_expected_dims {
-                        if let Some(map_codeblock) = if map.address >= 0x4C000 && map.address < 0x5C000 {
-                            Some(1)
-                        } else if map.address >= 0x5C000 && map.address < 0x6C000 {
-                            Some(2)
-                        } else if map.address >= 0x6C000 && map.address < 0x7C000 {
-                            Some(3)
-                        } else {
-                            None
-                        } {
+                        if let Some(map_codeblock) = layout.block_index(map.address) {
                             if !egr_codeblocks.contains(&map_codeblock) {
                                 // Swap axes so that X = IQ (mg/st), Y = RPM
                                 std::mem::swap(&mut map.x_axis_address, &mut map.y_axis_address);
@@ -4939,7 +5029,7 @@ impl EDC15PDetector {
             }
             
             // If map was classified, add it; otherwise keep original name (might be from pattern matching)
-            if classified_this || map.name.as_ref().map_or(false, |n| !n.starts_with("3D Map Size:")) {
+            if classified_this || keep_generic || map.name.as_ref().map_or(false, |n| !n.starts_with("3D Map Size:")) {
                 classified.push(map);
             }
         }
@@ -4947,63 +5037,6 @@ impl EDC15PDetector {
         classified
     }
     
-    /// Lit les métadonnées d'un codeblock (ID et adresse de table) comme dans CheckCodeBlock de l'impl C#
-    fn read_codeblock_metadata(&self, data: &[u8], meta_offset: usize) -> Option<(u32, u32)> {
-        // Besoin d'au moins 0x1004 octets après l'offset pour lire la table
-        let end_of_table_offset = meta_offset.checked_add(0x1001)?;
-        let codeblock_addr_offset = meta_offset.checked_add(0x1003)?;
-        if end_of_table_offset >= data.len() || codeblock_addr_offset >= data.len() {
-            return None;
-        }
-
-        let end_of_table = meta_offset
-            + u16::from_le_bytes([data[meta_offset + 0x1000], data[meta_offset + 0x1001]]) as usize;
-
-        // Même garde-fou que l'impl originale : si la table vaut 0xC3C3, on ignore
-        if end_of_table == meta_offset + 0xC3C3 {
-            return None;
-        }
-
-        let codeblock_address = meta_offset
-            + u16::from_le_bytes([data[meta_offset + 0x1002], data[meta_offset + 0x1003]]) as usize;
-
-        if codeblock_address + 1 >= data.len() {
-            return None;
-        }
-
-        let codeblock_id =
-            u16::from_le_bytes([data[codeblock_address], data[codeblock_address + 1]]) as u32;
-
-        Some((codeblock_id, codeblock_address as u32))
-    }
-
-    /// Extrait les IDs de codeblock à partir des offsets standards (0x50000, 0x60000, 0x70000)
-    /// Cela permet d'éviter le mapping fixe 4C000->2, 6C000->5 sur les fichiers où les IDs sont inversés.
-    fn extract_codeblock_ids_from_metadata(&self, data: &[u8]) -> HashMap<u32, (u32, u32)> {
-        let mut ids = HashMap::new();
-        // Clef = adresse de début attendue, valeur = (code_id, address_id dans le fichier)
-        let candidates = [
-            (0x4C000u32, 0x50000usize),
-            (0x5C000u32, 0x60000usize),
-            (0x6C000u32, 0x70000usize),
-        ];
-
-        for (start_addr, meta_offset) in candidates {
-            // Si le fichier est plus petit que l'offset, on passe
-            if meta_offset + 0x1004 > data.len() {
-                continue;
-            }
-
-            if let Some((code_id, address_id)) = self.read_codeblock_metadata(data, meta_offset) {
-                if code_id != 0 {
-                    ids.insert(start_addr, (code_id, address_id));
-                }
-            }
-        }
-
-        ids
-    }
-
     /// Detect codeblocks by analyzing map address ranges
     /// EDC15P files have 2-3 codeblocks, each containing similar maps
     /// 
@@ -5011,119 +5044,34 @@ impl EDC15PDetector {
     /// - Codeblock 2: 0x4C000 - 0x5BFFF (Address ID: 0x51CE6)
     /// - Codeblock 3: 0x5C000 - 0x6BFFF (Address ID: 0x61CE6)
     /// - Codeblock 5: 0x6C000 - 0x7BFFF (Address ID: 0x71CE6)
-    fn detect_codeblocks(&self, maps: &[DetectedMap], data: &[u8]) -> Vec<Codeblock> {
+    fn detect_codeblocks(&self, maps: &[DetectedMap], _data: &[u8]) -> Vec<Codeblock> {
         if maps.is_empty() {
             return Vec::new();
         }
-
-        // Tente de lire les IDs réels dans le binaire (comme VerifyCodeBlocks/CheckCodeBlock)
-        let metadata_ids = self.extract_codeblock_ids_from_metadata(data);
-
-        // EDC15P codeblocks are 0x10000 (64KB) blocks starting at 0x4C000
-        // Check which codeblocks have maps
-        let mut has_cb2 = false; // 0x4C000 - 0x5BFFF
-        let mut has_cb3 = false; // 0x5C000 - 0x6BFFF
-        let mut has_cb5 = false; // 0x6C000 - 0x7BFFF
-        
-        let mut cb2_start = 0x5C000u32;
-        let mut cb2_end = 0x4C000u32;
-        let mut cb3_start = 0x6C000u32;
-        let mut cb3_end = 0x5C000u32;
-        let mut cb5_start = 0x7C000u32;
-        let mut cb5_end = 0x6C000u32;
-
+        // Blocs de la disposition détectée qui contiennent au moins une map
+        // (identifiants lus dans le fichier : 2/3/5 ou 1/2/3 selon les softs)
+        let layout = self.layout();
+        let mut used: Vec<bool> = vec![false; layout.blocks.len()];
         for map in maps {
-            let addr = map.address;
-            let end = addr + map.size as u32;
-            
-            // Determine which codeblock based on EDCSuite address ranges
-            if addr >= 0x4C000 && addr < 0x5C000 {
-                has_cb2 = true;
-                cb2_start = cb2_start.min(addr);
-                cb2_end = cb2_end.max(end);
-            } else if addr >= 0x5C000 && addr < 0x6C000 {
-                has_cb3 = true;
-                cb3_start = cb3_start.min(addr);
-                cb3_end = cb3_end.max(end);
-            } else if addr >= 0x6C000 && addr < 0x7C000 {
-                has_cb5 = true;
-                cb5_start = cb5_start.min(addr);
-                cb5_end = cb5_end.max(end);
-            } else if addr >= 0x40000 && addr < 0x4C000 {
-                // Early addresses go to codeblock 2
-                has_cb2 = true;
-                cb2_start = cb2_start.min(addr);
-                cb2_end = cb2_end.max(end);
-            } else if addr >= 0x7C000 && addr < 0x80000 {
-                // Late addresses go to codeblock 5
-                has_cb5 = true;
-                cb5_start = cb5_start.min(addr);
-                cb5_end = cb5_end.max(end);
+            if let Some(i) = layout.block_index(map.address) {
+                used[i] = true;
             }
         }
-
-        let mut codeblocks = Vec::new();
-
-        // Create codeblocks with EDCSuite-compatible IDs
-        if has_cb2 {
-            let id = metadata_ids.get(&0x4C000).map(|(id, _)| *id).unwrap_or(2);
-                codeblocks.push(Codeblock {
-                id, // Peut être 2 (par défaut) ou la valeur lue dans le fichier
-                start_address: cb2_start,
-                end_address: cb2_end,
-            });
-        }
-        
-        if has_cb3 {
-            let id = metadata_ids.get(&0x5C000).map(|(id, _)| *id).unwrap_or(3);
-            codeblocks.push(Codeblock {
-                id, // Peut être 3 (par défaut) ou la valeur lue dans le fichier
-                start_address: cb3_start,
-                end_address: cb3_end,
-            });
-        }
-        
-        if has_cb5 {
-            let id = metadata_ids.get(&0x6C000).map(|(id, _)| *id).unwrap_or(5);
-        codeblocks.push(Codeblock {
-                id, // Peut être 5 (par défaut) ou la valeur lue dans le fichier
-                start_address: cb5_start,
-                end_address: cb5_end,
-            });
-        }
-
-        log::debug!("📦 Detected {} codeblocks from {} maps", codeblocks.len(), maps.len());
+        let codeblocks: Vec<Codeblock> = layout
+            .blocks
+            .iter()
+            .zip(used.iter())
+            .filter(|(_, &u)| u)
+            .map(|(b, _)| Codeblock {
+                id: b.id,
+                start_address: b.start,
+                end_address: b.end,
+            })
+            .collect();
+        log::debug!("📦 Detected {} codeblocks from {} maps ({:?})", codeblocks.len(), maps.len(), layout.generation);
         for cb in &codeblocks {
-            // Pour le log, on essaie de récupérer l'adresse de la table (address_id) si elle existe
-            let base_key = if cb.start_address < 0x5C000 {
-                0x4C000
-            } else if cb.start_address < 0x6C000 {
-                0x5C000
-            } else {
-                0x6C000
-            };
-
-            if let Some((meta_id, addr_id)) = metadata_ids.get(&base_key) {
-                log::debug!(
-                    "  Codeblock {}: 0x{:X} - 0x{:X} (size: {} bytes, id lue={}, address_id=0x{:X})",
-                    cb.id,
-                    cb.start_address,
-                    cb.end_address,
-                    cb.end_address - cb.start_address,
-                    meta_id,
-                    addr_id
-                );
-            } else {
-                log::debug!(
-                    "  Codeblock {}: 0x{:X} - 0x{:X} (size: {} bytes, id par défaut)",
-                    cb.id,
-                    cb.start_address,
-                    cb.end_address,
-                    cb.end_address - cb.start_address
-                );
-            }
+            log::debug!("  Codeblock {}: 0x{:X} - 0x{:X}", cb.id, cb.start_address, cb.end_address);
         }
-
         codeblocks
     }
 
@@ -5166,24 +5114,9 @@ impl EDC15PDetector {
     
     /// Get codeblock info (id, start, end) from address using fixed EDCSuite ranges
     fn get_codeblock_info_from_address(&self, address: u32) -> (Option<u32>, Option<u32>, Option<u32>) {
-        // EDCSuite codeblock ranges:
-        // - Codeblock 2: 0x4C000 - 0x5BFFF (first flashbank)
-        // - Codeblock 3: 0x5C000 - 0x6BFFF (second flashbank)
-        // - Codeblock 5: 0x6C000 - 0x7BFFF (third flashbank)
-        if address >= 0x4C000 && address < 0x5C000 {
-            (Some(2), Some(0x4C000), Some(0x5C000))
-        } else if address >= 0x5C000 && address < 0x6C000 {
-            (Some(3), Some(0x5C000), Some(0x6C000))
-        } else if address >= 0x6C000 && address < 0x7C000 {
-            (Some(5), Some(0x6C000), Some(0x7C000))
-        } else if address >= 0x40000 && address < 0x4C000 {
-            // Early addresses go to codeblock 2
-            (Some(2), Some(0x4C000), Some(0x5C000))
-        } else if address >= 0x7C000 && address < 0x80000 {
-            // Late addresses go to codeblock 5
-            (Some(5), Some(0x6C000), Some(0x7C000))
-        } else {
-            (None, None, None)
+        match self.layout().block(address) {
+            Some(b) => (Some(b.id), Some(b.start), Some(b.end)),
+            None => (None, None, None),
         }
     }
 

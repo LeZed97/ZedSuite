@@ -40,6 +40,12 @@ pub struct DetectedMap {
     // MapSelector for maps with multiple variations (SOI maps, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map_selector: Option<MapSelectorInfo>,
+    // Lignes de données rangées dans l'ordre INVERSE de l'axe Y (bloc des
+    // durées de certains EDC16) : la ligne fichier 0 porte la dernière
+    // valeur de l'axe. L'éditeur, l'export et le dyno lisent alors les
+    // lignes à l'envers pour rester alignés sur l'axe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_reversed: Option<bool>,
 }
 
 /// Information about a MapSelector attached to a map
@@ -199,6 +205,7 @@ impl DetectedMap {
             category: None,
             subcategory: None,
             map_selector: None,
+            rows_reversed: None,
         }
     }
 }

@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { openExternal, ZEDSUITE_RELEASES_URL } from "@/lib/open-external";
 import { MODAL_GLASS } from "@/lib/modal-glass";
 import { useI18n } from "@/contexts/i18n-context";
 import { downloadAndInstallUpdate, type UpdateInfo } from "@/lib/update";
@@ -105,6 +106,17 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
             </div>
           )}
 
+          {/* Liste complète des mises à jour (sur demande : pour ceux que le détail intéresse) */}
+          <p className="mb-5 text-xs text-slate-400">
+            {t.updateDialog.allReleases}{" "}
+            <button
+              type="button"
+              onClick={() => void openExternal(ZEDSUITE_RELEASES_URL)}
+              className="underline underline-offset-2 text-slate-200 hover:text-white"
+            >
+              github.com/LeZed97/ZedSuite/releases
+            </button>
+          </p>
           {downloading && (
             <div className="mb-5">
               <div className="flex justify-between text-xs text-slate-400 mb-1.5">

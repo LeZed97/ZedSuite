@@ -31,6 +31,11 @@ export async function openProjectDir(fileId: string): Promise<void> {
   return invoke("open_project_dir", { fileId });
 }
 
+/** Total size in bytes of the projects folder (every project and version). */
+export async function projectsDirSize(): Promise<number> {
+  return invoke<number>("projects_dir_size");
+}
+
 const BASE = { baseDir: BaseDirectory.AppData };
 const PROJECTS_DIR = "projects";
 

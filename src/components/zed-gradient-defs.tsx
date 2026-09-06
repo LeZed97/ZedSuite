@@ -28,6 +28,35 @@ export function ZedFileIcon({
   );
 }
 
+/** Icône presse-papiers à liste (tracés lucide ClipboardList) : contour au
+ *  dégradé de marque, lignes de la liste dans une couleur unie (blanc en
+ *  thème sombre, noir en clair). Fenêtre de la feuille de route. */
+export function ZedClipboardIcon({
+  className,
+  barColor = "#ffffff",
+}: {
+  className?: string;
+  barColor?: string;
+}) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" stroke="url(#zedIconGradient)" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" stroke="url(#zedIconGradient)" />
+      <path d="M12 11h4" stroke={barColor} />
+      <path d="M12 16h4" stroke={barColor} />
+      <path d="M8 11h.01" stroke={barColor} />
+      <path d="M8 16h.01" stroke={barColor} />
+    </svg>
+  );
+}
+
 export default function ZedGradientDefs() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>

@@ -192,6 +192,26 @@ function scanCodeblockForDTCs(data: Uint8Array, codeblock: CodeblockInfo): Detec
   return dtcs;
 }
 
+const V41_SIGNATURE = [0x67, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x56, 0x34, 0x2e, 0x31];
+
+function hasV41SignatureAt(data: Uint8Array, pos: number): boolean {
+  if (pos + V41_SIGNATURE.length > data.length) return false;
+  for (let i = 0; i < V41_SIGNATURE.length; i++) {
+    if (data[pos + i] !== V41_SIGNATURE[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Disposition classique : signature V4.1 un octet après un bloc de code à
+ * 0x50000 / 0x60000 / 0x70000 (codeblocks 2 / 3 / 5 de 64 Ko).
+ */
+function hasStandardV41Layout(data: Uint8Array): boolean {
+  const standard = [0x50001, 0x60001, 0x70001].some((pos) => hasV41SignatureAt(data, pos));
+  const compact = [0x58001, 0x64001].some((pos) => hasV41SignatureAt(data, pos));
+  return standard && !compact;
+}
+
 /**
  * Detect all DTCs in an EDC15P file
  */
@@ -201,6 +221,21 @@ export function detectEDC15PDTCs(data: Uint8Array): DTCDetectionResult {
   // Validate file size (EDC15P files are typically 512KB)
   if (data.length < 0x70000) {
     errors.push(`File too small for EDC15P (${data.length} bytes, expected at least 458752 bytes)`);
+    return {
+      success: false,
+      ecuType: 'EDC15P',
+      codeblocks: [],
+      dtcs: [],
+      errors,
+    };
+  }
+
+  // Dispositions compacte (blocs de 0xC000 signés V4.1 à 0x58001/0x64001,
+  // ex. 038906019AJ) et précoce (aucune signature V4.1, 038906019A) : la
+  // table des DTC n'y a pas le format 8 octets à marqueur 0x23 — les plages
+  // classiques y lisaient des entrées fantaisistes. Non supportées pour l'instant.
+  if (!hasStandardV41Layout(data)) {
+    errors.push('EDC15P early software layout: DTC table format not supported yet');
     return {
       success: false,
       ecuType: 'EDC15P',

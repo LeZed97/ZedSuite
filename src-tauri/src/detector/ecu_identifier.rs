@@ -275,6 +275,25 @@ impl ECUIdentifier {
                     });
                 }
 
+                // EDC15P précoce (1999, 038906019A / 0281001691) : pas de
+                // signature V4.1, quatre blocs de calibration de 32 Ko
+                // terminés par 3C 3C 41 E4, référence VAG 038906019x en clair
+                if Self::has_edc15_characteristics(data)
+                    && Self::contains_sequence(data, b"038906019")
+                    && crate::detector::ecu::bosch::edc15p::layout::has_early_block_markers(data)
+                {
+                    log::debug!("512KB early EDC15P (no V4.1 signature, 32KB blocks)");
+                    return Some(ECUIdentification {
+                        manufacturer: ECUManufacturer::Bosch,
+                        ecu_type: ECUType::EDC15P,
+                        variant: Some("VAG TDI (early PD)".to_string()),
+                        software_version: Self::extract_vag_sw_number(data).map(|(sw, _)| sw),
+                        hardware_version: hw_number,
+                        part_number: Self::extract_vag_part_number(data),
+                        confidence: 0.80,
+                    });
+                }
+
                 // Check for EDC16 patterns
                 if Self::has_edc16_characteristics(data) {
                     let (ecu_type, variant) = Self::detect_edc16_variant(data, hw_prefix);

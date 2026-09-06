@@ -52,6 +52,7 @@ export interface DetectedMapLite {
   y_axis_offset?: number | null;
   is_little_endian?: boolean;
   codeblock_id?: number | null;
+  rows_reversed?: boolean | null;
 }
 
 export type MapEditLite = { map_address: number; payload?: any };
@@ -260,8 +261,10 @@ function orientMap(
   let v: number[][] = [];
   for (let r = 0; r < rows; r++) {
     const row: number[] = [];
+    // Bloc Duration de certains EDC16 : lignes fichier à l'envers de l'axe Y
+    const fileRow = map.rows_reversed ? rows - 1 - r : r;
     for (let c = 0; c < cols; c++) {
-      const addr = map.address + (r * cols + c) * cellSize;
+      const addr = map.address + (fileRow * cols + c) * cellSize;
       row.push(decodeCell(bytes, addr, dt, cellBig) * factor + offset);
     }
     v.push(row);

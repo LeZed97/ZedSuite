@@ -55,6 +55,70 @@ fn http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("http client: {e}"))
 }
 
+/// Feuille de route publique : ROADMAP.md du dépôt (anglais) et ses
+/// traductions ROADMAP.<fr|es|it|de>.md, lues sur GitHub (branche master)
+/// pour être à jour sans nouvelle version ; copies embarquées à la
+/// compilation en repli hors ligne. Affichée dans la langue de l'app.
+const ROADMAP_RAW_BASE: &str = "https://raw.githubusercontent.com/LeZed97/ZedSuite/master/";
+
+fn roadmap_file_name(lang: &str) -> &'static str {
+    match lang.to_ascii_lowercase().as_str() {
+        "fr" => "ROADMAP.fr.md",
+        "es" => "ROADMAP.es.md",
+        "it" => "ROADMAP.it.md",
+        "de" => "ROADMAP.de.md",
+        _ => "ROADMAP.md",
+    }
+}
+
+fn bundled_roadmap(lang: &str) -> &'static str {
+    match lang.to_ascii_lowercase().as_str() {
+        "fr" => include_str!("../../ROADMAP.fr.md"),
+        "es" => include_str!("../../ROADMAP.es.md"),
+        "it" => include_str!("../../ROADMAP.it.md"),
+        "de" => include_str!("../../ROADMAP.de.md"),
+        _ => include_str!("../../ROADMAP.md"),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RoadmapContent {
+    pub markdown: String,
+    /// "github" (à jour) ou "bundled" (copie livrée avec cette version)
+    pub source: String,
+}
+
+async fn fetch_roadmap_online(lang: &str) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("http client: {e}"))?;
+    let url = format!("{ROADMAP_RAW_BASE}{}", roadmap_file_name(lang));
+    let res = client
+        .get(&url)
+        .header("User-Agent", "ZedSuite")
+        .send()
+        .await
+        .map_err(|e| format!("network: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("http: {e}"))?;
+    res.text().await.map_err(|e| format!("body: {e}"))
+}
+
+#[tauri::command]
+pub async fn fetch_roadmap(lang: String) -> Result<RoadmapContent, String> {
+    match fetch_roadmap_online(&lang).await {
+        Ok(md) if md.trim_start().starts_with('#') => Ok(RoadmapContent {
+            markdown: md,
+            source: "github".to_string(),
+        }),
+        Ok(_) | Err(_) => Ok(RoadmapContent {
+            markdown: bundled_roadmap(&lang).to_string(),
+            source: "bundled".to_string(),
+        }),
+    }
+}
+
 #[tauri::command]
 pub async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     let current_version = app.package_info().version.to_string();

@@ -6,7 +6,7 @@
 
 **Open source map editor for VAG-group Bosch EDC15/EDC16 ECUs — 100% local.**
 
-Drop in an ECU dump and ZedSuite finds the maps for you — Driver Wish, Turbo Boost, N75, SOI, torque limiters and the rest. Edit them in a table, on a 2D graph or a 3D surface, or straight in the hexdump. Keep versions, compare them, disable DTCs, fix the checksum, export your binary or a WinOLS mappack.
+Drop in an ECU dump and ZedSuite finds the maps for you — Driver Wish, Turbo Boost, N75, SOI, torque limiters and the rest. Edit them in a table, on a 2D graph or a 3D surface, or straight in the hexdump. Keep versions, compare them, disable or re-enable DTCs, fix the checksum, export your binary or a WinOLS mappack.
 
 No account, no cloud, no limits: everything runs locally and your files stay on your computer.
 
@@ -16,7 +16,7 @@ No account, no cloud, no limits: everything runs locally and your files stay on 
 
 | ECU | Detection |
 |-----|-----------|
-| Bosch EDC15P | pattern + codeblock based |
+| Bosch EDC15P | pattern + codeblock based, including the early 1999-2002 PD software |
 | Bosch EDC15VM+ | pattern + codeblock based |
 | Bosch EDC16U1 | signature based |
 | Bosch EDC16U31 | signature based |
@@ -30,12 +30,12 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 
 - **Automatic map detection** — embedded Rust engine, per-family detectors
 - **Detection completeness check** — a confidence badge shows whether every map expected for the ECU family was found, with the missing ones detailed in one click
-- **Map editor** — table, 2D graph and 3D surface views, WinOLS-style shortcuts
+- **Map editor** — table, 2D graph and 3D surface views, keyboard navigation and copy/paste between maps, absolute, additive or percent edits, propagation to similar maps, WinOLS-style shortcuts
 - **Hexdump editor** — virtualized, minimap, modification highlighting vs original
 - **Versioning** — "Ori" + named versions per project, compare view
 - **Lean storage** — original binary + a modification file per version, rebuilt automatically at export
 - **Virtual dyno** — power/torque estimation from the maps, printable PDF report
-- **DTC Off** — detect and disable diagnostic trouble codes
+- **DTC on/off** — read the fault-code table, disable codes and re-enable them later (EDC15 and EDC16)
 - **Solutions** — one-click patches (launch control, …); deliberately kept to a minimum so the release wouldn't take even more time, more may come later
 - **Checksum correction** — EDC15 family and EDC16, implemented natively
 - **Brand auto-fill** — embedded ECU reference database (Bosch/VAG part numbers)
@@ -43,7 +43,7 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 - **Automatic updates** — the app checks GitHub once a day for new releases; one click to install
 - **3 themes** — dark, light and OLED, for every kind of screen
 - **Any screen size** — resizable map panel and browser-style zoom in the editor, from laptops to ultrawides
-- **Two languages** — English and French; adding another is easy (a single translations file), and map names are deliberately untranslated — they stay in English
+- **Five languages** — English, French, Spanish, Italian and German, for the app and the installer; adding another is easy (a single translations file), and map names are deliberately untranslated — they stay in English
 
 ## 🔧 Working with modified files
 
@@ -77,6 +77,16 @@ Community contributions are welcome: **new ECU detectors** are the most valuable
 - **Dilemma**, who released [VAGEDCSuite](https://github.com/Blackfrosch/VAGEDCSuite) about 14 years ago. That software is how I practiced and learned this craft: automatic map recognition and a dead-simple interface, at a time when nothing else offered that. It is an enormous piece of work for a tool born in the 2000s! (The man must be an alien) A large part of ZedSuite's EDC15 detection logic is directly inherited from the work done in EDCSuite.
 - **Skalda**, who [kept VAGEDCSuite alive](https://github.com/skaldamramra/VAGEDCSuite) by updating the map detection and adding a lot of EDC15 maps. My own private build of EDCSuite started from his version, and it is what I used daily until I finally had the time to build ZedSuite.
 
+## ⬇️ Download
+
+Grab the installer from the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest): in the **Assets** section, download the `ZedSuite_x.y.z_x64-setup.exe` file and run it (on a 32-bit Windows, take `ZedSuite_x.y.z_x86-setup.exe` instead). The app then keeps itself up to date on its own.
+
+ZedSuite requires **Windows 10 or 11**. It is not compatible with older versions of Windows: adapting it to Windows 7 would have required a lot more work.
+
+## 🗺️ Roadmap
+
+What is being worked on, what is planned and what users asked for: [ROADMAP.md](ROADMAP.md) (also in [French](ROADMAP.fr.md), [Spanish](ROADMAP.es.md), [Italian](ROADMAP.it.md) and [German](ROADMAP.de.md)). The same page opens inside the app, in the app language, from the dashboard (roadmap button next to the help button).
+
 ## 📫 Contact
 
 - 🌐 Website — [zedperf.com](https://zedperf.com)
@@ -93,12 +103,6 @@ ZedSuite is free and always will be. If it saved you time or a WinOLS licence, y
 - **BTC** (Bitcoin): `bc1qj2e42vpphx73xguspqd9c6uqrs9ra0yywcq97a`
 - **SOL / USDC** (Solana): `AqjSzxi7pBkwcCVkyVxBVLTk9TgPmui71bNgVgNLWrJC`
 - **TRX** (Tron): `TRDgrasP7yaEKcz54r8spbmgZdRBFpNerW`
-
-## ⬇️ Download
-
-Grab the installer from the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest): in the **Assets** section, download the `ZedSuite_x.y.z_x64-setup.exe` file and run it (on a 32-bit Windows, take `ZedSuite_x.y.z_x86-setup.exe` instead). The app then keeps itself up to date on its own.
-
-ZedSuite requires **Windows 10 or 11**. It is not compatible with older versions of Windows: adapting it to Windows 7 would have required a lot more work.
 
 ## 🚀 Getting started (development)
 

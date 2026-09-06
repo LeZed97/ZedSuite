@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +32,13 @@ import { HexdumpViewer, type MapRegion } from "@/components/hexdump-viewer";
 import { EditorToolbar, type ModifyOperation } from "@/components/editor-toolbar";
 import { MapViewer, clearMapDataCache, buildPlot3DTicks } from "@/components/map-viewer";
 import { SettingsMenu } from "@/components/settings-menu";
-import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
+import {
+  setAppZoom,
+  reapplyAppZoom,
+  setAppMinWidth,
+  editorMinLogicalWidth,
+  EDITOR_SIDEBAR_DEFAULT_WIDTH,
+} from "@/lib/webview-zoom";
 import { DTCModal } from "@/components/dtc-modal";
 import { SolutionsModal } from "@/components/solutions-modal";
 import { getSolutionImplementation } from "@/lib/ecu/solutions";
@@ -45,6 +51,7 @@ import { MODAL_GLASS, MODAL_GLASS_LIGHT, TOAST_GLASS, TOAST_GLASS_LIGHT } from "
 import { StyledSelect } from "@/components/styled-select";
 import { formatEcuWithManufacturer } from "@/lib/ecu-manufacturer";
 import { isBigEndianEcu } from "@/lib/ecu-endianness";
+import { resolveMapCellLayout } from "@/lib/map-cell-layout";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PromptModal } from "@/components/prompt-modal";
 import { correctChecksumByEcuType, isChecksumSupported, ChecksumResult } from "@/lib/ecu/bosch/checksums";
@@ -101,6 +108,8 @@ interface MapData {
   y_label?: string;
   unit?: string;
   y_axis_inverted?: boolean;
+  // Lignes fichier dans l'ordre inverse de l'axe Y (bloc Duration de certains EDC16)
+  rows_reversed?: boolean;
 }
 
 interface ProjectData {
@@ -1060,6 +1069,7 @@ interface PreviewWindowProps {
   }>;
   dataVersion: number; // Déclenche un re-render quand les données changent
   mapEasyViewStatus: Map<number, boolean>;
+  mapViewModes: Map<number, "text" | "2d" | "3d">;
   zIndex: number;
   layout: { x: number; y: number; width: number; height: number };
   onLayoutChange: (layout: { x: number; y: number; width: number; height: number }) => void;
@@ -1086,6 +1096,7 @@ function PreviewWindow({
   plot3DDataMap,
   dataVersion,
   mapEasyViewStatus,
+  mapViewModes,
   zIndex,
   layout,
   onLayoutChange,
@@ -1123,6 +1134,8 @@ function PreviewWindow({
   const activeMap = activeMapAddress ? openMaps.find(m => m.address === activeMapAddress) : null;
   const activeMapData = activeMapAddress ? plot3DDataMap.get(activeMapAddress) : null;
   const isActiveMapEasyView = activeMapAddress ? mapEasyViewStatus.get(activeMapAddress) || false : false;
+  // Map déjà en vue 3D : l'aperçu ferait doublon (même règle qu'en EasyView)
+  const isActiveMap3D = activeMapAddress ? mapViewModes.get(activeMapAddress) === "3d" : false;
   // Étiquettes d'axes du preview : la surface est tracée en indices
   // (espacement uniforme), les vraies valeurs viennent en ticktext
   const previewTicks = activeMapData && activeMapData.canShow3D
@@ -1353,15 +1366,15 @@ function PreviewWindow({
         className="flex-1 overflow-hidden bg-transparent relative"
         style={{ height: layout.height - 40 }}
       >
-        {activeMap && isActiveMapEasyView ? (
-          // Map en mode EasyView - Preview non disponible
+        {activeMap && (isActiveMapEasyView || isActiveMap3D) ? (
+          // Map en mode EasyView ou déjà en vue 3D - Preview non disponible
           <div
             className="w-full h-full flex items-center justify-center"
             style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
           >
             <div className="text-center">
               <Eye className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">{t.preview.notAvailableEasyView}</p>
+              <p className="text-sm">{isActiveMapEasyView ? t.preview.notAvailableEasyView : t.preview.notAvailable3D}</p>
             </div>
           </div>
         ) : activeMap && activeMapData && activeMapData.canShow3D ? (
@@ -1567,6 +1580,72 @@ function EditorPageContent() {
     theme === 'oled' &&
     (editorWallpaper === 'lines' || editorWallpaper === 'editor' || editorWallpaper === 'custom');
 
+  // Couche de fond mémorisée : sans ça, chaque re-rendu de l'éditeur (une
+  // cellule modifiée) réconciliait le fond animé WebGL (FloatingLines) ; le
+  // même élément d'un rendu à l'autre est ignoré par React.
+  const wallpaperLayer = useMemo(() => (
+    <>
+      {/* Ambient glassmorphism halos — the editor's native wallpaper */}
+      {editorWallpaper === 'editor' && (
+        <div aria-hidden className="absolute inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: theme === 'light' ? 0.14 : 0.65 }}>
+          <div className="absolute rounded-full" style={{ width: 520, height: 520, left: -120, top: -140, filter: 'blur(90px)', background: 'radial-gradient(circle, #ef444488, transparent 70%)' }} />
+          <div className="absolute rounded-full" style={{ width: 620, height: 620, right: -160, top: 120, filter: 'blur(90px)', background: 'radial-gradient(circle, #2563eb77, transparent 70%)' }} />
+          <div className="absolute rounded-full" style={{ width: 480, height: 480, left: '32%', bottom: -200, filter: 'blur(90px)', background: 'radial-gradient(circle, #7c3aed66, transparent 70%)' }} />
+        </div>
+      )}
+      {/* Traits animés clairs : canvas inversé, couleurs pré-inversées */}
+      {editorWallpaper === 'lines-light' && (
+        <div aria-hidden className="absolute inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: 0.45, filter: 'invert(1)' }}>
+          <FloatingLines
+            linesGradient={['#046dc3', '#078e8e', '#7e7307']}
+            enabledWaves={['top', 'middle', 'bottom']}
+            lineCount={[6, 8, 6]}
+            lineDistance={[5, 5, 6]}
+            animationSpeed={0.8}
+            interactive={false}
+            parallax={false}
+            parallaxStrength={0.15}
+          />
+        </div>
+      )}
+      {/* Fond « traits animés » (option manuelle) */}
+      {editorWallpaper === 'lines' && (
+        <div aria-hidden className="absolute inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: 0.45 }}>
+          <FloatingLines
+            linesGradient={['#9a3412', '#7f1d1d', '#312e81']}
+            enabledWaves={['top', 'middle', 'bottom']}
+            lineCount={[6, 8, 6]}
+            lineDistance={[5, 5, 6]}
+            animationSpeed={0.8}
+            interactive={false}
+            parallax={false}
+            parallaxStrength={0.15}
+          />
+        </div>
+      )}
+      {/* Image personnalisée de l'utilisateur : plein écran en cover, léger
+          voile suivant le thème pour garder fenêtres et panneaux lisibles */}
+      {editorWallpaper === 'custom' && customEditorWallpaper && (
+        <>
+          <div
+            aria-hidden
+            className="absolute inset-0 z-0 pointer-events-none"
+            style={{
+              backgroundImage: `url(${customEditorWallpaper})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+          <div
+            aria-hidden
+            className="absolute inset-0 z-0 pointer-events-none"
+            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.18)' }}
+          />
+        </>
+      )}
+    </>
+  ), [editorWallpaper, theme, customEditorWallpaper]);
+
   // Translucent sidebar surface; the ambient halos glow through it.
   // OLED stays near-opaque dark to preserve the true-black look.
   const getSidebarBg = () => {
@@ -1744,14 +1823,19 @@ function EditorPageContent() {
   const handleAxisLabelsChange = useCallback((mapAddress: number, axes: { x?: string[]; y?: string[] }) => {
     setMapAxisLabels(prev => {
       const existing = prev.get(mapAddress) || {};
+      // Tableau vide = axe revenu à l'origine → on retire l'entrée
       const merged = {
-        x: axes.x !== undefined ? axes.x : existing.x,
-        y: axes.y !== undefined ? axes.y : existing.y,
+        x: axes.x !== undefined ? (axes.x.length > 0 ? axes.x : undefined) : existing.x,
+        y: axes.y !== undefined ? (axes.y.length > 0 ? axes.y : undefined) : existing.y,
       };
       if (!merged.x && !merged.y) {
         if (!prev.has(mapAddress)) return prev;
         const next = new Map(prev);
         next.delete(mapAddress);
+        // Retirer un axe édité est aussi une modification à enregistrer
+        if (!isLoadingVersionRef.current) {
+          setTimeout(() => setHasUnsavedChanges(true), 0);
+        }
         return next;
       }
       const prevEntry = prev.get(mapAddress);
@@ -1778,10 +1862,14 @@ function EditorPageContent() {
   // when we re-encode display-coord edits into file bytes we need to know
   // whether to mirror the row/col index. Kept in a ref so updates don't re-render.
   const mapAxesFlipRef = useRef<Map<number, { rowsReversed: boolean; colsReversed: boolean }>>(new Map());
+  // Incrémenté quand une fenêtre remonte son orientation : les octets édités
+  // (hexdump, checksum) doivent être recalculés, la ref seule ne re-rend pas
+  const [flipRevision, setFlipRevision] = useState(0);
   const handleAxesFlipChange = useCallback((mapAddress: number, flip: { rowsReversed: boolean; colsReversed: boolean }) => {
     const existing = mapAxesFlipRef.current.get(mapAddress);
     if (existing && existing.rowsReversed === flip.rowsReversed && existing.colsReversed === flip.colsReversed) return;
     mapAxesFlipRef.current.set(mapAddress, flip);
+    setFlipRevision((r) => r + 1);
   }, []);
 
   // Store original file data (never modified) for version switching
@@ -1868,7 +1956,14 @@ function EditorPageContent() {
   useEffect(() => {
     setAppZoom(editorZoom / 100);
     localStorage.setItem("zedsuite-editor-zoom", String(editorZoom));
+    // Filet de sécurité : si le « retour à 100 % » du dashboard (ou d'un
+    // remontage de l'éditeur) arrive après coup, on ré-applique le zoom
+    // mémorisé une fois la navigation retombée.
+    const retries = [400, 1500].map((delay) =>
+      window.setTimeout(() => reapplyAppZoom(editorZoom / 100), delay),
+    );
     return () => {
+      retries.forEach((id) => window.clearTimeout(id));
       setAppZoom(1);
     };
   }, [editorZoom]);
@@ -1941,7 +2036,6 @@ function EditorPageContent() {
   // True when this project's mappack has already been exported (loaded from
   // the server, kept in sync after an export) — the export confirmation
   // modal must not open again in that case.
-  const [mappackExported, setMappackExported] = useState(false);
   // Export button hint: when the mappack becomes unlocked the button shows
   // its "Export" label for 2 seconds, then collapses to the icon only
   // (the label re-expands on hover).
@@ -1982,6 +2076,8 @@ function EditorPageContent() {
 
   // Checksum modal state
   const [isChecksumModalOpen, setIsChecksumModalOpen] = useState(false);
+  // Pastille « Fichier exporté » (coche verte) après l'enregistrement du .bin
+  const [isExportComplete, setIsExportComplete] = useState(false);
   const [isChecksumModalClosing, setIsChecksumModalClosing] = useState(false);
   const [isChecksumCalculating, setIsChecksumCalculating] = useState(false);
   const [isChecksumComplete, setIsChecksumComplete] = useState(false);
@@ -2096,7 +2192,7 @@ function EditorPageContent() {
   // Note: Les maps modifiées sont trackées via allMapModifications qui est déjà version-specific
 
   // Sidebar resize state
-  const [sidebarWidth, setSidebarWidth] = useState(335);
+  const [sidebarWidth, setSidebarWidth] = useState(EDITOR_SIDEBAR_DEFAULT_WIDTH);
   const isResizing = useRef(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -2107,7 +2203,7 @@ function EditorPageContent() {
   // barre) : le redimensionnement de la fenêtre ne les modifie pas, donc pas
   // de boucle.
   useEffect(() => {
-    setAppMinWidth(TOOLBAR_MIN_CSS_WIDTH + sidebarWidth, editorZoom / 100);
+    setAppMinWidth(editorMinLogicalWidth(sidebarWidth, editorZoom), 1);
   }, [sidebarWidth, editorZoom]);
 
   // Sync sidebar width to CSS variable for global Toaster positioning
@@ -2449,6 +2545,7 @@ function EditorPageContent() {
     data: Uint8Array,
     mods: Map<number, Record<string, number>>,
     axisEdits: Map<number, { x?: string[]; y?: string[] }>,
+    flipsOverride?: Map<number, { rowsReversed: boolean; colsReversed: boolean }>,
   ): void => {
     if (!projectData) return;
 
@@ -2548,10 +2645,15 @@ function EditorPageContent() {
       const mapInfo = maps.find((m: MapData) => m.address === mapAddress);
       if (!mapInfo) return;
 
-      const dims = mapInfo.dimensions?.TwoDimensional;
-      const rows = dims?.rows || 1;
-      const cols = dims?.cols || (mapInfo.dimensions?.OneDimensional?.length ?? 1);
-      const totalCells = rows * cols;
+      // Dimensions d'AFFICHAGE (celles des clés de changedCells) et index
+      // fichier : mêmes règles que la lecture du MapViewer. Avec les
+      // dimensions API en ligne-major, les cellules des maps transposées
+      // (torque limiter, IQ by MAF/MAP, EGR 13x16) étaient écrites au
+      // mauvais endroit dès la deuxième ligne.
+      const layout = resolveMapCellLayout(mapInfo);
+      const rows = layout.rows;
+      const cols = layout.cols;
+      const totalCells = layout.apiRows * layout.apiCols;
       if (totalCells === 0) return;
       const cellSize = Math.max(1, Math.floor(mapInfo.size / totalCells));
 
@@ -2559,7 +2661,11 @@ function EditorPageContent() {
       const isLittleEndian = (mapInfo as { is_little_endian?: boolean }).is_little_endian === true;
       const useBigEndian = !isLittleEndian && ecuBigEndian;
 
-      const flip = mapAxesFlipRef.current.get(mapAddress);
+      // Orientation PERSISTÉE avec l'edit (une map fermée n'a pas de fenêtre
+      // pour la remonter) : sans elle, les octets d'un edit rejoué à la
+      // réouverture tombaient sur les lignes miroir et le checksum enregistré
+      // ne validait plus le fichier (v4-Golf5 du banc).
+      const flip = flipsOverride?.get(mapAddress) ?? mapAxesFlipRef.current.get(mapAddress);
       const rowsReversed = flip?.rowsReversed ?? false;
       const colsReversed = flip?.colsReversed ?? false;
 
@@ -2574,8 +2680,9 @@ function EditorPageContent() {
         // the bottommost file row on maps where Y axis was reversed for display.
         const row = rowsReversed ? (rows - 1 - displayRow) : displayRow;
         const col = colsReversed ? (cols - 1 - displayCol) : displayCol;
+        if (row < 0 || row >= rows || col < 0 || col >= cols) return;
 
-        const linearOffset = (row * cols + col) * cellSize;
+        const linearOffset = layout.cellIndex(row, col) * cellSize;
         const byteAddress = mapAddress + linearOffset;
         if (byteAddress < 0 || byteAddress + cellSize > data.length) return;
 
@@ -2603,13 +2710,20 @@ function EditorPageContent() {
   }, [projectData, mapDisplaySettingsStore]);
 
   // Build a file_data byte array that includes the current in-memory map edits.
+  // Octets d'origine en Uint8Array, convertis UNE fois : la conversion du
+  // number[] de 2 Mo à chaque reconstruction coûtait plus que les édits.
+  const baseFileBytes = useMemo(
+    () => (projectData?.file_data ? new Uint8Array(projectData.file_data) : null),
+    [projectData?.file_data],
+  );
   const buildEditedFileData = useCallback((): number[] => {
-    if (!projectData?.file_data) return [];
-    const data = new Uint8Array(projectData.file_data);
-    if (allMapModifications.size === 0 && mapAxisLabels.size === 0) return Array.from(data);
+    void flipRevision; // recalcul quand une fenêtre remonte son orientation
+    if (!projectData?.file_data || !baseFileBytes) return [];
+    if (allMapModifications.size === 0 && mapAxisLabels.size === 0) return projectData.file_data;
+    const data = new Uint8Array(baseFileBytes);
     applyEditsToFileData(data, allMapModifications, mapAxisLabels);
     return Array.from(data);
-  }, [projectData, allMapModifications, mapAxisLabels, applyEditsToFileData]);
+  }, [projectData, baseFileBytes, allMapModifications, mapAxisLabels, applyEditsToFileData, flipRevision]);
 
   // Reconstruit les octets COMPLETS d'une version pour la comparaison :
   // base (fichier importé de la version, sinon original) + modifications
@@ -2629,6 +2743,7 @@ function EditorPageContent() {
       const edits = res.data.edits || [];
       const mods = new Map<number, Record<string, number>>();
       const axisEdits = new Map<number, { x?: string[]; y?: string[] }>();
+      const flips = new Map<number, { rowsReversed: boolean; colsReversed: boolean }>();
       edits.forEach((edit: { map_address: number; payload?: Record<string, unknown> }) => {
         const mapAddress = edit.map_address;
         const payload = (edit.payload || {}) as {
@@ -2636,6 +2751,7 @@ function EditorPageContent() {
           changes?: { address: number; newValue: number }[];
           changedCells?: { row: number; col: number; value: number }[];
           axisLabels?: { x?: string[]; y?: string[] };
+          flip?: { rowsReversed?: boolean; colsReversed?: boolean };
         };
         if (mapAddress === -1 && payload.type === "binary") {
           (payload.changes || []).forEach((c) => {
@@ -2650,6 +2766,9 @@ function EditorPageContent() {
           });
           mods.set(mapAddress, cells);
         }
+        if (payload.flip) {
+          flips.set(mapAddress, { rowsReversed: !!payload.flip.rowsReversed, colsReversed: !!payload.flip.colsReversed });
+        }
         const axisLabels = payload.axisLabels;
         if (axisLabels && (Array.isArray(axisLabels.x) || Array.isArray(axisLabels.y))) {
           axisEdits.set(mapAddress, {
@@ -2658,7 +2777,7 @@ function EditorPageContent() {
           });
         }
       });
-      applyEditsToFileData(data, mods, axisEdits);
+      applyEditsToFileData(data, mods, axisEdits, flips);
     } catch (error) {
       console.error("buildVersionFileData error", error);
     }
@@ -2670,7 +2789,22 @@ function EditorPageContent() {
   // map n'apparaissent ni en valeur ni en rouge/bleu dans l'hexdump tant
   // qu'aucune version n'est enregistrée (file_data n'est écrit qu'à la
   // sauvegarde/export).
-  const hexdumpDisplayData = useMemo(() => buildEditedFileData(), [buildEditedFileData]);
+  // Version DIFFÉRÉE pour l'affichage (hexdump, comparaison, surveillance du
+  // checksum) : la reconstruction des 2 Mo passe après le rendu de la cellule
+  // modifiée au lieu de le bloquer — avec un fond animé chaque frappe faisait
+  // sauter l'animation. Les enregistrements/exports utilisent toujours
+  // buildEditedFileData(), synchrone et à jour.
+  const deferredMapModifications = useDeferredValue(allMapModifications);
+  const deferredAxisLabels = useDeferredValue(mapAxisLabels);
+  const deferredFlipRevision = useDeferredValue(flipRevision);
+  const hexdumpDisplayData = useMemo(() => {
+    void deferredFlipRevision;
+    if (!projectData?.file_data || !baseFileBytes) return [];
+    if (deferredMapModifications.size === 0 && deferredAxisLabels.size === 0) return projectData.file_data;
+    const data = new Uint8Array(baseFileBytes);
+    applyEditsToFileData(data, deferredMapModifications, deferredAxisLabels);
+    return Array.from(data);
+  }, [projectData?.file_data, baseFileBytes, deferredMapModifications, deferredAxisLabels, applyEditsToFileData, deferredFlipRevision]);
 
   // Surveillance du checksum : re-vérification (débouncée) à chaque changement
   // des octets courants — édits de maps, DTC, import, changement de version.
@@ -2694,20 +2828,21 @@ function EditorPageContent() {
       // correctChecksumByEcuType ne modifie pas son entrée (copie interne) :
       // fixed === 0 signifie que tous les checksums du fichier sont déjà bons
       const res = correctChecksumByEcuType(projectData.ecu_type, hexdumpDisplayData);
-      setChecksumStatus(res ? (res.info.fixed === 0 ? 'ok' : 'bad') : 'unsupported');
+      // variant 'unknown' (disposition EDC15 non reconnue) = pas de correction possible
+      setChecksumStatus(res && res.info.variant !== 'unknown' ? (res.info.fixed === 0 ? 'ok' : 'bad') : 'unsupported');
     }, 400);
     return () => clearTimeout(timer);
   }, [hexdumpDisplayData, currentVersionId, projectData?.ecu_type, projectData?.file_data?.length]);
 
   // Actual export function (called after checksum decision)
-  const performExport = (withChecksum: boolean = false, correctedData?: number[] | null) => {
+  const performExport = async (withChecksum: boolean = false, correctedData?: number[] | null): Promise<boolean> => {
     if (!projectData?.file_data) {
       toast({
         title: t.errors.exportError,
         description: t.errors.exportNoData,
         variant: "destructive",
       });
-      return;
+      return false;
     }
 
     setLoadingAction("export");
@@ -2729,7 +2864,7 @@ function EditorPageContent() {
 
       // Boîte de dialogue native "Enregistrer sous" (le webview n'a pas de
       // téléchargements navigateur)
-      void saveBytesToFile(uint8Array, fileName);
+      return await saveBytesToFile(uint8Array, fileName);
 
     } catch {
       toast({
@@ -2740,6 +2875,7 @@ function EditorPageContent() {
     } finally {
       setLoadingAction(null);
     }
+    return false;
   };
 
   // Handle export button click - check limits then show checksum modal
@@ -2802,21 +2938,35 @@ function EditorPageContent() {
       setIsChecksumModalClosing(false);
       setIsChecksumCalculating(false);
       setIsChecksumComplete(false);
+      setIsExportComplete(false);
       setChecksumCorrectedData(null);
     }, 200);
+  };
+
+  // Exporte puis, si le fichier a bien été enregistré, affiche la même
+  // pastille de confirmation que le mappack (coche verte) avant de refermer
+  const finishExport = async (withChecksum: boolean = false, correctedData?: number[] | null) => {
+    const saved = await performExport(withChecksum, correctedData);
+    if (!saved) return;
+    setIsChecksumModalClosing(false);
+    setIsChecksumCalculating(false);
+    setIsChecksumComplete(false);
+    setIsExportComplete(true);
+    setIsChecksumModalOpen(true);
+    setTimeout(() => closeChecksumModal(), 900);
   };
 
   // Export without checksum
   const handleExportWithoutChecksum = () => {
     closeChecksumModal();
-    performExport(false);
+    void finishExport(false);
   };
 
   // Checksum déjà bon : export tel quel, mais le nom porte _ChecksumOK
   // (même garantie qu'après une correction manuelle)
   const handleExportChecksumAlreadyOk = () => {
     closeChecksumModal();
-    performExport(true);
+    void finishExport(true);
   };
 
   // Export with checksum correction
@@ -2844,7 +2994,7 @@ function EditorPageContent() {
           // Auto-close modal and export after showing complete state
           setTimeout(() => {
             closeChecksumModal();
-            performExport(true, correctedData);
+            void finishExport(true, correctedData);
           }, 800);
         } else {
           // ChecksumTypeError - could not determine correct algorithm
@@ -2855,12 +3005,12 @@ function EditorPageContent() {
             variant: "destructive",
           });
           closeChecksumModal();
-          performExport(false);
+          void finishExport(false);
         }
       } else {
         // ECU type not supported for checksum
         closeChecksumModal();
-        performExport(false);
+        void finishExport(false);
       }
     }, 100);
   };
@@ -3254,9 +3404,6 @@ function EditorPageContent() {
             if (response.data.mappack_unlocked !== undefined) {
               setMappackUnlocked(response.data.mappack_unlocked);
             }
-            if (response.data.mappack_exported !== undefined) {
-              setMappackExported(response.data.mappack_exported === true);
-            }
 
             // Tri de la liste des maps mémorisé avec le projet
             const storedSort = response.data.map_sort_mode;
@@ -3353,7 +3500,6 @@ function EditorPageContent() {
           .then(statusData => {
             setMappackUnlocked(statusData.unlocked === true);
             setMappackIsPro(statusData.isPro === true);
-            setMappackExported(statusData.exported === true);
             setMappackExportEnabled(statusData.exportEnabled !== false);
             if (typeof statusData.mappackPrice === "number") {
               setMappackPrice(statusData.mappackPrice);
@@ -3541,6 +3687,9 @@ function EditorPageContent() {
             });
           }
 
+          if (edit.payload?.flip) {
+            mapAxesFlipRef.current.set(mapAddress, { rowsReversed: !!edit.payload.flip.rowsReversed, colsReversed: !!edit.payload.flip.colsReversed });
+          }
           if (Object.keys(changedCells).length > 0) {
             modificationsMap.set(mapAddress, changedCells);
           }
@@ -3775,6 +3924,8 @@ function EditorPageContent() {
     const sourceDims = sourceMap.dimensions?.TwoDimensional;
     const sourceRows = sourceDims?.rows || 1;
     const sourceCols = sourceDims?.cols || (sourceMap.dimensions?.OneDimensional?.length ?? 1);
+    // Disposition d'affichage de la source (clés de changedCells) → index fichier
+    const sourceLayout = resolveMapCellLayout(sourceMap);
 
     // ── Lecture fidèle à applyEditsToFileData ─────────────────────────
     // Les valeurs d'allMapModifications sont des valeurs AFFICHÉES (raw ×
@@ -3814,9 +3965,9 @@ function EditorPageContent() {
     // orientation d'affichage).
     const srcFlip = mapAxesFlipRef.current.get(sourceMapAddress);
     const fileOffsetOf = (row: number, col: number): number => {
-      const fileRow = srcFlip?.rowsReversed ? (sourceRows - 1 - row) : row;
-      const fileCol = srcFlip?.colsReversed ? (sourceCols - 1 - col) : col;
-      return fileRow * sourceCols + fileCol;
+      const fileRow = srcFlip?.rowsReversed ? (sourceLayout.rows - 1 - row) : row;
+      const fileCol = srcFlip?.colsReversed ? (sourceLayout.cols - 1 - col) : col;
+      return sourceLayout.cellIndex(fileRow, fileCol);
     };
     // Propager le flip de la source vers une cible jamais ouverte : sans ça,
     // applyEditsToFileData (export/sauvegarde) dé-flipperait les clés copiées
@@ -4121,6 +4272,8 @@ function EditorPageContent() {
       ...(axes.y ? { y: axes.y } : {}),
     };
   }
+  const flip = mapAxesFlipRef.current.get(mapAddress);
+  if (flip) payload.flip = { rowsReversed: flip.rowsReversed, colsReversed: flip.colsReversed };
   return { mapAddress, payload };
 });
 if (binaryModifications.size > 0) {
@@ -4198,6 +4351,8 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
       ...(axes.y ? { y: axes.y } : {}),
     };
   }
+  const flip = mapAxesFlipRef.current.get(mapAddress);
+  if (flip) payload.flip = { rowsReversed: flip.rowsReversed, colsReversed: flip.colsReversed };
   return { mapAddress, payload };
 });
 if (binaryModifications.size > 0) {
@@ -4278,8 +4433,8 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
   };
 
   // Export the project's ORIGINAL mappack as a WinOLS-compatible JSON file.
-  // Server-side rules: mappack unlocked, once per project, daily limit,
-  // export must be enabled for the ECU, price set per-ECU (blue coins).
+  // Version desktop : export libre, autant de fois qu'on veut (la limite
+  // « une fois par projet » venait de la version web payante).
   // Uses detection_data (per-project display customizations are not included).
   const [isMappackExportModalOpen, setIsMappackExportModalOpen] = useState(false);
   const [isMappackExportModalClosing, setIsMappackExportModalClosing] = useState(false);
@@ -4292,10 +4447,6 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     if (isExportingMappack) return;
     if (!projectData?.fileId) {
       toast({ title: t.toolbar.exportMappackError, variant: "destructive" });
-      return;
-    }
-    if (mappackExported) {
-      toast({ title: t.toolbar.exportMappackAlready, variant: "destructive" });
       return;
     }
     if (!mappackUnlocked) {
@@ -4358,9 +4509,6 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
         if (errCode === "export_disabled_for_ecu") {
           setMappackExportEnabled(false);
         }
-        if (errCode === "already_exported") {
-          setMappackExported(true);
-        }
         closeMappackExportModal();
         toast({ title: message, variant: "destructive" });
         return;
@@ -4378,7 +4526,6 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       // Show the success state in the modal, then auto-close (checksum-modal flow)
       setIsExportingMappack(false);
       setIsMappackExportComplete(true);
-      setMappackExported(true);
       const mapsCount = response.headers.get("X-Maps-Count") ?? "?";
       setTimeout(() => {
         closeMappackExportModal();
@@ -4508,6 +4655,8 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       ...(axes.y ? { y: axes.y } : {}),
     };
   }
+  const flip = mapAxesFlipRef.current.get(mapAddress);
+  if (flip) payload.flip = { rowsReversed: flip.rowsReversed, colsReversed: flip.colsReversed };
   return { mapAddress, payload };
 });
 if (binaryModifications.size > 0) {
@@ -4626,6 +4775,8 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
       ...(axes.y ? { y: axes.y } : {}),
     };
   }
+  const flip = mapAxesFlipRef.current.get(mapAddress);
+  if (flip) payload.flip = { rowsReversed: flip.rowsReversed, colsReversed: flip.colsReversed };
   return { mapAddress, payload };
 });
 if (binaryModifications.size > 0) {
@@ -4714,6 +4865,14 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     if (!res) return;
     const { correctedData, info } = res;
 
+    // Disposition EDC15 inconnue : aucune table de checksum ne s'applique,
+    // le fichier est rendu intact — ne pas annoncer « déjà valide ».
+    if (info.variant === 'unknown') {
+      setChecksumStatus('unsupported');
+      toast({ title: t.checksum.statusUnsupported, variant: 'destructive' });
+      return;
+    }
+
     if (info.fixed === 0) {
       setChecksumStatus('ok');
       toast({ title: t.checksum.alreadyValidTitle, description: t.checksum.alreadyValidDescription });
@@ -4783,29 +4942,23 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     setShowChecksumSaveConfirm(false);
     const ecuType = projectData?.ecu_type;
     if (!ecuType) return;
-    await handleSaveRef.current?.();
-    // Attendre la FIN réelle du rechargement de version (lancé en
-    // fire-and-forget par l'effet de changement de version), puis le
-    // relâchement des drapeaux de chargement — jamais un délai fixe.
-    await new Promise((r) => setTimeout(r, 400));
-    await versionLoadPromiseRef.current;
-    const settleStart = Date.now();
-    while (isLoadingVersionRef.current && Date.now() - settleStart < 10000) {
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    await new Promise((r) => setTimeout(r, 300));
-    // Recalculer via la ref (closure du DERNIER rendu), puis CONTRE-VÉRIFIER
-    // les octets finaux ; si une écriture tardive a écrasé la correction,
-    // refaire une passe — l'équivalent exact du clic manuel.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Corriger D'ABORD sur l'état en mémoire (toutes les modifications de
+    // maps et binaires présentes), puis enregistrer UNE fois. L'ancien
+    // ordre (enregistrer, puis recalculer) vidait les modifications à
+    // l'enregistrement et le checksum était calculé sur un fichier SANS les
+    // edits de maps : les octets enregistrés validaient l'original, et le
+    // projet ressortait NOK à la réouverture (N75 du v4-Golf5 du banc).
+    const current = buildEditedFileDataRef.current?.() ?? [];
+    const check = current.length ? correctChecksumByEcuType(ecuType, current) : null;
+    if (check && check.info.fixed > 0) {
+      // performChecksumRecalc corrige les octets, les ajoute aux modifications
+      // binaires, puis enregistre (même chemin que le bouton manuel)
       await performChecksumRecalcRef.current?.();
-      await new Promise((r) => setTimeout(r, 800));
-      const finalData = buildEditedFileDataRef.current?.() ?? [];
-      const check = finalData.length ? correctChecksumByEcuType(ecuType, finalData) : null;
-      if (!check || check.info.fixed === 0) break;
+    } else {
+      setChecksumStatus('ok');
+      await handleSaveRef.current?.();
     }
   };
-
   // Auto-save functionality.
   // Le compteur de modifications est lu via une ref : l'interval capture ses
   // closures au montage du timer, et les états React (Maps remplacées par les
@@ -5440,64 +5593,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
 
   return (
     <div className="flex h-screen overflow-hidden relative" style={{ background: getBackgroundColor() }}>
-      {/* Ambient glassmorphism halos — the editor's native wallpaper */}
-      {editorWallpaper === 'editor' && (
-        <div aria-hidden className="absolute inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: theme === 'light' ? 0.14 : 0.65 }}>
-          <div className="absolute rounded-full" style={{ width: 520, height: 520, left: -120, top: -140, filter: 'blur(90px)', background: 'radial-gradient(circle, #ef444488, transparent 70%)' }} />
-          <div className="absolute rounded-full" style={{ width: 620, height: 620, right: -160, top: 120, filter: 'blur(90px)', background: 'radial-gradient(circle, #2563eb77, transparent 70%)' }} />
-          <div className="absolute rounded-full" style={{ width: 480, height: 480, left: '32%', bottom: -200, filter: 'blur(90px)', background: 'radial-gradient(circle, #7c3aed66, transparent 70%)' }} />
-        </div>
-      )}
-      {/* Traits animés clairs : canvas inversé, couleurs pré-inversées */}
-      {editorWallpaper === 'lines-light' && (
-        <div aria-hidden className="absolute inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: 0.45, filter: 'invert(1)' }}>
-          <FloatingLines
-            linesGradient={['#046dc3', '#078e8e', '#7e7307']}
-            enabledWaves={['top', 'middle', 'bottom']}
-            lineCount={[6, 8, 6]}
-            lineDistance={[5, 5, 6]}
-            animationSpeed={0.8}
-            interactive={false}
-            parallax={false}
-            parallaxStrength={0.15}
-          />
-        </div>
-      )}
-      {/* Fond « traits animés » (option manuelle) */}
-      {editorWallpaper === 'lines' && (
-        <div aria-hidden className="absolute inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: 0.45 }}>
-          <FloatingLines
-            linesGradient={['#9a3412', '#7f1d1d', '#312e81']}
-            enabledWaves={['top', 'middle', 'bottom']}
-            lineCount={[6, 8, 6]}
-            lineDistance={[5, 5, 6]}
-            animationSpeed={0.8}
-            interactive={false}
-            parallax={false}
-            parallaxStrength={0.15}
-          />
-        </div>
-      )}
-      {/* Image personnalisée de l'utilisateur : plein écran en cover, léger
-          voile suivant le thème pour garder fenêtres et panneaux lisibles */}
-      {editorWallpaper === 'custom' && customEditorWallpaper && (
-        <>
-          <div
-            aria-hidden
-            className="absolute inset-0 z-0 pointer-events-none"
-            style={{
-              backgroundImage: `url(${customEditorWallpaper})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
-          <div
-            aria-hidden
-            className="absolute inset-0 z-0 pointer-events-none"
-            style={{ backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.18)' }}
-          />
-        </>
-      )}
+      {wallpaperLayer}
       {/* Film grain for glass tactility (off on pure black) */}
       {editorWallpaper !== 'black' && (
         <div aria-hidden className="absolute inset-0 z-0 pointer-events-none" style={{
@@ -6734,6 +6830,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
                   plot3DDataMap={mapPlot3DDataRef.current}
                   dataVersion={previewDataVersion}
                   mapEasyViewStatus={mapEasyViewStatus}
+                  mapViewModes={mapViewModes}
                   zIndex={previewZIndex}
                   layout={previewLayout}
                   onLayoutChange={setPreviewLayout}
@@ -7288,6 +7385,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           isClosing={isChecksumModalClosing}
           isCalculating={isChecksumCalculating}
           calculationComplete={isChecksumComplete}
+          exportComplete={isExportComplete}
         />
       )}
 
@@ -7468,13 +7566,6 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     </div>
   );
 }
-
-/** Largeur (px CSS) nécessaire à la BARRE D'OUTILS seule, marge comprise.
- *  La largeur de la barre latérale — que l'utilisateur peut élargir — s'y
- *  ajoute à l'exécution, et le total est converti selon le zoom courant. */
-// +60 px depuis l'ajout du bouton HiLo/LoHi dans la pastille 8b/16b : en
-// dessous, la barre recouvrait les contrôles de fenêtre à largeur minimale.
-const TOOLBAR_MIN_CSS_WIDTH = 1095;
 
 // Dégradé « modifié » de la liste des maps (texte en bg-clip-text). Sur le
 // thème clair, une map ouverte a un fond rouge translucide : le dégradé

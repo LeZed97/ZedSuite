@@ -42,7 +42,10 @@ pub fn run() {
             commands::list_ecus,
             commands::save_binary_file,
             commands::open_project_dir,
+            commands::projects_dir_size,
+            commands::open_external_url,
             update::check_for_update,
+            update::fetch_roadmap,
             update::download_and_install_update,
         ])
         .run(tauri::generate_context!())

@@ -464,7 +464,47 @@ function tdi412002ChecksumSearch(fileBuffer: Uint8Array, fileSize: number): Chec
 /**
  * Detect which checksum variant to use based on file structure
  */
+/**
+ * Signature V4.1 des codeblocks EDC15P/VM : 0x67 FF FF FF FF FF FF 'V4.1',
+ * placée un octet après le début du bloc de code signé (0x50001/0x70001 sur
+ * la disposition classique, 0x58001/0x64001/0x70001 sur la disposition
+ * compacte à blocs de 0xC000 des premiers PD, ex. 038906019AJ).
+ */
+const V41_SIGNATURE = [0x67, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x56, 0x34, 0x2E, 0x31];
+
+function findV41Signatures(fileBuffer: Uint8Array): number[] {
+  const out: number[] = [];
+  const n = V41_SIGNATURE.length;
+  for (let i = 0; i + n <= fileBuffer.length; i++) {
+    if (fileBuffer[i] !== 0x67) continue;
+    let ok = true;
+    for (let k = 1; k < n; k++) {
+      if (fileBuffer[i + k] !== V41_SIGNATURE[k]) { ok = false; break; }
+    }
+    if (ok) out.push(i);
+  }
+  return out;
+}
+
+/**
+ * Detect which checksum variant to use based on file structure
+ *
+ * - aucune signature V4.1 : disposition inconnue (ex. 038906019A de 1999,
+ *   blocs de 32 Ko à marqueur 3C 3C 41 E4) → on ne touche PAS au fichier ;
+ * - signatures à 0x58001 / 0x64001 (blocs de 0xC000) → tdi41v2, la seule
+ *   table qui suit ces blocs (vérifié sur 019AJ : 7 sommes justes) ; la
+ *   variante 2002 ne voyait que le bloc 0x70000 et corrompait le reste ;
+ * - sinon disposition classique : 2002 (marqueur V4.1 texte) puis tdi41.
+ */
 function detectChecksumVariant(fileBuffer: Uint8Array, fileSize: number): 'tdi41' | 'tdi41v2' | 'tdi41_2002' | 'unknown' {
+  const signatures = findV41Signatures(fileBuffer);
+  if (signatures.length === 0) {
+    return 'unknown';
+  }
+  if (signatures.some((pos) => pos === 0x58001 || pos === 0x64001)) {
+    return 'tdi41v2';
+  }
+
   // Check for 2002 variant marker (V4.1 string)
   let chkStoreAddr = 0x4FFFB;
   while (chkStoreAddr + 16 < fileSize) {
@@ -538,6 +578,22 @@ export function correctEDC15PChecksum(fileData: number[]): { info: ChecksumInfo;
 
   // Detect which variant to use
   const variant = detectChecksumVariant(fileBuffer, fileSize);
+
+  // Disposition inconnue : aucune des tables connues ne s'applique, corriger
+  // quand même écrirait des sommes à des adresses arbitraires (36 octets
+  // corrompus sur un 038906019A). On rend le fichier intact.
+  if (variant === 'unknown') {
+    return {
+      info: {
+        result: ChecksumResult.ChecksumTypeError,
+        found: 0,
+        fixed: 0,
+        matched: 0,
+        variant: 'unknown',
+      },
+      correctedData: [...fileData],
+    };
+  }
 
   let info: ChecksumInfo;
 

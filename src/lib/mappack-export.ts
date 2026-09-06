@@ -24,6 +24,7 @@
  */
 
 import { isBigEndianEcu } from "./ecu-endianness";
+import { resolveMapCellLayout } from "./map-cell-layout";
 
 /** Superset of the editor MapData with the raw detection fields */
 export interface ExportMapData {
@@ -49,7 +50,10 @@ export interface ExportMapData {
   unit?: string | null;
   y_axis_inverted?: boolean | null;
   data_type?: string;
+  rows_reversed?: boolean | null;
   is_little_endian?: boolean;
+  // EDC15 : numéro de codeblock, ajouté au nom exporté comme dans l'app
+  codeblock_id?: number | null;
 }
 
 type WinolsMap = Record<string, string>;
@@ -97,8 +101,68 @@ function mapRowsCols(m: ExportMapData): { rows: number; cols: number } {
   const two = m.dimensions?.TwoDimensional;
   if (two && two.rows > 0 && two.cols > 0) return { rows: two.rows, cols: two.cols };
   const one = m.dimensions?.OneDimensional;
-  if (one && one.length > 0) return { rows: one.length, cols: 1 };
+  // 1D : UNE ligne de N colonnes, comme l'app et WinOLS (l'axe X porte les
+  // N valeurs). Exportée en N lignes x 1 colonne, la map perdait son axe X
+  // (émis seulement si Columns > 1) et WinOLS lisait les deux axes à $0 :
+  // 65535 partout (MAP Linearisation signalée).
+  if (one && one.length > 0) return { rows: 1, cols: one.length };
   return { rows: 1, cols: 1 };
+}
+
+interface ExportAxis {
+  address?: number | null;
+  correction?: number | null;
+  offset?: number | null;
+  label?: string | null;
+}
+
+/**
+ * Disposition FICHIER de la map telle que WinOLS doit la lire, alignée sur
+ * la lecture du MapViewer (lib/map-cell-layout) : lignes/colonnes réelles et
+ * axe porté par chaque dimension.
+ *
+ * Les dimensions API ne suffisent pas : les EGR EDC16 sont annoncées 13x16
+ * alors que le fichier est 16 lignes (régime) x 13 colonnes (IQ), le torque
+ * limiter EDC15 21x3 est lu 3 lignes x 21 colonnes, les IQ by MAF/MAP 13x16
+ * en 16x13… Exportées avec les dimensions API, WinOLS les lisait entrelacées
+ * (EGR du Superb signalée). Les maps lues transposées (Drivers wish
+ * MJD6, N75 13x16) gardent leurs dimensions API avec leurs axes API : WinOLS
+ * les montre transposées par rapport à l'app mais justes.
+ */
+function exportLayout(m: ExportMapData): { rows: number; cols: number; xAxis: ExportAxis; yAxis: ExportAxis } {
+  const apiX: ExportAxis = { address: m.x_axis_address, correction: m.x_axis_correction, offset: m.x_axis_offset, label: m.x_label };
+  const apiY: ExportAxis = { address: m.y_axis_address, correction: m.y_axis_correction, offset: m.y_axis_offset, label: m.y_label };
+  const two = m.dimensions?.TwoDimensional;
+  if (!two || two.rows <= 0 || two.cols <= 0) {
+    const { rows, cols } = mapRowsCols(m);
+    return { rows, cols, xAxis: apiX, yAxis: apiY };
+  }
+  const layout = resolveMapCellLayout({
+    name: m.name,
+    description: m.description,
+    size: m.size ?? 0,
+    data_type: m.data_type,
+    rows_reversed: m.rows_reversed === true,
+    dimensions: m.dimensions,
+  });
+  const name = (m.name || "").toLowerCase();
+  const rowMajorSwapped =
+    name.includes("torque limiter") || name.includes("iq by map") || name.includes("iq by maf") ||
+    (name.includes("injector duration") && !name.includes("selector"));
+  if (layout.axesSwapped && !rowMajorSwapped) {
+    // Transposition standard (display[r][c] = file[c][r]) : le fichier reste
+    // en dimensions API, avec les axes API
+    return { rows: two.rows, cols: two.cols, xAxis: apiX, yAxis: apiY };
+  }
+  // Lecture ligne-major sur les dimensions d'affichage : l'axe X de l'app
+  // porte les colonnes, l'axe Y les lignes (mêmes règles que le MapViewer)
+  const swapAxes = layout.axesSwapped && !name.includes("boost target map");
+  return {
+    rows: layout.rows,
+    cols: layout.cols,
+    xAxis: swapAxes ? apiY : apiX,
+    yAxis: swapAxes ? apiX : apiY,
+  };
 }
 
 /**
@@ -111,10 +175,12 @@ function buildFolderNames(maps: ExportMapData[]): Map<string, string> {
     new Set(maps.map((m) => (m.category || "Other").trim() || "Other"))
   ).sort((a, b) => a.localeCompare(b));
   const folders = new Map<string, string>();
-  categories.forEach((cat, i) => {
+  categories.forEach((cat) => {
     // Pas de préfixe numérique : WinOLS trie les dossiers par nom et le
-    // « 4-… » cassait le classement (sur demande, tous calculateurs)
-    folders.set(cat, cat);
+    // « 4-… » cassait le classement (sur demande, tous calculateurs).
+    // « Other » seul est préfixé « Z- » pour rester en bas, comme dans
+    // la liste de l'app.
+    folders.set(cat, cat === "Other" ? "Z-Other" : cat);
   });
   return folders;
 }
@@ -125,18 +191,25 @@ function buildWinolsMap(
   folderName: string,
   ds?: MappackDisplaySettings
 ): WinolsMap {
-  const { rows, cols } = mapRowsCols(m);
+  const { rows, cols, xAxis, yAxis } = exportLayout(m);
   // Miroirs choisis par l'utilisateur : l'axe X s'exporte croissant par
   // défaut (bBackwards 0), l'axe Y de haut en bas comme l'app (bBackwards 1) ;
   // un miroir inverse le drapeau correspondant.
   const xMirror = ds?.xAxis?.mirror === true;
-  const yMirror = ds?.yAxis?.mirror === true;
-  const name = m.name || `Map ${hexAddr(m.address)}`;
+  // Lignes stockées à l'envers de l'axe Y (bloc Duration de certains EDC16) :
+  // WinOLS lit les lignes dans l'ordre du fichier, on retourne l'axe pour
+  // qu'il reste aligné (même effet qu'un miroir demandé par l'utilisateur).
+  const yMirror = (ds?.yAxis?.mirror === true) !== (m.rows_reversed === true);
+  // Même libellé que la liste de l'app : « Nom [codeblock N] » sur EDC15
+  // (plusieurs jeux de maps par fichier), rien sur EDC16 (sur demande)
+  const baseName = m.name || `Map ${hexAddr(m.address)}`;
+  const withCodeblock = /^EDC15/i.test(ecuType) && m.codeblock_id != null;
+  const name = withCodeblock ? `${baseName} [codeblock ${m.codeblock_id}]` : baseName;
   const dt = (m.data_type || "").toLowerCase();
   const signed = dt === "int16" || dt === "int8";
 
-  const hasX = typeof m.x_axis_address === "number" && m.x_axis_address! > 0 && cols > 1;
-  const hasY = typeof m.y_axis_address === "number" && m.y_axis_address! > 0 && rows > 1;
+  const hasX = typeof xAxis.address === "number" && xAxis.address > 0 && cols > 1;
+  const hasY = typeof yAxis.address === "number" && yAxis.address > 0 && rows > 1;
   const axesOrg = dataOrgForAxes(ecuType);
 
   return {
@@ -169,11 +242,11 @@ function buildWinolsMap(
     "Fieldvalues.Factor": fmtFactor(m.correction_factor),
     "Fieldvalues.Offset": fmtOffset(m.offset),
     "Fieldvalues.StartAddr.Cpu": hexAddr(m.address),
-    "AxisX.Name": hasX ? m.x_label || "" : "",
+    "AxisX.Name": hasX ? xAxis.label || "" : "",
     "AxisX.IdName": "",
-    "AxisX.Unit": hasX ? m.x_label || "" : "",
-    "AxisX.Factor": hasX ? fmtFactor(m.x_axis_correction) : "1.000000",
-    "AxisX.Offset": hasX ? fmtOffset(m.x_axis_offset) : "0",
+    "AxisX.Unit": hasX ? xAxis.label || "" : "",
+    "AxisX.Factor": hasX ? fmtFactor(xAxis.correction) : "1.000000",
+    "AxisX.Offset": hasX ? fmtOffset(xAxis.offset) : "0",
     "AxisX.Radix": "10",
     "AxisX.bBackwards": xMirror ? "1" : "0",
     "AxisX.bReciprocal": "0",
@@ -181,13 +254,13 @@ function buildWinolsMap(
     "AxisX.Precision": "0",
     "AxisX.DataSrc": "eRom",
     "AxisX.DataHeader": "0",
-    "AxisX.DataAddr.Cpu": hasX ? hexAddr(m.x_axis_address) : "$0",
+    "AxisX.DataAddr.Cpu": hasX ? hexAddr(xAxis.address) : "$0",
     "AxisX.DataOrg": axesOrg,
-    "AxisY.Name": hasY ? m.y_label || "" : "",
+    "AxisY.Name": hasY ? yAxis.label || "" : "",
     "AxisY.IdName": "",
-    "AxisY.Unit": hasY ? m.y_label || "" : "",
-    "AxisY.Factor": hasY ? fmtFactor(m.y_axis_correction) : "1.000000",
-    "AxisY.Offset": hasY ? fmtOffset(m.y_axis_offset) : "0",
+    "AxisY.Unit": hasY ? yAxis.label || "" : "",
+    "AxisY.Factor": hasY ? fmtFactor(yAxis.correction) : "1.000000",
+    "AxisY.Offset": hasY ? fmtOffset(yAxis.offset) : "0",
     "AxisY.Radix": "10",
     "AxisY.bBackwards": yMirror ? "0" : "1",
     "AxisY.bReciprocal": "0",
@@ -195,7 +268,7 @@ function buildWinolsMap(
     "AxisY.Precision": "0",
     "AxisY.DataSrc": "eRom",
     "AxisY.DataHeader": "0",
-    "AxisY.DataAddr.Cpu": hasY ? hexAddr(m.y_axis_address) : "$0",
+    "AxisY.DataAddr.Cpu": hasY ? hexAddr(yAxis.address) : "$0",
     "AxisY.DataOrg": axesOrg,
   };
 }
@@ -240,7 +313,7 @@ export function buildWinolsMappack(
       buildWinolsMap(
         m,
         ecuType,
-        folders.get((m.category || "Other").trim() || "Other") || "1-Other",
+        folders.get((m.category || "Other").trim() || "Other") || "Z-Other",
         displaySettings?.[String(m.address)]
       )
     ),

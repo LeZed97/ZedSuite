@@ -79,7 +79,7 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
-pub const DETECTOR_VERSION: u32 = 34;
+pub const DETECTOR_VERSION: u32 = 37;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -223,8 +223,9 @@ fn build_expected_report(
         ("Boost correction by temperature", 1, "Boost correction by temperature"),
         // Corrélation « 1 N75 par Boost target » INFIRMÉE au banc (Eos et
         // G5 run trophy : 4 boost targets / 3 N75 ; l'inverse existe aussi).
-        // Minimum observé sur tous les U31/U34 stock : 2.
-        ("N75 duty cycle", 2, "N75 duty cycle"),
+        // Minimum : 1 — certains U31 n'en ont qu'une (Owen STOCK BEW,
+        // confirmé avec un autre logiciel le 06/09).
+        ("N75 duty cycle", 1, "N75 duty cycle"),
     ];
 
     // EDC16U1 : détecteur remis au niveau (banc du 28/08 : fenêtres 1 Mo,
@@ -252,7 +253,20 @@ fn build_expected_report(
         .map(|(label, expected, prefix)| ExpectedMapStatus {
             label: label.to_string(),
             expected: if is_u1 && label == "N75 duty cycle" { 1 } else { expected },
-            found: count_starts(prefix),
+            // « Torque Limiter » : seule la map principale compte (4 x 20-23),
+            // pas la petite 2x2 qui l'accompagne — sinon un fichier où la
+            // principale manque (03G906016JD) affichait 100 % (sur demande).
+            found: if label == "Torque Limiter" {
+                maps.iter()
+                    .filter(|m| m.name.as_deref().map(|n| n.starts_with(prefix)).unwrap_or(false))
+                    .filter(|m| match &m.dimensions {
+                        crate::models::MapDimensions::TwoDimensional { rows, cols } => rows * cols > 4,
+                        _ => false,
+                    })
+                    .count()
+            } else {
+                count_starts(prefix)
+            },
         })
         .collect();
 
@@ -351,7 +365,29 @@ fn build_expected_report_edc15p(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapS
         ("VCDS Diagnostic MAP Limit (3)", 3, 1, "VCDS Diagnostic MAP Limit"),
         ("VCDS Diagnostic Torque Limit", 1, 0, "VCDS Diagnostic Torque Limit"),
         ("VCDS Diagnostic Display offsets (3)", 3, 2, "Display offset"),
+        // Paire de courbes 20 points par codeblock (seuils IQ d'activation et
+        // de coupure), présente sur les 31 fichiers du banc
+        ("EGR hysteresis (2)", 2, 1, "EGR hysteresis"),
     ];
+
+    // Générations précoces (1999-2002 : 038906019A, 019AJ…) : une seule map
+    // SOI par codeblock (pas de paquet de 10 par température), pas de Smoke
+    // limiter ni de MAP/MAF switch, un seul Start IQ.
+    let soi_total = count(1, "Start of injection (SOI)");
+    let early_generation = soi_total < 10 * n_cb;
+    let rules: Vec<(&str, usize, u8, &str)> = if early_generation {
+        rules
+            .into_iter()
+            .filter(|(label, _, _, _)| *label != "Smoke limiter" && *label != "MAP/MAF switch")
+            .map(|(label, per_cb, mode, pat)| match label {
+                "Start of injection (paquet de 10)" => ("Start of injection (>=1)", 1, mode, pat),
+                "Start IQ" => (label, 1, mode, pat),
+                _ => (label, per_cb, mode, pat),
+            })
+            .collect()
+    } else {
+        rules
+    };
 
     let report: Vec<ExpectedMapStatus> = rules
         .into_iter()
@@ -493,6 +529,60 @@ pub async fn save_binary_file(
         }
         None => Ok(false),
     }
+}
+
+/// Open a ZedSuite page in the default browser (releases list, source, roadmap,
+/// forum thread). Only a few known prefixes are accepted.
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    // Dépôt ZedSuite, fil du forum et site ZedPerf (liens de la feuille de route)
+    const ALLOWED_PREFIXES: [&str; 4] = [
+        "https://github.com/LeZed97/ZedSuite",
+        "https://www.ecuconnections.com/forum/",
+        "https://zedperf.com",
+        "https://linktr.ee/zedperf",
+    ];
+    if !ALLOWED_PREFIXES.iter().any(|p| url.starts_with(p))
+        || url.chars().any(|c| c.is_whitespace() || c == '"' || c == '&' || c == '^')
+    {
+        return Err("URL not allowed".to_string());
+    }
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Total size in bytes of the projects folder (every project, every
+/// version), shown next to the file count on the dashboard.
+#[tauri::command]
+pub fn projects_dir_size(app: tauri::AppHandle) -> Result<u64, String> {
+    use tauri::Manager;
+
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("projects");
+    if !dir.is_dir() {
+        return Ok(0);
+    }
+    Ok(dir_size(&dir))
+}
+
+fn dir_size(dir: &std::path::Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.metadata() {
+            Ok(meta) if meta.is_dir() => dir_size(&entry.path()),
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        })
+        .sum()
 }
 
 /// Open a project's folder in the Windows Explorer.

@@ -49,6 +49,16 @@ const SOURCE_COLORS = [
   { dark: "#c084fc", light: "#9333ea" },
 ];
 
+// Format de date du PDF selon la langue de l'app (les libellés viennent
+// des traductions, seule la date dépend de la locale).
+const PDF_LOCALES: Record<string, string> = {
+  EN: "en-GB",
+  FR: "fr-FR",
+  ES: "es-ES",
+  IT: "it-IT",
+  DE: "de-DE",
+};
+
 export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
   const { t, language } = useI18n();
   const { settings } = useSettings();
@@ -291,7 +301,7 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
           rpmLabel: d.unitRpm,
           hpLabel: d.unitPower,
           nmLabel: "Nm",
-          locale: language === "FR" ? "fr-FR" : "en-GB",
+          locale: PDF_LOCALES[language] ?? "en-GB",
           peaksTitle: d.pdfPeaks,
           peaksHeader: [d.pdfCurve, d.pdfPower, d.pdfTorque, d.pdfBoostMax],
           paramsLabel: d.pdfParams,

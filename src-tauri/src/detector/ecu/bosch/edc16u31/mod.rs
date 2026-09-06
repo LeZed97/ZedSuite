@@ -4114,8 +4114,10 @@ impl EDC16U31Detector {
         // The axis validators (pressure 600-1100 mbar + monotonic RPM) gate
         // false positives, so the accepted grid can stay wide.
         let mut all_candidates: Vec<DetectedMap> = Vec::new();
+        // (4, 21): 03G906016JD — preambule 7F FF x3 + [00 04][00 15], axe RPM
+        // 0..5100 sur 21 points ; sans cette grille seule la 2x2 sortait.
         for (rows, cols) in [
-            (4usize, 20usize), (3, 21), (3, 22), (4, 22), (4, 23),
+            (4usize, 20usize), (4, 21), (3, 21), (3, 22), (4, 22), (4, 23),
             (3, 23), (3, 24), (3, 25), (4, 24), (4, 25),
         ] {
             all_candidates.extend(self.detect_torque_limiter_variant(data, start, end, rows, cols, detected));
@@ -5306,6 +5308,11 @@ impl EDC16U31Detector {
                 break;
             }
         }
+
+        // Certains logiciels rangent les lignes du bloc du régime max au régime
+        // min alors que l'axe est croissant (U34 1037376704) : décision sur
+        // Duration 00/01, appliquée à tout le bloc
+        super::duration_orientation::mark_duration_block_orientation(data, &mut maps);
 
         maps
     }
@@ -7643,7 +7650,13 @@ impl EDC16U31Detector {
 
                 // Validate data - correction factors should be around 0x2000 (8192)
                 // Typical range: 0x1000-0x3000 (4096-12288) = factors 0.5-1.5
+                // Sur les PD U31 (BEW, Superb MK1…) la correction par EGT est
+                // livrée SATURÉE à 0x7FFF sur toute la grille (correction
+                // neutralisée) : même en-tête, même axe EGT, mêmes voisins
+                // que sur le JD — on l'accepte pour cette famille.
+                let egt_axis = y_axis_values.first().map_or(false, |&f| f >= 5000);
                 let mut valid_data_count = 0;
+                let mut saturated_count = 0;
                 let mut sum_values: u64 = 0;
                 let total_values = rows * cols;
 
@@ -7656,6 +7669,9 @@ impl EDC16U31Detector {
                     // Also allow 0 for disabled entries
                     if val == 0 || (val >= 0x1000 && val <= 0x4000) {
                         valid_data_count += 1;
+                    } else if egt_axis && val == 0x7FFF {
+                        valid_data_count += 1;
+                        saturated_count += 1;
                     }
                 }
 
@@ -7665,9 +7681,11 @@ impl EDC16U31Detector {
                     continue;
                 }
 
-                // Average value should be around 0x2000 (factor 1.0)
+                // Average value should be around 0x2000 (factor 1.0), except
+                // for a saturated EGT correction
                 let avg_value = sum_values / total_values as u64;
-                if avg_value < 0x1800 || avg_value > 0x2800 {
+                let saturated_egt = egt_axis && saturated_count >= total_values * 70 / 100;
+                if !saturated_egt && (avg_value < 0x1800 || avg_value > 0x2800) {
                     // Not centered around 1.0, likely not a correction factor map
                     offset += 2;
                     continue;
@@ -7755,7 +7773,8 @@ impl EDC16U31Detector {
 
         // EGT temperature range (Kelvin × 10): 5000-12000 (500K-1200K = 227°C to 927°C)
         // Exhaust gas temperatures are much higher
-        let is_egt_temperature = first >= 5000 && first <= 10000 && last >= 6000 && last <= 12000;
+        // (borne haute 12500 : l'axe des PD U31 monte à 12331 = 960 °C)
+        let is_egt_temperature = first >= 5000 && first <= 10000 && last >= 6000 && last <= 12500;
 
         // Atmospheric pressure range: 50-1500 mbar (borne haute 1600 : les
         // axes paddés en marches de 1 finissent à 1501..1505, ex. KN 10x10)
@@ -7786,7 +7805,8 @@ impl EDC16U31Detector {
         // RPM range: 0-5500 (typical EDC16 RPM range)
         // First value can be 0 or higher (some maps start at 1000-3000 RPM)
         // Last value should be at least 1000 RPM (some maps only go to 1388 = 1388 RPM)
-        first <= 3500 && last >= 1000 && last <= 5500
+        // (borne haute 6500 : l'axe de la correction EGT des PD U31 finit à 6000)
+        first <= 3500 && last >= 1000 && last <= 6500
     }
 
     /// Identify fuel correction map type based on axis values

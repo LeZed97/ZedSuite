@@ -17,6 +17,8 @@ interface ChecksumModalProps {
   isClosing?: boolean;
   isCalculating?: boolean;
   calculationComplete?: boolean;
+  /** Fichier enregistré : coche verte « Fichier exporté » (même pastille que le mappack) */
+  exportComplete?: boolean;
   /** État du checksum des données à exporter, vérifié à l'ouverture :
    *  ok → export direct, bad → proposer la correction avant l'export. */
   status?: ExportChecksumStatus;
@@ -30,6 +32,7 @@ export function ChecksumModal({
   isClosing = false,
   isCalculating = false,
   calculationComplete = false,
+  exportComplete = false,
   status = "checking",
 }: ChecksumModalProps) {
   const { t } = useI18n();
@@ -53,7 +56,7 @@ export function ChecksumModal({
         }}
       >
         {/* Close button - only on initial choice screen */}
-        {!isCalculating && !calculationComplete && status !== "checking" && (
+        {!isCalculating && !calculationComplete && !exportComplete && status !== "checking" && (
           <button
             onClick={onClose}
             className={`absolute top-4 right-4 z-10 p-2 rounded-lg transition-colors ${L ? "hover:bg-black/5" : "hover:bg-white/5"}`}
@@ -72,14 +75,14 @@ export function ChecksumModal({
             <div
               className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
               style={{
-                backgroundColor: calculationComplete || (!isCalculating && status === "ok")
+                backgroundColor: calculationComplete || exportComplete || (!isCalculating && status === "ok")
                   ? 'rgba(34, 197, 94, 0.15)'
                   : !isCalculating && status === "bad"
                     ? 'rgba(245, 158, 11, 0.15)'
                     : 'rgba(59, 130, 246, 0.15)'
               }}
             >
-              {calculationComplete || (!isCalculating && status === "ok") ? (
+              {calculationComplete || exportComplete || (!isCalculating && status === "ok") ? (
                 <Check className="w-10 h-10" style={{ color: '#22c55e' }} />
               ) : !isCalculating && status === "bad" ? (
                 <AlertTriangle className="w-10 h-10" style={{ color: '#f59e0b' }} />
@@ -93,7 +96,9 @@ export function ChecksumModal({
 
             {/* Title */}
             <h2 className={`text-xl font-semibold text-center ${L ? "text-slate-900" : "text-white"}`}>
-              {isCalculating
+              {exportComplete
+                ? t.checksum.exportComplete
+                : isCalculating
                 ? t.checksum.calculating
                 : calculationComplete
                   ? t.checksum.complete
@@ -106,7 +111,7 @@ export function ChecksumModal({
           </div>
 
           {/* Action buttons — selon l'état du checksum */}
-          {!isCalculating && !calculationComplete && status === "ok" && (
+          {!isCalculating && !calculationComplete && !exportComplete && status === "ok" && (
             <div className="flex">
               <Button
                 onClick={onExportChecksumOk}
@@ -116,7 +121,7 @@ export function ChecksumModal({
               </Button>
             </div>
           )}
-          {!isCalculating && !calculationComplete && status === "bad" && (
+          {!isCalculating && !calculationComplete && !exportComplete && status === "bad" && (
             <div className="flex gap-3">
               <Button
                 onClick={onExportWithoutChecksum}

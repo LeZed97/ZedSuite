@@ -541,6 +541,19 @@ impl EDC16U1Detector {
         }
         log::debug!("🔧 [EDC16] Duration block detection complete: {} selectors found", duration_selectors.len());
 
+        // ========== PHASE 0.65: extras de parité avec la référence (portés de U31/U34) ==========
+        // Fuel Volume Correction + Expected Fuel Temp (paire 9x8 + 8x8),
+        // MAF Linearisation, Dpf switch — mêmes structures sur les U1 1 Mo
+        // (zone 0x80000+), vérifiées au banc.
+        let extra_maps = self.detect_reference_extras(data, &detected_addresses);
+        for map in extra_maps {
+            let range = (map.address, map.address + map.size as u32);
+            if !self.overlaps(&detected_ranges, range) {
+                detected_addresses.insert(map.address);
+                detected_ranges.insert(range);
+                all_maps.push(map);
+            }
+        }
         // ========== PHASE 0.7: Gearbox Torque Limiter Detection ==========
         // Detect 15x1 1D maps that limit torque per gear (typically all 30000 = OFF on VAG)
         let gearbox_maps = self.detect_gearbox_torque_limiter(data, &detected_addresses);
@@ -5390,6 +5403,11 @@ impl EDC16U1Detector {
             }
         }
 
+        // Certains logiciels rangent les lignes du bloc du régime max au régime
+        // min alors que l'axe est croissant (U34 1037376704) : décision sur
+        // Duration 00/01, appliquée à tout le bloc
+        super::duration_orientation::mark_duration_block_orientation(data, &mut maps);
+
         maps
     }
 
@@ -8635,6 +8653,215 @@ impl EDC16U1Detector {
     }
 
     // ========== PHASE 0.11: EGT (Exhaust Gas Temperature) Maps Detection ==========
+    /// Extras de parité avec la référence (portés de U34) : FVC 9x8 + EFT 8x8 en
+    /// paire, MAF Linearization 1D 32, Dpf switch scalaire — structures
+    /// vérifiées présentes sur les U1 réels.
+    fn detect_reference_extras(&self, data: &[u8], detected: &HashSet<u32>) -> Vec<DetectedMap> {
+        let mut maps = Vec::new();
+        let rd = |o: usize| u16::from_be_bytes([data[o], data[o + 1]]);
+        let (scan_lo, scan_hi) = if data.len() >= 0x200000 {
+            (0x180000usize, data.len().saturating_sub(0x400))
+        } else {
+            (0x80000usize, data.len().saturating_sub(0x400))
+        };
+
+        // ---- Fuel Volume Correction (9x8) + Expected Fuel Temp (8x8) ----
+        let mut i = scan_lo;
+        while i < scan_hi {
+            if !(data[i] == 0 && data[i + 1] == 0x09 && data[i + 2] == 0 && data[i + 3] == 0x08) {
+                i += 2;
+                continue;
+            }
+            let y0 = i + 4;
+            let x0 = y0 + 18;
+            let d0 = x0 + 16;
+            let y: Vec<u16> = (0..9).map(|k| rd(y0 + k * 2)).collect();
+            let x: Vec<u16> = (0..8).map(|k| rd(x0 + k * 2)).collect();
+            let axes_ok = y[0] <= 1500
+                && y.windows(2).all(|w| w[0] < w[1])
+                && (2000..=6000).contains(&y[8])
+                && x[0] <= 600
+                && x.windows(2).all(|w| w[0] < w[1])
+                && (2000..=8000).contains(&x[7]);
+            if !axes_ok {
+                i += 2;
+                continue;
+            }
+            let vals: Vec<u16> = (0..72).map(|k| rd(d0 + k * 2)).collect();
+            let rows_start_ok = (0..9).all(|r| vals[r * 8] <= 200);
+            let rows_high = (0..9).filter(|r| vals[r * 8 + 7] >= 1000).count();
+            let rows_ok =
+                rows_start_ok && vals.iter().all(|&v| v <= 12000) && rows_high >= 6;
+            if !rows_ok || detected.contains(&(d0 as u32)) {
+                i += 2;
+                continue;
+            }
+            let fvc_end = d0 + 144;
+            let mut eft: Option<(usize, usize, usize)> = None;
+            let mut j = fvc_end;
+            while j < (fvc_end + 0x200).min(data.len().saturating_sub(200)) {
+                if data[j] == 0 && data[j + 1] == 0x08 && data[j + 2] == 0 && data[j + 3] == 0x08 {
+                    let ey0 = j + 4;
+                    let ex0 = ey0 + 16;
+                    let ed0 = ex0 + 16;
+                    let ey: Vec<u16> = (0..8).map(|k| rd(ey0 + k * 2)).collect();
+                    let ex: Vec<u16> = (0..8).map(|k| rd(ex0 + k * 2)).collect();
+                    let evals: Vec<u16> = (0..64).map(|k| rd(ed0 + k * 2)).collect();
+                    if ey[0] <= 1500
+                        && ey.windows(2).all(|w| w[0] < w[1])
+                        && ex[0] <= 600
+                        && ex.windows(2).all(|w| w[0] < w[1])
+                        && evals.iter().all(|&v| (2500..=4800).contains(&v))
+                        && !detected.contains(&(ed0 as u32))
+                    {
+                        eft = Some((ey0, ex0, ed0));
+                        break;
+                    }
+                }
+                j += 2;
+            }
+            if let Some((ey0, ex0, ed0)) = eft {
+                let mut m = DetectedMap::new(
+                    d0 as u32,
+                    144,
+                    MapDimensions::TwoDimensional { rows: 9, cols: 8 },
+                    DataType::Int16,
+                );
+                m.name = Some("Fuel Volume Correction".to_string());
+                m.category = Some("Fuel Correction".to_string());
+                m.unit = Some("(mg/stroke)/100°C".to_string());
+                m.correction_factor = Some(0.002441);
+                m.y_axis_address = Some(y0 as u32);
+                m.y_label = Some("rpm".to_string());
+                m.y_axis_correction = Some(1.0);
+                m.x_axis_address = Some(x0 as u32);
+                m.x_label = Some("mg/stroke".to_string());
+                m.x_axis_correction = Some(0.01);
+                m.confidence = 0.9;
+                maps.push(m);
+
+                let mut m2 = DetectedMap::new(
+                    ed0 as u32,
+                    128,
+                    MapDimensions::TwoDimensional { rows: 8, cols: 8 },
+                    DataType::Int16,
+                );
+                m2.name = Some("Expected Fuel Temp".to_string());
+                m2.category = Some("Fuel Correction".to_string());
+                m2.unit = Some("°C".to_string());
+                m2.correction_factor = Some(0.1);
+                m2.offset = Some(-273.15); // brut = kelvin x10 (3174 -> 44 degC), sans ce decalage la map affichait 317..376 degC
+                m2.y_axis_address = Some(ey0 as u32);
+                m2.y_label = Some("rpm".to_string());
+                m2.y_axis_correction = Some(1.0);
+                m2.x_axis_address = Some(ex0 as u32);
+                m2.x_label = Some("mg/stroke".to_string());
+                m2.x_axis_correction = Some(0.01);
+                m2.confidence = 0.9;
+                maps.push(m2);
+                log::debug!("✅ [EDC16U1] Found Fuel Volume Correction 0x{:X} + Expected Fuel Temp 0x{:X}", d0, ed0);
+                i = ed0 + 128;
+                continue;
+            }
+            i += 2;
+        }
+
+        // ---- MAF Linearization ----
+        let mut maf_count = 0;
+        let mut i = scan_lo;
+        while i < scan_hi {
+            if !(data[i] == 0 && data[i + 1] == 0x20) {
+                i += 2;
+                continue;
+            }
+            let x0 = i + 2;
+            let d0 = x0 + 64;
+            if d0 + 64 > data.len() {
+                break;
+            }
+            let ax: Vec<u16> = (0..32).map(|k| rd(x0 + k * 2)).collect();
+            if ax[0] > 400 || ax[31] > 1100 || ax.windows(2).any(|w| w[0] >= w[1]) {
+                i += 2;
+                continue;
+            }
+            let vals: Vec<i16> = (0..32).map(|k| rd(d0 + k * 2) as i16).collect();
+            if !((-2500..=0).contains(&vals[0])
+                && vals.windows(2).all(|w| w[0] < w[1])
+                && vals[31] >= 5000)
+            {
+                i += 2;
+                continue;
+            }
+            if detected.contains(&(d0 as u32)) {
+                i += 2;
+                continue;
+            }
+            maf_count += 1;
+            let mut m = DetectedMap::new(
+                d0 as u32,
+                64,
+                MapDimensions::OneDimensional { length: 32 },
+                DataType::Int16,
+            );
+            m.name = Some(if maf_count == 1 {
+                "MAF Linearization".to_string()
+            } else {
+                format!("MAF Linearization {}", maf_count)
+            });
+            m.category = Some("Airflow".to_string());
+            m.unit = Some("kg/h".to_string());
+            m.correction_factor = Some(0.1);
+            m.x_axis_address = Some(x0 as u32);
+            m.x_label = Some("mV".to_string());
+            m.x_axis_correction = Some(4.887586);
+            m.confidence = 0.9;
+            log::debug!("✅ [EDC16U1] Found MAF Linearization at 0x{:X}", d0);
+            maps.push(m);
+            i = d0 + 64;
+        }
+
+        // ---- Dpf switch ----
+        let mut i = scan_lo;
+        while i + 20 < scan_hi {
+            if rd(i) == 0x7FFF
+                && rd(i + 2) == 0x8000
+                && rd(i + 4) == 0x0000
+                && rd(i + 6) == 0x028F
+                && rd(i + 10) == 0
+                && rd(i + 12) == 0
+                && rd(i + 14) == 0x001E
+                && rd(i + 16) == 0xFFFF
+            {
+                let addr = (i + 8) as u32;
+                if !detected.contains(&addr) && !maps.iter().any(|m| m.address == addr) {
+                    let mut m = DetectedMap::new(
+                        addr,
+                        2,
+                        MapDimensions::OneDimensional { length: 1 },
+                        DataType::UInt16,
+                    );
+                    m.name = Some("Dpf switch".to_string());
+                    m.category = Some("DPF".to_string());
+                    m.unit = Some("-".to_string());
+                    m.correction_factor = Some(1.0);
+                    m.confidence = 0.9;
+                    log::debug!("✅ [EDC16U1] Found Dpf switch at 0x{:X}", addr);
+                    maps.push(m);
+                    break;
+                }
+            }
+            i += 2;
+        }
+
+        maps
+    }
+
+    /// Validate Duration RPM axis (improved version)
+    /// Duration RPM axes vary widely:
+    /// - Some maps have RPM from 100-6500
+    /// - Some maps have RPM from 600-2500 (very low max!)
+    /// - Most maps have RPM from 800-5200
+
     /// Detect EGT sensor linearisation maps and EGT base maps
     ///
     /// Types of EGT maps:

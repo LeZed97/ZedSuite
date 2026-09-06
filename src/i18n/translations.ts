@@ -109,6 +109,7 @@ export const translations = {
     preview: {
       title: "Preview",
       notAvailableEasyView: "Preview not available in EasyView mode",
+      notAvailable3D: "Preview not available: the map is already in 3D view",
       map1DNotSupported: "This map is 1D and cannot be displayed in 3D",
       clickToSee: "Click on a map to see the preview",
     },
@@ -263,6 +264,9 @@ export const translations = {
       updatesText: "ZedSuite checks GitHub once a day for new releases — each update can bring new supported ECUs, more detected maps and new tools. When one is available, install it in one click, or check manually anytime from Settings > Check for updates.",
       feedbackTitle: "Help us improve",
       feedbackText: "Found a bug, a missing map or an ECU you would like supported? Open an issue on GitHub — user reports directly shape the next releases.",
+      roadmapTitle: "Roadmap",
+      roadmapLoading: "Loading the roadmap…",
+      roadmapOpen: "Open on GitHub",
     },
     // Project Info Modal
     projectInfo: {
@@ -423,6 +427,7 @@ export const translations = {
     updateDialog: {
       title: "Update available",
       versionLine: "Version {latest} is available — you have {current}",
+      allReleases: "Every update with its details:",
       downloading: "Downloading...",
       updating: "Updating...",
       updateNow: "Update now",
@@ -760,6 +765,7 @@ export const translations = {
       alreadyValidTitle: "Checksum already valid",
       alreadyValidDescription: "No correction was needed.",
       correctedTitle: "Checksum corrected",
+      exportComplete: "File exported",
       correctedDescription: "checksum block(s) rewritten",
     },
     // Mappack Export Modal
@@ -1063,6 +1069,7 @@ export const translations = {
     preview: {
       title: "Aperçu",
       notAvailableEasyView: "Aperçu non disponible en mode EasyView",
+      notAvailable3D: "Aperçu non disponible : la map est déjà en vue 3D",
       map1DNotSupported: "Cette map est 1D et ne peut pas être affichée en 3D",
       clickToSee: "Cliquez sur une map pour voir l'aperçu",
     },
@@ -1217,6 +1224,9 @@ export const translations = {
       updatesText: "ZedSuite vérifie une fois par jour sur GitHub si une nouvelle version existe — chaque mise à jour peut apporter de nouveaux calculateurs supportés, des cartographies supplémentaires détectées et de nouveaux outils. Quand une version est disponible, installez-la en un clic, ou vérifiez manuellement à tout moment via Paramètres > Rechercher les mises à jour.",
       feedbackTitle: "Aidez-nous à améliorer l'app",
       feedbackText: "Un bug, une map manquante ou un calculateur que vous aimeriez voir supporté ? Ouvrez une issue sur GitHub — les retours utilisateurs orientent directement les prochaines versions.",
+      roadmapTitle: "Feuille de route",
+      roadmapLoading: "Chargement de la feuille de route…",
+      roadmapOpen: "Ouvrir sur GitHub",
     },
     // Project Info Modal
     projectInfo: {
@@ -1377,6 +1387,7 @@ export const translations = {
     updateDialog: {
       title: "Mise à jour disponible",
       versionLine: "La version {latest} est disponible — vous avez la {current}",
+      allReleases: "Toutes les mises à jour et leur détail :",
       downloading: "Téléchargement...",
       updating: "Mise à jour...",
       updateNow: "Mettre à jour maintenant",
@@ -1714,6 +1725,7 @@ export const translations = {
       alreadyValidTitle: "Checksum déjà valide",
       alreadyValidDescription: "Aucune correction n'était nécessaire.",
       correctedTitle: "Checksum corrigé",
+      exportComplete: "Fichier exporté",
       correctedDescription: "bloc(s) de checksum réécrit(s)",
     },
     // Mappack Export Modal
@@ -2012,6 +2024,7 @@ export const translations = {
     preview: {
       title: "Vista previa",
       notAvailableEasyView: "Vista previa no disponible en modo EasyView",
+      notAvailable3D: "Vista previa no disponible: el mapa ya está en vista 3D",
       map1DNotSupported: "Este mapa es 1D y no se puede mostrar en 3D",
       clickToSee: "Haz clic en un mapa para ver la vista previa",
     },
@@ -2162,6 +2175,9 @@ export const translations = {
       updatesText: "ZedSuite comprueba GitHub una vez al día en busca de nuevas versiones — cada actualización puede traer nuevas ECU compatibles, más mapas detectados y nuevas herramientas. Cuando haya una disponible, instálala en un clic o comprueba manualmente desde Ajustes > Buscar actualizaciones.",
       feedbackTitle: "Ayúdanos a mejorar",
       feedbackText: "¿Has encontrado un fallo, un mapa que falta o una ECU que te gustaría ver soportada? Abre una issue en GitHub — los informes de los usuarios dan forma directamente a las próximas versiones.",
+      roadmapTitle: "Hoja de ruta",
+      roadmapLoading: "Cargando la hoja de ruta…",
+      roadmapOpen: "Abrir en GitHub",
     },
     projectInfo: {
       title: "Información del proyecto",
@@ -2316,6 +2332,7 @@ export const translations = {
     updateDialog: {
       title: "Actualización disponible",
       versionLine: "La versión {latest} está disponible — tienes la {current}",
+      allReleases: "Todas las actualizaciones con sus detalles:",
       downloading: "Descargando...",
       updating: "Actualizando...",
       updateNow: "Actualizar ahora",
@@ -2638,6 +2655,7 @@ export const translations = {
       alreadyValidTitle: "Checksum ya válido",
       alreadyValidDescription: "No hizo falta ninguna corrección.",
       correctedTitle: "Checksum corregido",
+      exportComplete: "Archivo exportado",
       correctedDescription: "bloque(s) de checksum reescrito(s)",
     },
     mappackExport: {
@@ -2929,6 +2947,7 @@ export const translations = {
     preview: {
       title: "Anteprima",
       notAvailableEasyView: "Anteprima non disponibile in modalità EasyView",
+      notAvailable3D: "Anteprima non disponibile: la mappa è già in vista 3D",
       map1DNotSupported: "Questa mappa è 1D e non può essere mostrata in 3D",
       clickToSee: "Clicca su una mappa per vedere l'anteprima",
     },
@@ -3079,6 +3098,9 @@ export const translations = {
       updatesText: "ZedSuite controlla GitHub una volta al giorno per nuove versioni — ogni aggiornamento può portare nuove ECU supportate, più mappe rilevate e nuovi strumenti. Quando ce n'è uno disponibile, installalo con un clic o controlla manualmente da Impostazioni > Cerca aggiornamenti.",
       feedbackTitle: "Aiutaci a migliorare",
       feedbackText: "Hai trovato un bug, una mappa mancante o una ECU che vorresti supportata? Apri una issue su GitHub — le segnalazioni degli utenti danno forma direttamente alle prossime versioni.",
+      roadmapTitle: "Roadmap",
+      roadmapLoading: "Caricamento della roadmap…",
+      roadmapOpen: "Apri su GitHub",
     },
     projectInfo: {
       title: "Informazioni del progetto",
@@ -3233,6 +3255,7 @@ export const translations = {
     updateDialog: {
       title: "Aggiornamento disponibile",
       versionLine: "La versione {latest} è disponibile — hai la {current}",
+      allReleases: "Tutti gli aggiornamenti con i dettagli:",
       downloading: "Download...",
       updating: "Aggiornamento...",
       updateNow: "Aggiorna ora",
@@ -3555,6 +3578,7 @@ export const translations = {
       alreadyValidTitle: "Checksum già valido",
       alreadyValidDescription: "Nessuna correzione necessaria.",
       correctedTitle: "Checksum corretto",
+      exportComplete: "File esportato",
       correctedDescription: "blocco/hi di checksum riscritto/i",
     },
     mappackExport: {
@@ -3846,6 +3870,7 @@ export const translations = {
     preview: {
       title: "Vorschau",
       notAvailableEasyView: "Vorschau im EasyView-Modus nicht verfügbar",
+      notAvailable3D: "Vorschau nicht verfügbar: das Kennfeld ist bereits in der 3D-Ansicht",
       map1DNotSupported: "Dieses Kennfeld ist 1D und kann nicht in 3D angezeigt werden",
       clickToSee: "Klicke auf ein Kennfeld, um die Vorschau zu sehen",
     },
@@ -3996,6 +4021,9 @@ export const translations = {
       updatesText: "ZedSuite prüft einmal täglich auf GitHub, ob neue Versionen verfügbar sind — jedes Update kann neue unterstützte Steuergeräte, mehr erkannte Kennfelder und neue Werkzeuge bringen. Wenn eines verfügbar ist, installiere es mit einem Klick oder prüfe jederzeit manuell unter Einstellungen > Nach Updates suchen.",
       feedbackTitle: "Hilf uns, besser zu werden",
       feedbackText: "Einen Fehler, ein fehlendes Kennfeld oder ein Steuergerät gefunden, das du unterstützt sehen möchtest? Eröffne ein Issue auf GitHub — Nutzerberichte prägen direkt die nächsten Versionen.",
+      roadmapTitle: "Roadmap",
+      roadmapLoading: "Roadmap wird geladen…",
+      roadmapOpen: "Auf GitHub öffnen",
     },
     projectInfo: {
       title: "Projektinformationen",
@@ -4150,6 +4178,7 @@ export const translations = {
     updateDialog: {
       title: "Update verfügbar",
       versionLine: "Version {latest} ist verfügbar — du hast {current}",
+      allReleases: "Alle Updates mit Details:",
       downloading: "Wird heruntergeladen...",
       updating: "Wird aktualisiert...",
       updateNow: "Jetzt aktualisieren",
@@ -4472,6 +4501,7 @@ export const translations = {
       alreadyValidTitle: "Checksumme bereits gültig",
       alreadyValidDescription: "Keine Korrektur nötig.",
       correctedTitle: "Checksumme korrigiert",
+      exportComplete: "Datei exportiert",
       correctedDescription: "Checksummen-Block/Blöcke neu geschrieben",
     },
     mappackExport: {

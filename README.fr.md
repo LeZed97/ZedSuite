@@ -6,7 +6,7 @@
 
 **Éditeur de cartographies open source pour les ECU Bosch EDC15/EDC16 du groupe VAG — 100 % en local.**
 
-Ouvrez un dump d'ECU et ZedSuite trouve les cartographies tout seul : Driver Wish, Turbo Boost, N75, SOI, limiteurs de couple, etc. Modifiez-les en tableau, en 2D, en 3D ou directement dans l'hexadécimal. Créez des versions, comparez-les, désactivez des DTC, corrigez le checksum, puis exportez votre binaire ou un mappack WinOLS.
+Ouvrez un dump d'ECU et ZedSuite trouve les cartographies tout seul : Driver Wish, Turbo Boost, N75, SOI, limiteurs de couple, etc. Modifiez-les en tableau, en 2D, en 3D ou directement dans l'hexadécimal. Créez des versions, comparez-les, désactivez ou réactivez des DTC, corrigez le checksum, puis exportez votre binaire ou un mappack WinOLS.
 
 Pas de compte, pas de cloud, pas de limites : tout est en local, vos fichiers ne quittent jamais votre ordinateur.
 
@@ -16,7 +16,7 @@ Pas de compte, pas de cloud, pas de limites : tout est en local, vos fichiers ne
 
 | ECU | Détection |
 |-----|-----------|
-| Bosch EDC15P | patterns + codeblocks |
+| Bosch EDC15P | patterns + codeblocks, y compris les premiers logiciels PD (1999-2002) |
 | Bosch EDC15VM+ | patterns + codeblocks |
 | Bosch EDC16U1 | signatures |
 | Bosch EDC16U31 | signatures |
@@ -30,12 +30,12 @@ La détection n'est pas parfaite pour autant. Chaque famille a été calibrée s
 
 - **Détection automatique des cartographies** — moteur Rust embarqué, un détecteur par famille
 - **Vérification de complétude** — un badge de confiance indique si toutes les maps attendues pour la famille d'ECU ont été trouvées, avec le détail de ce qui manque en un clic
-- **Éditeur de maps** — tableau, graphe 2D et surface 3D, raccourcis clavier façon WinOLS
+- **Éditeur de maps** — tableau, graphe 2D et surface 3D, navigation clavier et copier/coller entre maps, modification absolue, additive ou en pourcentage, report vers les maps similaires, raccourcis façon WinOLS
 - **Éditeur hexadécimal** — virtualisé, minimap, modifications surlignées par rapport à l'origine
 - **Versions** — « Ori » + versions nommées par projet, vue de comparaison
 - **Stockage optimisé** — fichier d'origine + fichier de modifications par version, reconstruction automatique à l'export
 - **Dyno virtuel** — estimation puissance/couple à partir des maps, rapport PDF imprimable
-- **DTC Off** — détection et désactivation des codes défaut
+- **DTC on/off** — lecture de la table des codes défaut, désactivation et réactivation (EDC15 et EDC16)
 - **Solutions** — patchs en un clic (launch control, …) ; volontairement limités pour ne pas repousser encore la sortie de l'application, d'autres pourront arriver plus tard
 - **Correction de checksum** — famille EDC15 et EDC16, implémentée nativement
 - **Marque pré-remplie** — base de références ECU embarquée (numéros Bosch/VAG)
@@ -43,7 +43,7 @@ La détection n'est pas parfaite pour autant. Chaque famille a été calibrée s
 - **Mises à jour automatiques** — l'app vérifie une fois par jour sur GitHub si une nouvelle version existe ; installation en un clic
 - **3 thèmes** — sombre, clair et OLED, pour tous les types d'écrans
 - **Toutes les tailles d'écran** — menu des maps redimensionnable et zoom de l'éditeur façon navigateur, du portable à l'ultrawide
-- **Deux langues** — anglais et français ; en ajouter une autre est simple (un seul fichier de traductions), et le nom des maps n'est volontairement pas traduit — il reste en anglais
+- **Cinq langues** — anglais, français, espagnol, italien et allemand, pour l'app et l'installateur ; en ajouter une autre est simple (un seul fichier de traductions), et le nom des maps n'est volontairement pas traduit — il reste en anglais
 
 ## 🔧 Travailler avec des fichiers modifiés
 
@@ -77,6 +77,16 @@ Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce q
 - **Dilemma**, qui a publié [VAGEDCSuite](https://github.com/Blackfrosch/VAGEDCSuite) il y a environ 14 ans. C'est avec ce logiciel que j'ai pu pratiquer et apprendre facilement : la reconnaissance automatique des maps, la simplicité de l'outil… un travail énorme pour un logiciel né dans les années 2000 ! (Ce mec doit être un alien) Une grande partie de la logique de détection des EDC15 de ZedSuite est d'ailleurs directement héritée du travail fait dans EDCSuite.
 - **Skalda**, qui a [fait vivre VAGEDCSuite](https://github.com/skaldamramra/VAGEDCSuite) en mettant à jour la détection et en ajoutant beaucoup de maps EDC15. Ma propre version d'EDCSuite est partie de la sienne, et c'est elle que j'ai utilisée au quotidien en attendant d'avoir le temps de faire ZedSuite.
 
+## ⬇️ Téléchargement
+
+Récupérez l'installateur depuis la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest) : dans la section **Assets**, téléchargez le fichier `ZedSuite_x.y.z_x64-setup.exe` et lancez-le (sur un Windows 32 bits, prenez `ZedSuite_x.y.z_x86-setup.exe`). L'application se met ensuite à jour toute seule.
+
+ZedSuite demande **Windows 10 ou 11**. L'application n'est pas compatible avec les Windows antérieurs à Windows 10 : l'adapter à Windows 7 aurait demandé encore beaucoup de travail.
+
+## 🗺️ Feuille de route
+
+Ce qui est en cours, ce qui est prévu et ce que les utilisateurs ont demandé : [ROADMAP.fr.md](ROADMAP.fr.md) (aussi en [anglais](ROADMAP.md), [espagnol](ROADMAP.es.md), [italien](ROADMAP.it.md) et [allemand](ROADMAP.de.md)). La même page s'ouvre dans l'application, dans la langue de l'app, depuis le dashboard (bouton feuille de route, à côté de l'aide).
+
 ## 📫 Contact
 
 - 🌐 Site — [zedperf.com](https://zedperf.com)
@@ -93,12 +103,6 @@ ZedSuite est gratuit et le restera. S'il vous a fait gagner du temps ou une lice
 - **BTC** (Bitcoin) : `bc1qj2e42vpphx73xguspqd9c6uqrs9ra0yywcq97a`
 - **SOL / USDC** (Solana) : `AqjSzxi7pBkwcCVkyVxBVLTk9TgPmui71bNgVgNLWrJC`
 - **TRX** (Tron) : `TRDgrasP7yaEKcz54r8spbmgZdRBFpNerW`
-
-## ⬇️ Téléchargement
-
-Récupérez l'installateur depuis la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest) : dans la section **Assets**, téléchargez le fichier `ZedSuite_x.y.z_x64-setup.exe` et lancez-le (sur un Windows 32 bits, prenez `ZedSuite_x.y.z_x86-setup.exe`). L'application se met ensuite à jour toute seule.
-
-ZedSuite demande **Windows 10 ou 11**. L'application n'est pas compatible avec les Windows antérieurs à Windows 10 : l'adapter à Windows 7 aurait demandé encore beaucoup de travail.
 
 ## 🚀 Démarrer (développement)
 

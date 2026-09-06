@@ -9,6 +9,8 @@ import { useTheme } from "@/contexts/theme-context";
 import { useI18n } from "@/contexts/i18n-context";
 import { PromptModal } from "@/components/prompt-modal";
 import { isBigEndianEcu, hasUnsignedAxes } from "@/lib/ecu-endianness";
+import { resolveMapCellLayout } from "@/lib/map-cell-layout";
+import { getMapValueRange, clampMapValue } from "@/lib/map-value-range";
 
 // Import Plotly dynamiquement pour ├®viter les probl├¿mes SSR
 import dynamic from "next/dynamic";
@@ -22,7 +24,7 @@ type ViewMode = "text" | "2d" | "3d";
 
 // Cache pour mémoriser les données extraites de chaque map (par adresse)
 // Ce cache évite de recalculer les données à chaque changement de map
-const CACHE_VERSION = "2025-01-boost-target-backend-swap-v33";
+const CACHE_VERSION = "2026-09-rows-reversed-v36";
 
 // Map globale pour sauvegarder les positions de caméra de chaque map 3D
 // Persiste entre les montages/démontages du composant
@@ -369,6 +371,8 @@ interface MapViewerProps {
     y_axis_inverted?: boolean;
     is_little_endian?: boolean;
     data_type?: string; // "UInt8", "UInt16", "UInt32", "Int8", "Int16", "Int32", "Float32"
+    // Lignes fichier dans l'ordre inverse de l'axe Y (bloc Duration de certains EDC16)
+    rows_reversed?: boolean;
   };
   fileData: number[];
   projectName?: string;
@@ -980,8 +984,21 @@ const skipAutoSizeRef = useRef<boolean>(false);
   // Incrément de la pastille de la topbar (touches +/- et menus contextuels) :
   // valeur absolue, ou pourcentage de la valeur courante quand la pastille est
   // sur « Pourcentage » (5 → ×1.05 / ×0.95)
+  // Bornes de la valeur affichée (N75 : 0..100 %, sinon plage du type brut
+  // avec le facteur/offset effectifs) — appliquées à toute saisie : édition,
+  // collage, +/-, pastille Ajouter/Pourcentage/Remplir.
+  const valueRange = useMemo(() => {
+    const ds = displaySettings?.map;
+    const dsFactor = ds && typeof ds.factor === 'number' && isFinite(ds.factor)
+      ? ds.factor / (typeof ds.divisor === 'number' && isFinite(ds.divisor) && ds.divisor !== 0 ? ds.divisor : 1)
+      : undefined;
+    const factor = dsFactor ?? (mapData.correction_factor ?? 1.0);
+    const offset = ds && typeof ds.offset === 'number' && isFinite(ds.offset) ? ds.offset : (mapData.offset ?? 0.0);
+    return getMapValueRange(mapData, factor, offset);
+  }, [mapData, displaySettings]);
+  const clampValue = (v: number): number => clampMapValue(v, valueRange);
   const applyIncrement = (v: number, sign: 1 | -1): number =>
-    incrementIsPercent ? v * (1 + (sign * incrementValue) / 100) : v + sign * incrementValue;
+    clampValue(incrementIsPercent ? v * (1 + (sign * incrementValue) / 100) : v + sign * incrementValue);
   const incrementUnit = incrementIsPercent ? '%' : '';
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ row: number; col: number } | null>(null);
@@ -1853,6 +1870,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
               // fill
               next[rowIdx][colIdx] = value;
             }
+            next[rowIdx][colIdx] = clampValue(next[rowIdx][colIdx]);
           }
         });
         setChangedCells((prevChangedCells) => {
@@ -2146,16 +2164,13 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // 13x16 (rows < cols) ; re-transposer les 16x13 VM tronquait l'axe Y à
     // 13 valeurs, faisait déborder l'axe X dans les données et affichait la
     // grille en escalier.
+    // Dimensions d'affichage et index fichier de chaque cellule : règles
+    // partagées avec l'éditeur (écriture des modifications) dans
+    // lib/map-cell-layout — les deux DOIVENT lire/écrire la même cellule.
+    const cellLayout = resolveMapCellLayout(mapData);
     const egrDimsSwapped = isEgrMap && apiRows < apiCols;
-    const rows = isEgrMap
-      ? (egrDimsSwapped ? apiCols : apiRows) // 16 RPM
-      : (needsAxisSwap && isInjectorDurationNon00 ? apiRows : (needsAxisSwap ? apiCols : apiRows));  // Display rows (vertical axis)
-    const cols = isEgrMap
-      ? (egrDimsSwapped ? apiRows : apiCols) // 13 IQ
-      : (needsAxisSwap && isInjectorDurationNon00 ? apiCols : (needsAxisSwap ? apiRows : apiCols));  // Display cols (horizontal axis)
-
-    // File column count for data reading (non-swapped)
-    const fileCols = egrDimsSwapped ? apiRows : apiCols;
+    const rows = cellLayout.rows;  // Display rows (vertical axis)
+    const cols = cellLayout.cols;  // Display cols (horizontal axis)
 
 
     const values: number[][] = [];
@@ -2629,70 +2644,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // otherwise every cell reads two neighboring cells as one 16-bit value.
     const dataTypeStr = String(mapData.data_type || '');
     const cellBytes = dataTypeStr === 'UInt8' || dataTypeStr === 'Int8' ? 1 : 2;
+    if (process.env.NODE_ENV !== 'production' && cellLayout.axesSwapped !== needsAxisSwap) {
+      console.warn('[MapViewer] cell layout swap mismatch for', mapData.name, cellLayout.axesSwapped, needsAxisSwap);
+    }
     for (let row = 0; row < rows; row++) {
       const rowValues: number[] = [];
       for (let col = 0; col < cols; col++) {
-        // Calculate offset based on whether axes are swapped
-        let offset: number;
-        if (needsAxisSwap) {
-          // CRITICAL: When swapping dimensions, we need to transpose the data
-          // The repeating pattern every 7 columns suggests the current formula is wrong
-          // 
-          // File structure: file[fileRow][fileCol] stored row-major
-          //   offset = startAddress + (fileRow * apiCols + fileCol) * 2
-          // 
-          // For Torque limiter: file is 21 rows x 3 cols, display is 3 rows x 21 cols
-          // The pattern repeats every 7 columns, which is 21/3 = 7
-          // This suggests we might need to read column-major instead of transposing
-          //
-          // Let's try: display[row][col] reads file using column-major indexing
-          // Or maybe the file stores data differently for this map type
-          //
-          // Alternative formula: offset = startAddress + (row * apiRows + col) * 2
-          // This would read column-major: first all values of col 0, then all of col 1, etc.
-          const isTorqueLimiter = mapData.name?.toLowerCase().includes("torque limiter");
-          const isIQByMap = mapData.name?.toLowerCase().includes("iq by map");
-          const isIQByMAF = mapData.name?.toLowerCase().includes("iq by maf");
-          
-          if (isTorqueLimiter) {
-            // Try column-major reading for Torque limiter
-            // display[row][col] reads from column-major storage
-            offset = startAddress + (row * apiRows + col) * cellBytes;
-          } else if (isIQByMap || isIQByMAF) {
-            // For IQ by MAP/MAF: data is stored column-major in the file
-            // File stores: all 13 values for RPM 0, then all 13 values for RPM 1, etc.
-            // File dimensions: apiRows=13 (X axis), apiCols=16 (RPM)
-            // Display dimensions after swap: rows=16 (RPM), cols=13 (X axis)
-            //
-            // Column-major storage means:
-            // - Offset for RPM 0, col 0: startAddress + 0
-            // - Offset for RPM 0, col 1: startAddress + 2
-            // - Offset for RPM 0, col 2: startAddress + 4
-            // - ...
-            // - Offset for RPM 1, col 0: startAddress + (13 * 2) = startAddress + 26
-            //
-            // So: display[RPM][col] = file[RPM_index * 13 + col_index]
-            // offset = startAddress + (row * apiRows + col) * cellBytes
-            offset = startAddress + (row * apiRows + col) * cellBytes;
-
-            // Enhanced debug logging for first row
-            if (row === 0 && col < 3) {
-              const mapType = isIQByMAF ? "IQ by MAF" : "IQ by map";
-            }
-          } else if (isInjectorDuration) {
-            // Injector Duration maps (01-05): data is stored in row-major order
-            // The swap is only for display orientation, NOT for data reading
-            // File stores: [row][col] in row-major order with apiCols columns per row
-            // We just need to read in normal row-major order
-            offset = startAddress + (row * apiCols + col) * cellBytes;
-          } else {
-            // Standard transposition: display[row][col] reads file[col][row]
-            offset = startAddress + (col * apiCols + row) * cellBytes;
-          }
-        } else {
-          // Normal row-major order: file[row][col] at offset = startAddress + (row * fileCols + col) * cellBytes
-          offset = startAddress + (row * fileCols + col) * cellBytes;
-        }
+        // Offset fichier de la cellule (colonne-major pour le torque limiter et
+        // les IQ by MAF/MAP transposés, transposition standard sinon)
+        const offset = startAddress + cellLayout.cellIndex(row, col) * cellBytes;
         if (offset + cellBytes - 1 < fileData.length) {
           let rawValue: number;
           if (cellBytes === 1) {
@@ -2898,64 +2858,13 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       }
     }
 
-    // EDC16U34 "Duration NN" maps: enforce row/label alignment by comparing
-    // raw-byte signatures. The upstream branches sometimes leave rows
-    // mirrored relative to the labels; this safety net detects the mismatch
-    // structurally (no dependency on the correction factor or label values).
-    //
-    // Rule: the displayed top row must correspond to the file row that
-    // matches the largest yLabel (typically max RPM). We figure out which
-    // file row that is by comparing raw row sums in the file with the
-    // displayed-then-decoded row sums.
-    if (isU34DurationMap && values.length > 1 && tempYLabels.length === values.length) {
-      const startAddressByte = mapData.address;
-      const cellsPerRow = values[0]?.length ?? 0;
-      const totalRows = values.length;
-      const bytesPerRow = cellsPerRow * 2;
-
-      const readSignedBE = (off: number): number => {
-        if (off + 1 >= fileData.length) return 0;
-        const raw = (fileData[off] << 8) | fileData[off + 1];
-        return (mapData.data_type === 'Int16' && raw > 32767) ? raw - 65536 : raw;
-      };
-      const fileRowSum = (fileRowIdx: number): number => {
-        let s = 0;
-        for (let c = 0; c < cellsPerRow; c++) {
-          s += readSignedBE(startAddressByte + fileRowIdx * bytesPerRow + c * 2);
-        }
-        return s;
-      };
-      const factor = dsAxisFactor(displaySettings?.map) ?? (mapData.correction_factor ?? 1.0);
-      const offsetVal =
-        typeof displaySettings?.map?.offset === 'number' && isFinite(displaySettings.map.offset)
-          ? displaySettings.map.offset
-          : (mapData.offset ?? 0.0);
-      const displayRowSumAsRaw = (row: number[]): number => {
-        let s = 0;
-        for (const v of row) s += Math.round((v - offsetVal) / (factor || 1));
-        return s;
-      };
-
-      const fileTopSum = fileRowSum(0);
-      const fileBotSum = fileRowSum(totalRows - 1);
-      const dispTopSum = displayRowSumAsRaw(values[0]);
-
-      // Which end of the file does the displayed top match more closely?
-      const topMatchesFileTop = Math.abs(dispTopSum - fileTopSum) <= Math.abs(dispTopSum - fileBotSum);
-
-      // Which file row should be at the top? The one whose Y label equals the
-      // currently-displayed top label.
-      const displayTopLabel = parseFloat(yLabels[0]);
-      const fileFirstLabel = parseFloat(tempYLabels[0]);
-      const fileLastLabel = parseFloat(tempYLabels[tempYLabels.length - 1]);
-      const desiredTopIsFileTop = Math.abs(displayTopLabel - fileFirstLabel)
-        <= Math.abs(displayTopLabel - fileLastLabel);
-
-      if (topMatchesFileTop !== desiredTopIsFileTop) {
-        values.reverse();
-        flipRowsReversed();
-      }
-    }
+    // NOTE : l'ancien « garde-fou » des maps « Duration NN » (EDC16) comparait
+    // le libellé du haut à tempYLabels[0]… alors que tempYLabels venait d'être
+    // retourné EN PLACE par yLabels.push(...tempYLabels.reverse()). Il
+    // concluait toujours à un désalignement et re-retournait les valeurs :
+    // toutes les durées EDC16 à axe croissant s'affichaient en miroir (coin
+    // rouge en bas à droite). Les blocs réellement stockés à l'envers portent
+    // maintenant rows_reversed, lu par cellLayout — plus rien à corriger ici.
 
     // Net row reversal: each reverse() inverts the order, so an odd count means
     // display row 0 corresponds to file row N-1.
@@ -3178,9 +3087,13 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       ? toFileOrder(yAxisLabels, true)
       : yAxisLabels;
 
-    const payload: { x?: string[]; y?: string[] } = {};
-    if (xChanged) payload.x = xFileOrder;
-    if (yChanged) payload.y = yFileOrder;
+    // Un axe revenu à ses valeurs d'origine est envoyé VIDE : le parent
+    // retire alors son entrée persistée (sinon « Remettre les valeurs
+    // d'origine » laissait les anciens libellés dans l'enregistrement)
+    const payload: { x?: string[]; y?: string[] } = {
+      x: xChanged ? xFileOrder : [],
+      y: yChanged ? yFileOrder : [],
+    };
 
     const sig = `${xChanged ? xFileOrder.join('|') : ''}::${yChanged ? yFileOrder.join('|') : ''}`;
     if (sig === lastNotifiedAxisRef.current) return;
@@ -3362,7 +3275,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     setContextMenu({ x: cellRect.left, y: cellRect.bottom, type: 'yAxis', index });
   };
 
-  const updateCellValue = (row: number, col: number, newValue: number) => {
+  const updateCellValue = (row: number, col: number, rawNewValue: number) => {
+    const newValue = clampValue(rawNewValue);
     setMapValues((prev) => {
       const next = prev.map((r, rIdx) =>
         r.map((v, cIdx) => (rIdx === row && cIdx === col ? newValue : v)),
@@ -3637,6 +3551,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
   // Édition des valeurs d'axe X (double-clic)
   const handleEditXAxisLabel = (index: number, currentValue: string) => {
+    // Axe absent (map 1D sans axe, libellé de repli) : rien à éditer, sinon
+    // on créait un libellé fantôme jamais enregistré
+    if (index < 0 || index >= xAxisLabels.length) return;
     setValuePrompt({
       title: t.mapViewer.editXAxisTitle,
       value: currentValue,
@@ -3653,6 +3570,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
   // Édition des valeurs d'axe Y (double-clic)
   const handleEditYAxisLabel = (index: number, currentValue: string) => {
+    if (index < 0 || index >= yAxisLabels.length) return;
     setValuePrompt({
       title: t.mapViewer.editYAxisTitle,
       value: currentValue,
@@ -4114,6 +4032,47 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
               />
             </div>
             )}
+
+          {/* Zoom +/− de la vue 3D : pastille flottante juste au-dessus des
+              onglets Text/2D/3D, légèrement décollée du bord gauche (sur demande ;
+              en EasyView la pastille est dans le coin du panneau 3D) */}
+          <div
+            className="absolute z-30 flex rounded-md overflow-hidden"
+            style={{
+              left: 8,
+              bottom: 32,
+              border: `1px solid ${getCellBorderColor()}`,
+              background: theme === 'light' ? '#f1f3f5' : '#1a1a1a'
+            }}
+          >
+            <button
+              onClick={() => zoomCamera(1.25)}
+              className="px-3 py-1 text-[13px] leading-[14px] font-medium transition-colors"
+              style={{
+                borderRight: `1px solid ${getCellBorderColor()}`,
+                background: getViewButtonBg(),
+                color: getCellTextColor()
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = getViewButtonBgHover()}
+              onMouseLeave={(e) => e.currentTarget.style.background = getViewButtonBg()}
+              title="Zoom -"
+            >
+              −
+            </button>
+            <button
+              onClick={() => zoomCamera(0.8)}
+              className="px-3 py-1 text-[13px] leading-[14px] font-medium transition-colors"
+              style={{
+                background: getViewButtonBg(),
+                color: getCellTextColor()
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = getViewButtonBgHover()}
+              onMouseLeave={(e) => e.currentTarget.style.background = getViewButtonBg()}
+              title="Zoom +"
+            >
+              +
+            </button>
+          </div>
 
           {/* View Mode Tabs - alignés sur le conteneur principal */}
           <div
@@ -4780,12 +4739,10 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                         paper_bgcolor: "transparent",
                         plot_bgcolor: "transparent",
                         xaxis: {
-                          title: mapData.map_type?.includes("Injection") ? "RPM" : "Load",
                           color: "#9ca3af",
                           gridcolor: "#374151",
                         },
                         yaxis: {
-                          title: "Value",
                           color: "#9ca3af",
                           gridcolor: "#374151",
                         },
@@ -5318,12 +5275,10 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                   paper_bgcolor: "transparent",
                   plot_bgcolor: "transparent",
                   xaxis: {
-                    title: mapData.map_type?.includes("Injection") ? "RPM" : "Load",
                     color: "#9ca3af",
                     gridcolor: "#374151",
                   },
                   yaxis: {
-                    title: "Value",
                     color: "#9ca3af",
                     gridcolor: "#374151",
                   },

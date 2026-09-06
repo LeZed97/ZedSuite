@@ -12,6 +12,8 @@ import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useThemeOptional } from "@/contexts/theme-context";
 import { identifyEcu, detectMaps } from "@/lib/local/detector";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
+// Listes déroulantes au style de l'app (même composant que la langue des paramètres)
+import { StyledSelect } from "@/components/styled-select";
 import { lookupEcuBrand } from "@/lib/ecu-brand-db";
 
 interface ProjectCreatorProps {
@@ -79,7 +81,6 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
   const labelCls = `block text-sm font-medium mb-2 ${L ? 'text-slate-900' : 'text-white'}`;
   const inputCls = `w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-0 ${L ? 'bg-black/[0.05] border border-black/20 text-slate-900 placeholder:text-black/40' : 'bg-black/15 border border-white/20 text-white placeholder:text-white/50'}`;
   const inputSmCls = `w-full px-2 py-2 rounded-lg text-sm focus:outline-none focus:ring-0 ${L ? 'bg-black/[0.05] border border-black/20 text-slate-900 placeholder:text-black/40' : 'bg-black/15 border border-white/20 text-white placeholder:text-white/50'}`;
-  const selectCls = `${inputSmCls} ${L ? '[&>option]:bg-white [&>option]:text-slate-900' : '[&>option]:bg-black/90 [&>option]:text-white'}`;
 
   const maxFileSize = platform.maxFileSizeMB * 1024 * 1024;
 
@@ -493,18 +494,19 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
               {/* Première ligne: Brand - Model - Year */}
               <div>
                 <label className={labelCls}>{t.upload?.brand || "Brand"}</label>
-                <select
+                <StyledSelect
                   value={vehicleBrand}
-                  onChange={(e) => setVehicleBrand(e.target.value)}
-                  className={selectCls}
+                  onChange={setVehicleBrand}
+                  className="w-full"
                   disabled={isUploading}
-                >
-                  <option value="">{t.upload?.select || "Select..."}</option>
-                  <option value="Audi">Audi</option>
-                  <option value="Seat">Seat</option>
-                  <option value="Skoda">Skoda</option>
-                  <option value="Volkswagen">Volkswagen</option>
-                </select>
+                  options={[
+                    { value: "", label: t.upload?.select || "Select..." },
+                    { value: "Audi", label: "Audi" },
+                    { value: "Seat", label: "Seat" },
+                    { value: "Skoda", label: "Skoda" },
+                    { value: "Volkswagen", label: "Volkswagen" },
+                  ]}
+                />
               </div>
 
               <div>
@@ -522,17 +524,17 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
 
               <div>
                 <label className={labelCls}>{t.upload?.year || "Year"}</label>
-                <select
+                <StyledSelect
                   value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className={selectCls}
+                  onChange={setYear}
+                  className="w-full"
                   disabled={isUploading}
-                >
-                  <option value="">{t.upload?.select || "Select..."}</option>
-                  {Array.from({ length: new Date().getFullYear() - 1996 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: t.upload?.select || "Select..." },
+                    // Années des EDC15/EDC16 supportés : 1999 à 2009, la plus récente en tête
+                    ...Array.from({ length: 11 }, (_, i) => 2009 - i).map(y => ({ value: String(y), label: String(y) })),
+                  ]}
+                />
               </div>
 
               {/* Deuxième ligne: Engine Type - Power (HP) - Transmission */}
@@ -564,16 +566,17 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
 
               <div>
                 <label className={labelCls}>{t.upload?.transmission || "Transmission"}</label>
-                <select
+                <StyledSelect
                   value={transmissionType}
-                  onChange={(e) => setTransmissionType(e.target.value)}
-                  className={selectCls}
+                  onChange={setTransmissionType}
+                  className="w-full"
                   disabled={isUploading}
-                >
-                  <option value="">{t.upload?.select || "Select..."}</option>
-                  <option value="Automatic">{t.upload?.automatic || "Automatic"}</option>
-                  <option value="Manual">{t.upload?.manual || "Manual"}</option>
-                </select>
+                  options={[
+                    { value: "", label: t.upload?.select || "Select..." },
+                    { value: "Automatic", label: t.upload?.automatic || "Automatic" },
+                    { value: "Manual", label: t.upload?.manual || "Manual" },
+                  ]}
+                />
               </div>
 
               {/* Troisième ligne: Customer - Stage - Date */}
@@ -592,17 +595,18 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
 
               <div>
                 <label className={labelCls}>{t.upload?.stage || "Stage"}</label>
-                <select
+                <StyledSelect
                   value={stage}
-                  onChange={(e) => setStage(e.target.value)}
-                  className={selectCls}
+                  onChange={setStage}
+                  className="w-full"
                   disabled={isUploading}
-                >
-                  <option value="">{t.upload?.select || "Select..."}</option>
-                  <option value="Stage 1">Stage 1</option>
-                  <option value="Stage 2">Stage 2</option>
-                  <option value="Stage 3">Stage 3</option>
-                </select>
+                  options={[
+                    { value: "", label: t.upload?.select || "Select..." },
+                    { value: "Stage 1", label: "Stage 1" },
+                    { value: "Stage 2", label: "Stage 2" },
+                    { value: "Stage 3", label: "Stage 3" },
+                  ]}
+                />
               </div>
 
               <div>

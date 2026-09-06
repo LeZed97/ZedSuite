@@ -8,12 +8,36 @@
 
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-export async function setAppZoom(factor: number): Promise<void> {
-  try {
-    await getCurrentWebview().setZoom(factor);
-  } catch {
-    // hors Tauri (navigateur de dev) : silencieux
-  }
+// Les demandes de zoom sont SÉRIALISÉES et la dernière l'emporte : en
+// passant du dashboard à l'éditeur (nouveau projet), le « retour à 100 % »
+// du dashboard qui se démonte et le zoom de l'éditeur qui se monte
+// partaient en même temps vers la webview, et il arrivait que le 100 %
+// arrive en dernier — l'écran restait à 100 % alors que la barre affichait
+// 70 % (bug rare signalé).
+let zoomChain: Promise<void> = Promise.resolve();
+let latestZoomRequest = 0;
+let lastAppliedZoom: number | null = null;
+
+export function setAppZoom(factor: number): Promise<void> {
+  const request = ++latestZoomRequest;
+  zoomChain = zoomChain.then(async () => {
+    // Une demande plus récente existe : celle-ci est obsolète
+    if (request !== latestZoomRequest) return;
+    if (lastAppliedZoom === factor) return;
+    try {
+      await getCurrentWebview().setZoom(factor);
+      lastAppliedZoom = factor;
+    } catch {
+      // hors Tauri (navigateur de dev) : silencieux
+    }
+  });
+  return zoomChain;
+}
+
+/** Ré-applique le dernier zoom demandé si la webview l'a perdu (navigation) */
+export function reapplyAppZoom(factor: number): Promise<void> {
+  lastAppliedZoom = null;
+  return setAppZoom(factor);
 }
 
 /**
@@ -30,6 +54,35 @@ export async function setAppZoom(factor: number): Promise<void> {
 // plein écran : appliquée au retour en mode fenêtré (voir plus bas).
 let pendingMinWidth: number | null = null;
 let resizeListenerInstalled = false;
+
+/** Largeur CSS minimale de la barre d'outils de l'éditeur (+60 px depuis
+ *  le bouton HiLo/LoHi de la pastille 8b/16b : en dessous, la barre
+ *  recouvrait les contrôles de fenêtre à largeur minimale). */
+export const EDITOR_TOOLBAR_MIN_CSS_WIDTH = 1095;
+/** Largeur par défaut de la liste des maps de l'éditeur. */
+export const EDITOR_SIDEBAR_DEFAULT_WIDTH = 335;
+
+/** Zoom de l'éditeur mémorisé (en %), 100 hors plage ou hors navigateur. */
+export function storedEditorZoomPercent(): number {
+  if (typeof window === "undefined") return 100;
+  try {
+    const saved = parseInt(localStorage.getItem("zedsuite-editor-zoom") || "100", 10);
+    return Number.isFinite(saved) && saved >= 60 && saved <= 150 ? saved : 100;
+  } catch {
+    return 100;
+  }
+}
+
+/** Largeur logique minimale de la fenêtre telle que l'éditeur la demande
+ *  (barre d'outils + liste des maps, à l'échelle du zoom). Le dashboard
+ *  utilise la même valeur pour que la taille minimale ne change pas d'une
+ *  page à l'autre. */
+export function editorMinLogicalWidth(
+  sidebarWidth = EDITOR_SIDEBAR_DEFAULT_WIDTH,
+  zoomPercent = storedEditorZoomPercent(),
+): number {
+  return Math.round((EDITOR_TOOLBAR_MIN_CSS_WIDTH + sidebarWidth) * (zoomPercent / 100));
+}
 
 export async function setAppMinWidth(cssWidth: number, zoom = 1): Promise<void> {
   try {

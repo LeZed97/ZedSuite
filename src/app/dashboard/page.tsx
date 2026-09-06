@@ -13,10 +13,14 @@ import { WindowControls } from "@/components/window-controls";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
-import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
+import { setAppZoom, setAppMinWidth, editorMinLogicalWidth } from "@/lib/webview-zoom";
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings } from "@/contexts/settings-context";
 import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
+import { openExternal, ZEDSUITE_REPO_URL, ZEDSUITE_RELEASES_URL } from "@/lib/open-external";
+import { RoadmapModal } from "@/components/roadmap-modal";
+import { formatBytes } from "@/lib/format-bytes";
+import packageJson from "../../../package.json";
 import {
   Upload,
   FileText,
@@ -31,6 +35,8 @@ import {
   User,
   Gauge,
   AlertTriangle,
+  ClipboardList,
+  HardDrive,
 } from "lucide-react";
 
 type File = FileRecord;
@@ -410,9 +416,10 @@ function DashboardContent() {
 
   useEffect(() => {
     setAppZoom(0.9);
-    // Le dashboard n'a pas la barre d'outils de l'éditeur : il se contente
-    // d'une largeur plus modeste, elle aussi ramenée à l'échelle du zoom.
-    setAppMinWidth(1100, 0.9);
+    // Même taille minimale que l'éditeur (barre d'outils + liste des maps,
+    // au zoom mémorisé) pour que la fenêtre ne change pas de contrainte
+    // d'une page à l'autre.
+    setAppMinWidth(editorMinLogicalWidth(), 1);
     return () => {
       setAppZoom(1);
     };
@@ -422,14 +429,45 @@ function DashboardContent() {
   const [selectedFileInfo, setSelectedFileInfo] = useState<File | null>(null);
   const [isClosingProjectInfo, setIsClosingProjectInfo] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [itemsPerPage, setItemsPerPage] = useState(7);
+  // Nombre de projets par page : gardé tant que l'app est ouverte
+  // (sessionStorage survit aux allers-retours éditeur/paramètres et
+  // repart à 7 à la prochaine ouverture de l'app).
+  const [itemsPerPage, setItemsPerPageState] = useState(() => {
+    if (typeof window === "undefined") return 7;
+    try {
+      const saved = parseInt(sessionStorage.getItem("zedsuite-dashboard-per-page") || "", 10);
+      return [7, 10, 20, 50, 100].includes(saved) ? saved : 7;
+    } catch {
+      return 7;
+    }
+  });
+  const setItemsPerPage = (n: number) => {
+    setItemsPerPageState(n);
+    try {
+      sessionStorage.setItem("zedsuite-dashboard-per-page", String(n));
+    } catch {
+      // stockage indisponible : on garde seulement l'état en mémoire
+    }
+  };
   const [currentPage, setCurrentPage] = useState(1);
   const [pageTransition, setPageTransition] = useState(false);
+  // Poids total du dossier projets (tous projets, toutes versions)
+  const [projectsSize, setProjectsSize] = useState<number | null>(null);
   const [versionCounts, setVersionCounts] = useState<Record<string, number>>({});
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [isClosingDeleteConfirmModal, setIsClosingDeleteConfirmModal] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<File | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+  // Feuille de route publique (ROADMAP.md), même style que la fenêtre info
+  const [showRoadmap, setShowRoadmap] = useState(false);
+  // Version réelle de l'app (tauri.conf.json) : le texte était figé à v1.0.0
+  // Repli : la version du package.json (figée au build) si l'API Tauri ne répond pas
+  const [appVersion, setAppVersion] = useState<string>(String((packageJson as { version?: string }).version || ""));
+  useEffect(() => {
+    void import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion().then((v) => { if (v) setAppVersion(v); }).catch(() => undefined))
+      .catch(() => undefined);
+  }, []);
   const [powerFile, setPowerFile] = useState<File | null>(null);
   const router = useRouter();
   const { toast } = useToast();
@@ -483,6 +521,7 @@ function DashboardContent() {
       // Read all projects from the local store (app data directory)
       const filesData = await store.listFiles();
       setFiles(filesData);
+      store.projectsDirSize().then(setProjectsSize).catch(() => setProjectsSize(null));
 
       // Get version counts for each file
       const counts: Record<string, number> = {};
@@ -777,6 +816,13 @@ function DashboardContent() {
                 <HelpCircle className="w-4 h-4" />
               </button>
               <button
+                onClick={() => setShowRoadmap(true)}
+                className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
+                title={t.appInfo.roadmapTitle}
+              >
+                <ClipboardList className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => router.push('/settings')}
                 className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
                 title={t.userMenu.settings}
@@ -793,9 +839,18 @@ function DashboardContent() {
         {/* Rangée titre / recherche / upload — fixe avec la barre fenêtre */}
         <div className="relative container mx-auto px-4 pt-3 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-baseline gap-3">
-              <h3 className={`text-sm font-bold uppercase tracking-widest ${subText ?? (isLight ? 'text-slate-900' : 'text-slate-300')}`}>{t.dashboard.recentFiles}</h3>
-              <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-700' : 'text-slate-500')}`}>{filteredFiles.length}</span>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-3">
+                <h3 className={`text-sm font-bold uppercase tracking-widest ${subText ?? (isLight ? 'text-slate-900' : 'text-slate-300')}`}>{t.dashboard.recentFiles}</h3>
+                <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-700' : 'text-slate-500')}`}>{filteredFiles.length}</span>
+              </div>
+              {/* Poids du dossier projets, juste sous le titre */}
+              {projectsSize !== null && (
+                <span className={`inline-flex items-center gap-1 text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-700' : 'text-slate-500')}`}>
+                  <HardDrive className="w-3 h-3" />
+                  {formatBytes(projectsSize, language)}
+                </span>
+              )}
             </div>
 
             {/* Search Bar */}
@@ -1152,6 +1207,20 @@ function DashboardContent() {
         <PowerEstimateModal file={powerFile} onClose={() => setPowerFile(null)} />
       )}
 
+      <RoadmapModal
+        open={showRoadmap}
+        onClose={() => setShowRoadmap(false)}
+        theme={theme}
+        language={language}
+        version={appVersion}
+        labels={{
+          title: t.appInfo.roadmapTitle,
+          loading: t.appInfo.roadmapLoading,
+          openOnGithub: t.appInfo.roadmapOpen,
+          close: t.common?.close || "Close",
+        }}
+      />
+
       {/* Help / About Modal */}
       {showAbout && (
         <div
@@ -1168,7 +1237,7 @@ function DashboardContent() {
               <img src="/zedsuite-icon.svg" alt="ZedSuite" className="w-10 h-10 object-contain" />
               <div>
                 <h3 className={`text-lg font-semibold leading-tight ${theme === "light" ? "text-slate-900" : "text-white"}`}>ZedSuite</h3>
-                <p className={`text-xs ${theme === "light" ? "text-slate-500" : "text-slate-400"}`}>v1.0.0 — Open source, GPL-3.0</p>
+                <p className={`text-xs ${theme === "light" ? "text-slate-500" : "text-slate-400"}`}>{appVersion ? `v${appVersion}` : 'ZedSuite'} — Open source, GPL-3.0</p>
               </div>
             </div>
             <p className={`text-sm mb-4 ${theme === "light" ? "text-slate-700" : "text-white/80"}`}>{t.appInfo.intro}</p>
@@ -1188,11 +1257,16 @@ function DashboardContent() {
             <div className={`rounded-md border p-3 mb-3 ${theme === "light" ? "border-black/[0.08] bg-black/[0.04]" : "border-white/[0.08] bg-white/[0.03]"}`}>
               <p className={`text-sm font-semibold mb-1 ${theme === "light" ? "text-slate-900" : "text-white"}`}>{t.appInfo.updatesTitle}</p>
               <p className={`text-sm ${theme === "light" ? "text-slate-600" : "text-white/60"}`}>{t.appInfo.updatesText}</p>
+              {/* Liste complète des mises à jour, avec le détail de chacune (sur demande) */}
+              <p className={`text-sm mt-2 ${theme === "light" ? "text-slate-600" : "text-white/60"}`}>
+                {t.updateDialog.allReleases}{" "}
+                <button type="button" onClick={() => void openExternal(ZEDSUITE_RELEASES_URL)} className={`underline underline-offset-2 ${theme === "light" ? "text-slate-800 hover:text-black" : "text-white/80 hover:text-white"}`}>github.com/LeZed97/ZedSuite/releases</button>
+              </p>
             </div>
             <div className={`text-sm mb-5 ${theme === "light" ? "text-slate-600" : "text-white/60"}`}>
               <p className={`font-semibold mb-1 ${theme === "light" ? "text-slate-900" : "text-white"}`}>{t.appInfo.feedbackTitle}</p>
               <p>{t.appInfo.feedbackText}</p>
-              <p className="mt-1.5">Source code: <span className={theme === "light" ? "text-slate-800" : "text-white/80"}>github.com/LeZed97/ZedSuite</span></p>
+              <p className="mt-1.5">Source code: <button type="button" onClick={() => void openExternal(ZEDSUITE_REPO_URL)} className={`underline underline-offset-2 ${theme === "light" ? "text-slate-800 hover:text-black" : "text-white/80 hover:text-white"}`}>github.com/LeZed97/ZedSuite</button></p>
             </div>
             <div className="relative flex justify-end items-center">
               {/* Logo ZedPerf centré en bas — noir/rouge en clair, blanc/rouge en sombre */}

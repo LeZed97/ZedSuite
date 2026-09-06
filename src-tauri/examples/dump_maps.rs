@@ -48,6 +48,7 @@ fn main() {
                 "size": m.size,
                 "x_axis": m.x_axis_address.map(|a| format!("{:X}", a)),
                 "y_axis": m.y_axis_address.map(|a| format!("{:X}", a)),
+                "rows_reversed": m.rows_reversed,
                 "category": m.category,
                 "codeblock": m.codeblock_id,
                 "factor": m.correction_factor,
