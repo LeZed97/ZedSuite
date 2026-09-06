@@ -335,12 +335,19 @@ pub struct ZoneLayout {
 
 /// Zone layout for a 2 MB CP31 dump.
 ///
-/// TODO(corpus): confirm the dump size actually produced by your reader for
-/// this ECU, and narrow `calibration` to the real calibration half. The
-/// value below mirrors the VAG 2 MB assumption (upper half) and is a
-/// starting point only.
+/// CONFIRMED on one real dump (OM642 3.0 CDI 165 kW, SW 1037393817,
+/// read with a KESS V2):
+///   - dump size is exactly 2 MB (0x200000);
+///   - EVERYTHING below 0x190000 is 0xFF. The reader only returns the
+///     calibration area and pads the rest, so scanning from 0x180000 (the
+///     VAG assumption) wastes 64 KB of padding on every pass;
+///   - the single EDC16 checksum region descriptor sits at 0x19003C and
+///     declares the region 0x190000..0x1FCFFB inclusive.
+///
+/// Hence calibration = (0x190000, 0x1FD000). Widen it only if another dump
+/// shows real data below 0x190000 (a full-flash read via bench/boot would).
 pub const CP31_ZONES: ZoneLayout = ZoneLayout {
-    calibration: (0x180000, 0x200000),
+    calibration: (0x190000, 0x1FD000),
     boost: None,
     rail_pressure: None,
     injection: None,
@@ -699,6 +706,7 @@ impl EDC16CP31Detector {
     /// Calibration area to scan, derived from the dump size.
     fn scan_range(&self, file_size: usize) -> (usize, usize) {
         if file_size >= 0x200000 {
+            // Confirmed window, see CP31_ZONES.
             (CP31_ZONES.calibration.0, CP31_ZONES.calibration.1.min(file_size))
         } else if file_size >= 0x100000 {
             (0x80000, file_size)
@@ -762,6 +770,22 @@ mod tests {
     #[test]
     fn block_len_accounts_for_both_axes_and_data() {
         assert_eq!(EDC16CP31Detector::block_len(10, 10), (10 + 10 + 100) * 2);
+    }
+
+    /// Locks the layout facts confirmed on a real OM642 dump. If a future
+    /// dump contradicts these, this test is where you find out.
+    #[test]
+    fn confirmed_cp31_layout_constants() {
+        // Calibration area starts at 0x190000, not the VAG 0x180000.
+        assert_eq!(CP31_ZONES.calibration.0, 0x190000);
+        // And stops just past the checksummed region end (0x1FCFFB).
+        assert!(CP31_ZONES.calibration.1 > 0x1FCFFB);
+        assert!(CP31_ZONES.calibration.1 <= 0x200000);
+
+        // A 2MB dump must scan exactly that window.
+        let (start, end) = EDC16CP31Detector::new().scan_range(0x200000);
+        assert_eq!(start, 0x190000);
+        assert_eq!(end, 0x1FD000);
     }
 
     /// Guard against a template being flipped to calibrated without ranges.

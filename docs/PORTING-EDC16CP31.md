@@ -21,8 +21,10 @@ que tu n'as pas renseigné les données issues d'un corpus réel.
 | Entrée `ecus.json` | ajoutée, `enabled: false` |
 | Checksum EDC16 | **hérité gratuitement**, à valider |
 | Endianness frontend | **héritée gratuitement** |
+| Zone de calibration | **CONFIRMÉE sur dump réel** |
+| Checksum sur fichier CP31 réel | **VALIDÉ** |
 | Base de signatures | **vide — à construire** |
-| Zones d'adresses | **vides — à construire** |
+| Zones par famille de maps | **vides — à construire** |
 | Facteurs raw→physique | **hypothèses — à valider** |
 
 ### Les deux cadeaux
@@ -37,10 +39,15 @@ Bosch `FA DE CA FE CA FE AF FE` à `region_start + 0x3C`, lit les bornes dans
 les deux dwords précédents et absorbe l'écart dans le dernier dword pour que
 la somme retombe sur `0xD01FE500`. C'est le mécanisme EDC16 générique.
 
-> **À valider avant tout flash.** Prends une paire stock / modifié connue d'un
-> CP31, passe `verifyEDC16Checksum` sur les deux, et vérifie que la correction
-> reproduit exactement le fichier modifié. Tant que ce test n'est pas passé,
-> considère la correction comme non supportée.
+> **VALIDÉ sur un dump CP31 réel.** Descripteur unique trouvé à `0x19003C`,
+> aligné sur 0x100, déclarant la région `0x190000..0x1FCFFB` (446 460 octets,
+> 111 615 dwords). La somme des dwords big-endian de la région vaut
+> **exactement `0xD01FE500`**, mot de checksum inclus (`0x0375D4D9` à
+> `0x1FCFF8`). Le module lit ce fichier sans aucune modification.
+>
+> Reste à valider la **correction** (et pas seulement la vérification) sur une
+> paire stock / modifié : édite une map, corrige, et vérifie que la somme
+> retombe sur la constante.
 
 ---
 
@@ -60,14 +67,29 @@ Pour chaque map connue, note : taille de grille, adresse de la map, adresse
 des deux axes, facteur raw→physique, unité, motif d'octets qui précède le
 bloc, fenêtre d'adresses.
 
-### Étape 2 — Confirmer la taille de dump et la zone de calibration
+### Étape 2 — Taille de dump et zone de calibration — ✅ FAIT
 
-`CP31_ZONES.calibration` vaut `(0x180000, 0x200000)` : c'est l'hypothèse VAG
-2 Mo recopiée, **pas une valeur CP31 vérifiée**. Confirme ce que sort
-réellement ton outil de lecture pour cette ECU, et resserre la fenêtre.
+Confirmé sur un dump OM642 3.0 CDI 165 kW, SW `1037393817`, lu au KESS V2 :
 
-Si la taille n'est pas 2 Mo, ajoute-la à `SUPPORTED_SIZES` dans
-`ecu_identifier.rs` (actuellement `[512 Ko, 1 Mo, 2 Mo]`).
+| Fait | Valeur |
+|---|---|
+| Taille | exactement 2 Mo (`0x200000`), déjà dans `SUPPORTED_SIZES` |
+| Zone utile | `0x190000` → `0x1FFFFF`. **Tout ce qui est en dessous de `0x190000` est `0xFF`** |
+| Région checksummée | `0x190000`..`0x1FCFFB` (descripteur à `0x19003C`) |
+| SW Bosch | `1037393817` à `0x190010` (offset fixe) |
+| Chaîne famille | `99/1/EDC16CP31/001/B209/X/080000_000/...` à `0x1906FF` |
+| Descripteur moteur | `CR4-642-42P7-209CM-165kW-PT2R05-LR-3907x064ME` à `0x1D751C`, `3.0l` à `0x1D759A` |
+
+Le KESS ne ramène que la zone de calibration et remplit le reste en `0xFF` :
+`CP31_ZONES.calibration` est donc passée de l'hypothèse VAG `(0x180000,
+0x200000)` à `(0x190000, 0x1FD000)`. Un jour où tu feras une lecture full
+flash en bench/boot, la moitié basse sera peuplée — élargis la fenêtre à ce
+moment-là, le test `confirmed_cp31_layout_constants` te le rappellera.
+
+L'identification exploite maintenant deux marqueurs confirmés : le SW `1037`
+**à l'offset fixe** `0x190010` (positionnel, pas une recherche de sous-chaîne)
+et le descripteur moteur `CR<n>-<groupe>-`. Confiance 0.95 quand la chaîne
+famille et un marqueur structurel sont tous deux présents.
 
 ### Étape 3 — Calibrer les templates un par un
 
