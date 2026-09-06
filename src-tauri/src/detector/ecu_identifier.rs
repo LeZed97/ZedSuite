@@ -62,6 +62,7 @@ pub enum ECUType {
     EDC16U,      // VAG generic (fallback)
     EDC16C,      // PSA
     EDC16CP,     // PSA newer
+    EDC16CP31,   // Mercedes-Benz OM642/OM646 common rail - MPC5xx
 
     // Bosch EDC17 family (Diesel)
     EDC17C,
@@ -134,6 +135,16 @@ impl ECUIdentifier {
         // Identify them explicitly so they can never pass for an EDC16.
         if let Some(id) = Self::identify_unsupported_bosch(data) {
             log::debug!("🚫 Unsupported Bosch family detected: {:?}", id.ecu_type);
+            return id;
+        }
+
+        // 1.5 Mercedes EDC16 gate. MUST run before the VAG variant logic:
+        // Mercedes CP31 shares the Bosch 0281 HW prefix and the 2MB dump size
+        // with the VAG EDC16, so detect_edc16_variant() would happily label a
+        // Mercedes file EDC16U31 and hand it to a detector calibrated on VAG
+        // address layouts.
+        if let Some(id) = Self::identify_mercedes_edc16(data) {
+            log::debug!("Identified as Mercedes EDC16: {:?}", id.ecu_type);
             return id;
         }
 
@@ -1199,6 +1210,86 @@ impl ECUIdentifier {
         Self::unknown_ecu(0.20)
     }
     
+    /// Positive identification of a Mercedes-Benz EDC16 (CP31 family).
+    ///
+    /// Evidence used, in decreasing strength:
+    ///   A. the literal family string "EDC16CP31" in the metadata area;
+    ///   B. a Daimler part number ("A" + 10 digits, e.g. A6421532179) in a
+    ///      file that also carries generic EDC16 characteristics;
+    ///   C. a Daimler part number plus a Bosch 0281 HW number.
+    ///
+    /// Deliberately conservative: a VAG part number anywhere in the file
+    /// vetoes the match, and evidence B/C alone yields a lower confidence.
+    /// Returning None here is safe (the VAG path runs next and will itself
+    /// refuse an unrecognised layout); returning a WRONG Some() is not.
+    ///
+    /// TODO(corpus): add a structural signature at a fixed offset once real
+    /// CP31 dumps are available, and raise the confidence accordingly. ASCII
+    /// evidence alone is weaker than what the VAG variants rely on.
+    fn identify_mercedes_edc16(data: &[u8]) -> Option<ECUIdentification> {
+        // Veto: a VAG reference means this is not a Mercedes file.
+        for vag in [&b"03G906"[..], b"038906", b"070906", b"03L906", b"045906"] {
+            if Self::contains_sequence(data, vag) {
+                return None;
+            }
+        }
+
+        let explicit = Self::contains_sequence(data, b"EDC16CP31")
+            || Self::contains_sequence(data, b"EDC16 CP31");
+        let daimler_part = Self::find_daimler_part_number(data);
+        let has_edc16 = Self::has_edc16_characteristics(data);
+        let has_bosch_hw = Self::extract_bosch_hw_number_full(data).is_some();
+
+        let confidence = if explicit {
+            0.90
+        } else if daimler_part.is_some() && has_edc16 && has_bosch_hw {
+            0.72
+        } else if daimler_part.is_some() && has_edc16 {
+            0.65
+        } else {
+            return None;
+        };
+
+        Some(ECUIdentification {
+            manufacturer: ECUManufacturer::Bosch,
+            ecu_type: ECUType::EDC16CP31,
+            variant: Some("Mercedes-Benz OM642/OM646 (MPC5xx)".to_string()),
+            software_version: None,
+            hardware_version: Self::extract_bosch_hw_number_full(data),
+            part_number: daimler_part,
+            confidence,
+        })
+    }
+
+    /// Find a Daimler part number: ASCII "A" followed by exactly 10 digits.
+    /// Engine/ECU groups seen on OM642/OM646 start A642/A646/A611/A628; the
+    /// group filter keeps random "A"+digits noise out.
+    fn find_daimler_part_number(data: &[u8]) -> Option<String> {
+        const GROUPS: [&[u8; 3]; 5] = [b"642", b"646", b"628", b"611", b"629"];
+        let scan_limit = std::cmp::min(Self::MAX_SCAN_BYTES, data.len());
+        let mut windows: Vec<&[u8]> = vec![&data[0..scan_limit]];
+        if data.len() == 2_097_152 {
+            windows.push(&data[0x180000..std::cmp::min(0x180000 + 100_000, data.len())]);
+        }
+
+        for window in windows {
+            for i in 0..window.len().saturating_sub(11) {
+                if window[i] != b'A' {
+                    continue;
+                }
+                let digits = &window[i + 1..i + 11];
+                if !digits.iter().all(|c| c.is_ascii_digit()) {
+                    continue;
+                }
+                if !GROUPS.iter().any(|g| &digits[0..3] == &g[..]) {
+                    continue;
+                }
+                return String::from_utf8(window[i..i + 11].to_vec()).ok();
+            }
+        }
+        None
+    }
+
     // Helper methods
     
     fn unknown_ecu(confidence: f32) -> ECUIdentification {

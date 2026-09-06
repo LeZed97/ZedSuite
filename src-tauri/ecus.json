@@ -164,5 +164,32 @@
     ],
     "mappack_export_enabled": true,
     "mappack_price": 40
+  },
+  {
+    "id": "edc16cp31",
+    "name": "EDC16CP31",
+    "manufacturer": "Bosch",
+    "family": "EDC16",
+    "processor": "MPC5xx",
+    "endianness": "Big-Endian",
+    "file_sizes": [
+      "2MB"
+    ],
+    "vehicles": "Mercedes-Benz OM642 / OM646 (CDI common rail)",
+    "detection_method": "Skeleton - templates not calibrated yet",
+    "status": "skeleton",
+    "enabled": false,
+    "map_categories": [
+      "Injection system",
+      "Turbo boost pressure",
+      "Turbo boost pressure control",
+      "Smoke limitation",
+      "Engine torque limiters",
+      "Engine torque request",
+      "Start of injection SOI",
+      "EGR"
+    ],
+    "mappack_export_enabled": false,
+    "mappack_price": 0
   }
 ]
