@@ -176,9 +176,9 @@
       "2MB"
     ],
     "vehicles": "Mercedes-Benz OM642 / OM646 (CDI common rail)",
-    "detection_method": "Skeleton - templates not calibrated yet",
-    "status": "skeleton",
-    "enabled": false,
+    "detection_method": "Self-describing Kf blocks + windowed markers (corpus: 1 SW)",
+    "status": "beta",
+    "enabled": true,
     "map_categories": [
       "Injection system",
       "Turbo boost pressure",
@@ -186,6 +186,7 @@
       "Smoke limitation",
       "Engine torque limiters",
       "Engine torque request",
+      "Torque to IQ Conversion",
       "Start of injection SOI",
       "EGR"
     ],

@@ -72,11 +72,12 @@ impl SmartDetector {
                 log::debug!("📋 Using EDC16U34 specialized detector");
                 self.detect_edc16u34(data, EDC16Variant::EDC16U34, tuned_mode)
             }
-            // EDC16CP31 (Mercedes OM642/OM646) - skeleton detector. Returns
-            // an empty list until its templates are calibrated; it never
-            // falls back to the VAG detectors.
+            // EDC16CP31 (Mercedes OM642/OM646) - self-describing Kf block
+            // walk, calibrated on one software build. Returns an empty list
+            // if no template is calibrated; it never falls back to the VAG
+            // detectors.
             ECUType::EDC16CP31 => {
-                log::debug!("Using EDC16CP31 skeleton detector");
+                log::debug!("Using EDC16CP31 detector");
                 self.detect_edc16cp31(data, tuned_mode)
             }
             // Other EDC16 variants - no detection for now (return empty)

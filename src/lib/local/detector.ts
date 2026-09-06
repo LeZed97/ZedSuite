@@ -35,10 +35,12 @@ export const SUPPORTED_ECUS = new Set([
   "EDC16U1",
   "EDC16U31",
   "EDC16U34",
-  // "EDC16CP31",  // Mercedes OM642/OM646 - uncomment once the detector is
-  //               // calibrated (see docs/PORTING-EDC16CP31.md). Enabling it
-  //               // early would let users import a file the engine cannot
-  //               // actually map.
+  "EDC16CP31", // Mercedes OM642/OM646. Calibrated on a corpus of ONE software
+  //           // build (Bosch 1037393817, OM642 165 kW) cross-checked against
+  //           // the Daimler ASAP2 description of the project - see
+  //           // docs/PORTING-EDC16CP31.md. Eleven map families, addresses
+  //           // used as search windows, every block re-validated structurally
+  //           // and against a physical range before being reported.
 ]);
 
 export async function identifyEcu(
