@@ -141,6 +141,50 @@ pub fn detect_maps(request: DetectMapsArgs) -> Result<DetectMapsResponse, String
 /// signale un fichier probablement déjà fortement modifié — l'app conseille
 /// alors de charger le fichier d'origine. Les libellés reprennent les noms
 /// de maps (anglais, comme partout).
+/// Rapport de complétude pour le Bosch EDC16CP31 (Mercedes OM642/OM646).
+///
+/// Le corpus ne compte qu'UN logiciel (OM642 165 kW, SW 1037393817), sur
+/// lequel le détecteur sort 25 maps. En tirer des comptes attendus par
+/// famille serait de la sur-interprétation : un autre build légitime en
+/// aurait d'autres, et le rapport crierait « fichier modifié » à tort. Le
+/// seul invariant défendable avec un corpus de un est la PRÉSENCE : un CP31
+/// d'origine porte au moins une map de chacune des onze familles calibrées.
+///
+/// Resserrer les comptes quand un deuxième logiciel sera au corpus.
+fn build_expected_report_edc16cp31(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapStatus>> {
+    // (libellé, minimum attendu, préfixe de nom compté) — les préfixes sont
+    // les `name` posés par MAP_TEMPLATES dans le détecteur CP31.
+    let rules: &[(&str, usize, &str)] = &[
+        ("Rail Pressure Target", 1, "Rail Pressure Target"),
+        ("Rail Pressure Limiter", 1, "Rail Pressure Limiter"),
+        ("Boost Target", 1, "Boost Target"),
+        ("Boost Limiter", 1, "Boost Limiter"),
+        ("VNT Duty Cycle", 1, "VNT Duty Cycle"),
+        ("Smoke Limiter", 1, "Smoke Limiter by boost pressure"),
+        ("Driver Wish", 1, "Driver Wish"),
+        ("Quantity Limiter", 1, "Quantity Limiter by boost pressure"),
+        ("Torque to IQ Conversion", 1, "Torque to IQ Conversion"),
+        ("Start of injection", 1, "Start of injection"),
+        ("EGR air mass target", 1, "EGR air mass target"),
+    ];
+
+    Some(
+        rules
+            .iter()
+            .map(|(label, expected, prefix)| ExpectedMapStatus {
+                label: label.to_string(),
+                expected: *expected,
+                found: maps
+                    .iter()
+                    .filter(|m| {
+                        m.name.as_deref().map(|n| n.starts_with(prefix)).unwrap_or(false)
+                    })
+                    .count(),
+            })
+            .collect(),
+    )
+}
+
 fn build_expected_report(
     ecu_type: Option<&str>,
     maps: &[DetectedMap],
@@ -151,6 +195,13 @@ fn build_expected_report(
     }
     if ecu.contains("EDC15VM") {
         return build_expected_report_edc15vm(maps);
+    }
+    // EDC16CP31 (Mercedes) : les règles EDC16 ci-dessous sont VAG (Duration
+    // 00-05, Gearbox Torque Limiter, SVRL, Smoke Limiter by MAF/MAP/Lambda…).
+    // Aucune de ces familles n'existe sous ce nom sur un CR4 Mercedes, donc
+    // les appliquer donnait un score de 3 % sur un fichier parfaitement sain.
+    if ecu.contains("EDC16CP31") {
+        return build_expected_report_edc16cp31(maps);
     }
     if !ecu.contains("EDC16") {
         return None;
