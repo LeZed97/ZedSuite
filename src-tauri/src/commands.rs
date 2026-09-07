@@ -86,7 +86,13 @@ pub fn identify_ecu(
 ///       l'adresse. Sur le corpus les maps trouvées sont les mêmes, mais
 ///       leur confiance change et un logiciel non catalogué peut désormais
 ///       en produire : les projets CP31 doivent être re-scannés.
-pub const DETECTOR_VERSION: u32 = 40;
+///   41 — EDC16CP31 : « Smoke Limiter by boost pressure » séparée en deux
+///       familles distinctes (« Smoke Limiter » = FlMng_qSmk, protection
+///       fumée ; « Thermal Quantity Limiter » = FlMng_qLimT3BPS, protection
+///       thermique). Les noms de maps changent, et un fichier déjà modifié
+///       ne perd plus ses cartes remontées : les projets CP31 doivent être
+///       re-scannés.
+pub const DETECTOR_VERSION: u32 = 41;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -162,7 +168,8 @@ fn build_expected_report_edc16cp31(maps: &[DetectedMap]) -> Option<Vec<ExpectedM
         ("Boost Target", 1, "Boost Target"),
         ("Boost Limiter", 1, "Boost Limiter"),
         ("VNT Duty Cycle", 1, "VNT Duty Cycle"),
-        ("Smoke Limiter", 1, "Smoke Limiter by boost pressure"),
+        ("Smoke Limiter", 1, "Smoke Limiter"),
+        ("Thermal Quantity Limiter", 1, "Thermal Quantity Limiter"),
         ("Driver Wish", 1, "Driver Wish"),
         ("Quantity Limiter", 1, "Quantity Limiter by boost pressure"),
         ("Torque to IQ Conversion", 1, "Torque to IQ Conversion"),

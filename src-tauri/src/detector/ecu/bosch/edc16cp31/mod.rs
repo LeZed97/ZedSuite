@@ -54,7 +54,8 @@ mod signatures;
 pub use signatures::{
     AxisKey, AxisSignature, BlockMarker, DimensionRange, EDC16MapSignature, StructureType,
     CP31_KEYS_ACCPED_TRQ_ENG, CP31_KEYS_AIRCTL_M_DES_BAS, CP31_KEYS_FLMNG_Q_LIM_BST_PRES,
-    CP31_KEYS_FLMNG_Q_SMK, CP31_KEYS_FMTC_TRQ2Q_BAS, CP31_KEYS_INJCRV_PHI_MI1,
+    CP31_KEYS_FLMNG_Q_LIM_T3BPS, CP31_KEYS_FLMNG_Q_SMK, CP31_KEYS_FMTC_TRQ2Q_BAS,
+    CP31_KEYS_INJCRV_PHI_MI1,
     CP31_KEYS_PCR_P_BDES_MAX_AP, CP31_KEYS_PCR_P_DES_BAS, CP31_KEYS_PCR_R_CTL_BAS,
     CP31_KEYS_RAIL_P_SETPOINT_BASE, CP31_KEYS_RAIL_P_SETPOINT_LIM_N, CP31_MARKERS, CP31_SIGNATURES,
 };
@@ -294,10 +295,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         calibrated: true,
     },
     MapTemplate {
-        name: "Smoke Limiter by boost pressure",
+        name: "Smoke Limiter",
         damos_label: "FlMng_qSmk_MAP",
         category: MapCategory::SmokeLimitation,
-        grids: &[(16, 16), (12, 12)],
+        grids: &[(16, 16)],
         // NOT by MAF: on CR4 the smoke limit is a function of engine speed
         // and CORRECTED BOOST PRESSURE (PCR_pBPSCor), not of air mass.
         axes: (AxisType::Rpm, AxisType::BoostPressure),
@@ -308,10 +309,36 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         z_range_tuned: (0.0, 130.0),
         unit: "mm^3/cyc",
         signed: false,
-        max_count: 2,
+        max_count: 1,
         priority: 92,
         axis_keys: CP31_KEYS_FLMNG_Q_SMK,
-        zone: Some((0x1A8000, 0x1A9000)),
+        zone: Some((0x1A8800, 0x1A9000)),
+        calibrated: true,
+    },
+    MapTemplate {
+        // A SECOND quantity ceiling, distinct from the smoke limiter and
+        // easily confused with it: same units, same axes, adjacent address.
+        // This one is exhaust-temperature protection (T3), the other one is
+        // visible smoke. They were reported under one name until a full
+        // reading of the project description separated them - which matters,
+        // because raising one of them is a cosmetic decision and raising the
+        // other removes a thermal protection.
+        name: "Thermal Quantity Limiter",
+        damos_label: "FlMng_qLimT3BPS_MAP",
+        category: MapCategory::SmokeLimitation,
+        grids: &[(12, 12)],
+        axes: (AxisType::Rpm, AxisType::BoostPressure),
+        z_factor: 0.01,
+        z_offset: 0.0,
+        // observed stock: 59.9 .. 88.0 mm3/stroke
+        z_range_stock: (0.0, 95.0),
+        z_range_tuned: (0.0, 130.0),
+        unit: "mm^3/cyc",
+        signed: false,
+        max_count: 1,
+        priority: 91,
+        axis_keys: CP31_KEYS_FLMNG_Q_LIM_T3BPS,
+        zone: Some((0x1A8200, 0x1A8800)),
         calibrated: true,
     },
     MapTemplate {
@@ -665,7 +692,7 @@ impl EDC16CP31Detector {
                     if found >= template.max_count {
                         break;
                     }
-                    if let Some(mut map) = self.try_block(data, hit, template) {
+                    if let Some(mut map) = self.try_block_ranged(data, hit, template, true) {
                         // An exact match on the whole breakpoint grid is
                         // stronger evidence than "plausible axes in the right
                         // window", which is all the zone walk can offer. Say
@@ -825,8 +852,26 @@ impl EDC16CP31Detector {
         Some(CalBlock { addr: off, nx, ny, x_axis, y_axis, data_addr, z })
     }
 
-    /// Try to read and validate one block at `off` against `template`.
+    /// Try to read and validate one block at `off` against `template`, using
+    /// the range the detector mode calls for.
     fn try_block(&self, data: &[u8], off: usize, template: &MapTemplate) -> Option<DetectedMap> {
+        self.try_block_ranged(data, off, template, self.tuned_mode)
+    }
+
+    /// Same, with an explicit choice of physical range.
+    ///
+    /// `wide_range` exists for the axis-key phase. The stock range is there to
+    /// reject blocks that are not the family at all; once the whole breakpoint
+    /// grid has matched, identity is settled, and applying the stock range
+    /// would only reject the family's OWN map because someone remapped it -
+    /// which is exactly the file a user opens this editor for.
+    fn try_block_ranged(
+        &self,
+        data: &[u8],
+        off: usize,
+        template: &MapTemplate,
+        wide_range: bool,
+    ) -> Option<DetectedMap> {
         let (x_type, y_type) = template.axes;
         let block = Self::read_block(data, off, CP31_MAX_AXIS_PTS, CP31_MAX_AXIS_PTS)?;
 
@@ -850,7 +895,7 @@ impl EDC16CP31Detector {
             })
             .collect();
 
-        let score = self.score(&values, block.nx, block.ny, template)?;
+        let score = self.score(&values, block.nx, block.ny, template, wide_range)?;
         Some(self.build_map(&block, template, score))
     }
 
@@ -860,8 +905,9 @@ impl EDC16CP31Detector {
         nx: usize,
         ny: usize,
         template: &MapTemplate,
+        wide_range: bool,
     ) -> Option<f64> {
-        let (lo, hi) = if self.tuned_mode {
+        let (lo, hi) = if wide_range {
             template.z_range_tuned
         } else {
             template.z_range_stock
@@ -1377,5 +1423,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn axis_key_still_finds_a_family_that_has_been_remapped() {
+        // A remap moves Z out of the stock range but never touches the axes.
+        // The key must keep identifying the family, otherwise the editor
+        // hides exactly the maps the user came to look at.
+        let key = &CP31_KEYS_FLMNG_Q_SMK[0];
+        let tpl = MAP_TEMPLATES
+            .iter()
+            .find(|t| t.damos_label.starts_with("FlMng_qSmk"))
+            .unwrap();
+        // Above the stock ceiling, inside the tuned one.
+        let over = (tpl.z_range_stock.1 + tpl.z_range_tuned.1) / 2.0;
+        let raw = (over / tpl.z_factor) as i16;
+        let z: Vec<i16> = (0..key.nx * key.ny)
+            .map(|i| raw - (i % 20) as i16)
+            .collect();
+        let img = image_with(0x1A8986, &kf_block(key.x, key.y, &z));
+
+        let maps = EDC16CP31Detector::new().detect(&img);
+        assert!(
+            maps.iter().any(|m| m.name.as_deref() == Some(tpl.name)),
+            "a remapped smoke limiter must still be reported in stock mode"
+        );
     }
 }

@@ -326,6 +326,21 @@ pub const CP31_KEYS_PCR_R_CTL_BAS: &[AxisKey] = &[
     },
 ];
 
+/// Axis keys for `FlMng_qLimT3BPS_MAP`.
+/// 12x12, read at 0x1A8436 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_FLMNG_Q_LIM_T3BPS: &[AxisKey] = &[
+    AxisKey {
+        nx: 12,
+        ny: 12,
+        x: &[
+            800, 1200, 1600, 2000, 2400, 2800, 3200, 3600, 4000, 4200, 4400, 4600
+        ],
+        y: &[
+            1600, 1700, 1800, 1900, 2000, 2050, 2100, 2150, 2200, 2250, 2300, 2400
+        ],
+    },
+];
+
 /// Axis keys for `FlMng_qSmk_MAP`.
 /// 16x16, read at 0x1A8986 on SW 1037393817, 1 occurrence(s) in that file.
 pub const CP31_KEYS_FLMNG_Q_SMK: &[AxisKey] = &[
