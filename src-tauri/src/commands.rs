@@ -79,7 +79,10 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
-pub const DETECTOR_VERSION: u32 = 38;
+///   39 — EDC16CP31 : famille calibrée (11 familles de maps, lecture des
+///       blocs Kf auto-descriptifs). Le détecteur produit des maps là où il
+///       n'en produisait aucune : les projets CP31 doivent être re-scannés.
+pub const DETECTOR_VERSION: u32 = 39;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
