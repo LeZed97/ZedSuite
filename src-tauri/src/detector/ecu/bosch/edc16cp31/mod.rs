@@ -52,7 +52,8 @@
 mod signatures;
 
 pub use signatures::{
-    AxisKey, AxisSignature, BlockMarker, DimensionRange, EDC16MapSignature, StructureType,
+    AxisKey, AxisSignature, BlockMarker, CurveKey, DimensionRange, EDC16MapSignature, StructureType,
+    CP31_CKEYS_FLMNG_Q_LIM_N, CP31_CKEYS_RAIL_P_MAX_SET_SUBST,
     CP31_KEYS_ACCPED_TRQ_ENG, CP31_KEYS_AIRCTL_M_DES_BAS, CP31_KEYS_FLMNG_Q_LIM_BST_PRES,
     CP31_KEYS_FLMNG_Q_LIM_T3BPS, CP31_KEYS_FLMNG_Q_SMK, CP31_KEYS_FMTC_TRQ2Q_BAS,
     CP31_KEYS_INJCRV_PHI_MI1,
@@ -541,6 +542,105 @@ const CP31_AXIS_KEY_BONUS: f32 = 0.15;
 /// on the corpus dump, so this leaves a wide margin.
 const CP31_MAX_KEY_HITS: usize = 64;
 
+// ============================== CURVES ==============================
+
+/// One-dimensional counterpart of `MapTemplate`, for the Bosch
+/// `Kl_Xs16_Ws16` layout: `[nx u16][X i16 x nx][Z i16 x nx]`.
+///
+/// Curves are a weaker structure than maps: one axis instead of two, and no
+/// grid to cross-check. A zone walk over them would happily report any
+/// ascending vector, so this detector never walks for curves - a curve is
+/// emitted only when one of its `axis_keys` matches exactly.
+pub struct CurveTemplate {
+    pub name: &'static str,
+    pub damos_label: &'static str,
+    pub category: MapCategory,
+    /// Accepted point counts, read from the block header.
+    pub lengths: &'static [usize],
+    pub axis: AxisType,
+    pub z_factor: f64,
+    pub z_offset: f64,
+    pub z_range_stock: (f64, f64),
+    pub z_range_tuned: (f64, f64),
+    pub unit: &'static str,
+    pub signed: bool,
+    pub max_count: usize,
+    /// Exact `[nx] + X` bytes of this family, read from a real dump.
+    pub axis_keys: &'static [CurveKey],
+    pub calibrated: bool,
+}
+
+/// Curve families confirmed on an OM642-class EDC16CP31.
+///
+/// Deliberately short. Every entry was verified the same way as the map
+/// families - the reference build's X vector matches in exactly one place in
+/// the corpus dump - and only curves whose ASAP2 conversion is unambiguous
+/// were kept. `FlMng_facFullLd_CUR` for instance is left out on purpose: its
+/// COMPU_METHOD gives a factor of 1/128 while its declared upper limit is
+/// 1.0, and the stored values reach 2.0. Until that is resolved, shipping it
+/// would mean showing a number that may be twice the truth.
+pub const CURVE_TEMPLATES: &[CurveTemplate] = &[
+    CurveTemplate {
+        // The ceiling that ends the power band: flat at 86 mm3/stroke from
+        // 1800 to 4000 rpm on the corpus, then collapsing to 1.5 by 4550.
+        name: "Quantity Limiter by RPM",
+        damos_label: "FlMng_qLimN_CUR",
+        category: MapCategory::SmokeLimitation,
+        lengths: &[20],
+        axis: AxisType::Rpm,
+        z_factor: 0.01,
+        z_offset: 0.0,
+        // observed stock: 1.5 .. 86.0 mm3/stroke, A2L allows up to 327.67
+        z_range_stock: (0.0, 95.0),
+        z_range_tuned: (0.0, 130.0),
+        unit: "mm^3/cyc",
+        signed: false,
+        max_count: 1,
+        axis_keys: CP31_CKEYS_FLMNG_Q_LIM_N,
+        calibrated: true,
+    },
+    CurveTemplate {
+        name: "Rail Pressure Substitute Limit",
+        damos_label: "Rail_pMaxSetSubst_CUR",
+        category: MapCategory::InjectionSystem,
+        lengths: &[8],
+        axis: AxisType::Rpm,
+        z_factor: 0.1,
+        z_offset: 0.0,
+        // observed stock: 300 .. 1600 bar, A2L allows up to 1800
+        z_range_stock: (0.0, 1700.0),
+        z_range_tuned: (0.0, 1800.0),
+        unit: "bar",
+        signed: false,
+        max_count: 1,
+        axis_keys: CP31_CKEYS_RAIL_P_MAX_SET_SUBST,
+        calibrated: true,
+    },
+];
+
+/// Decoded CP31 curve block.
+#[derive(Debug, Clone)]
+pub struct CalCurve {
+    pub addr: usize,
+    pub nx: usize,
+    pub x_axis: Vec<i16>,
+    pub data_addr: usize,
+    pub z: Vec<i16>,
+}
+
+impl CalCurve {
+    pub const fn len(nx: usize) -> usize {
+        CP31_CURVE_HEADER_LEN + 4 * nx
+    }
+
+    pub fn end(&self) -> usize {
+        self.addr + Self::len(self.nx)
+    }
+}
+
+/// `[nx]`, the single count word a CP31 curve starts with.
+pub const CP31_CURVE_HEADER_LEN: usize = 2;
+
 // ============================= DETECTOR =============================
 
 pub struct EDC16CP31Detector {
@@ -568,7 +668,9 @@ impl EDC16CP31Detector {
 
     /// True once at least one template has been confirmed on real files.
     pub fn is_calibrated() -> bool {
-        MAP_TEMPLATES.iter().any(|t| t.calibrated) || !CP31_SIGNATURES.is_empty()
+        MAP_TEMPLATES.iter().any(|t| t.calibrated)
+            || CURVE_TEMPLATES.iter().any(|t| t.calibrated)
+            || !CP31_SIGNATURES.is_empty()
     }
 
     /// Main entry point.
@@ -607,6 +709,11 @@ impl EDC16CP31Detector {
             self.push_if_free(&mut maps, &mut claimed, map);
         }
 
+        // PHASE 3 - curves, key-anchored only (see `CurveTemplate`).
+        for map in self.detect_curves(data) {
+            self.push_if_free(&mut maps, &mut claimed, map);
+        }
+
         maps.sort_by_key(|m| m.address);
         log::debug!("[EDC16CP31] detection complete: {} maps", maps.len());
         maps
@@ -624,6 +731,132 @@ impl EDC16CP31Detector {
         }
         claimed.insert(range);
         maps.push(map);
+    }
+
+    // ---------------------- PHASE 3: curves -----------------------
+
+    /// Curve walk. Key-anchored only: a curve has a single axis, so there is
+    /// nothing to cross-check a blind hit against.
+    fn detect_curves(&self, data: &[u8]) -> Vec<DetectedMap> {
+        let mut out = Vec::new();
+        let (scan_start, scan_end) = self.scan_range(data.len());
+        if scan_end <= scan_start || scan_end > data.len() {
+            return out;
+        }
+
+        for template in CURVE_TEMPLATES {
+            if !self.exploratory && !template.calibrated {
+                continue;
+            }
+
+            for key in template.axis_keys {
+                let bytes = key.to_bytes();
+                if bytes.len() < CP31_CURVE_HEADER_LEN + 8 {
+                    continue;
+                }
+
+                let mut found = 0usize;
+                let mut off = scan_start;
+                while off + bytes.len() <= scan_end && found < template.max_count {
+                    if data[off..off + bytes.len()] == bytes[..] {
+                        if let Some(mut map) = self.try_curve(data, off, template) {
+                            map.confidence = (map.confidence + CP31_AXIS_KEY_BONUS).min(0.99);
+                            out.push(map);
+                            found += 1;
+                        }
+                    }
+                    off += 2;
+                }
+                log::debug!(
+                    "[EDC16CP31] curve key {} pts for {} -> {} curve(s)",
+                    key.nx,
+                    template.name,
+                    found
+                );
+            }
+        }
+        out
+    }
+
+    /// Decode the CP31 curve at `off` without any interpretation.
+    pub fn read_curve(data: &[u8], off: usize, max_nx: usize) -> Option<CalCurve> {
+        let nx = Self::read_u16_be(data, off)? as usize;
+        if nx < 2 || nx > max_nx {
+            return None;
+        }
+        let x_off = off + CP31_CURVE_HEADER_LEN;
+        let data_addr = x_off + 2 * nx;
+        let x_axis = Self::read_i16_be_slice(data, x_off, nx)?;
+        let z = Self::read_i16_be_slice(data, data_addr, nx)?;
+        Some(CalCurve { addr: off, nx, x_axis, data_addr, z })
+    }
+
+    fn try_curve(
+        &self,
+        data: &[u8],
+        off: usize,
+        template: &CurveTemplate,
+    ) -> Option<DetectedMap> {
+        let curve = Self::read_curve(data, off, CP31_MAX_AXIS_PTS)?;
+        if !template.lengths.is_empty() && !template.lengths.contains(&curve.nx) {
+            return None;
+        }
+        if !Self::axis_is_valid(&curve.x_axis, template.axis) {
+            return None;
+        }
+
+        let values: Vec<f64> = curve
+            .z
+            .iter()
+            .map(|&v| {
+                let base = if template.signed { v as f64 } else { v as u16 as f64 };
+                base * template.z_factor + template.z_offset
+            })
+            .collect();
+
+        // Identity is settled by the key, so the wide range applies here for
+        // the same reason it does in phase 0.
+        let (lo, hi) = template.z_range_tuned;
+        if values.iter().any(|v| *v < lo || *v > hi) {
+            return None;
+        }
+        let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        if (max - min).abs() < f64::EPSILON {
+            return None;
+        }
+        // A curve is one row: monotonicity is measured over the whole vector.
+        let score = (0.60 + 0.40 * Self::row_monotonicity(&values, 1, values.len())).min(0.99);
+
+        Some(self.build_curve(&curve, template, score))
+    }
+
+    fn build_curve(
+        &self,
+        curve: &CalCurve,
+        template: &CurveTemplate,
+        score: f64,
+    ) -> DetectedMap {
+        let mut map = DetectedMap::new(
+            curve.data_addr as u32,
+            curve.nx * 2,
+            MapDimensions::OneDimensional { length: curve.nx },
+            if template.signed { DataType::Int16 } else { DataType::UInt16 },
+        );
+        map.name = Some(template.name.to_string());
+        map.category = Some(template.category.display_name().to_string());
+        map.unit = Some(template.unit.to_string());
+        map.correction_factor = Some(template.z_factor);
+        map.offset = Some(template.z_offset);
+        map.confidence = score as f32;
+        map.x_axis_address = Some((curve.addr + CP31_CURVE_HEADER_LEN) as u32);
+        map.x_axis_correction = Some(template.axis.factor());
+        map.x_label = Some(template.axis.label().to_string());
+        map.description = Some(format!(
+            "EDC16CP31 {} - damos family {} - curve 0x{:06X}, {} points",
+            template.name, template.damos_label, curve.addr, curve.nx
+        ));
+        map
     }
 
     // --------------------- PHASE 0: axis keys ---------------------
@@ -1088,6 +1321,17 @@ mod tests {
         v
     }
 
+    /// Build a synthetic CP31 curve: `[nx][X][Z]`.
+    fn kl_curve(x: &[i16], z: &[i16]) -> Vec<u8> {
+        assert_eq!(x.len(), z.len());
+        let mut v = Vec::new();
+        v.extend_from_slice(&(x.len() as u16).to_be_bytes());
+        for a in x.iter().chain(z.iter()) {
+            v.extend_from_slice(&a.to_be_bytes());
+        }
+        v
+    }
+
     /// 2 MB image with `block` planted at `addr`, everything else 0xFF like
     /// a real KESS read.
     fn image_with(addr: usize, block: &[u8]) -> Vec<u8> {
@@ -1448,5 +1692,76 @@ mod tests {
             maps.iter().any(|m| m.name.as_deref() == Some(tpl.name)),
             "a remapped smoke limiter must still be reported in stock mode"
         );
+    }
+
+    #[test]
+    fn curve_key_encodes_the_block_head_byte_for_byte() {
+        let key = &CP31_CKEYS_FLMNG_Q_LIM_N[0];
+        let z = vec![5_000i16; key.nx];
+        let block = kl_curve(key.x, &z);
+        let bytes = key.to_bytes();
+        assert_eq!(bytes, block[..bytes.len()].to_vec());
+    }
+
+    #[test]
+    fn detects_a_planted_quantity_limiter_curve() {
+        let key = &CP31_CKEYS_FLMNG_Q_LIM_N[0];
+        // 30 .. 87 mm3/stroke, ascending.
+        let z: Vec<i16> = (0..key.nx).map(|i| 3_000 + i as i16 * 300).collect();
+        let img = image_with(0x1A813C, &kl_curve(key.x, &z));
+
+        let maps = EDC16CP31Detector::new().detect(&img);
+        let hit = maps
+            .iter()
+            .find(|m| m.name.as_deref() == Some("Quantity Limiter by RPM"))
+            .expect("the curve key should locate the planted curve");
+        assert!(matches!(
+            hit.dimensions,
+            MapDimensions::OneDimensional { length } if length == key.nx
+        ));
+        assert_eq!(
+            hit.x_axis_address,
+            Some((0x1A813C + CP31_CURVE_HEADER_LEN) as u32)
+        );
+        assert_eq!(hit.address as usize, 0x1A813C + CP31_CURVE_HEADER_LEN + 2 * key.nx);
+    }
+
+    /// The whole safety argument for curves: no key, no curve. A plain
+    /// ascending vector must never be reported, whatever it looks like.
+    #[test]
+    fn a_curve_without_a_matching_key_is_never_reported() {
+        let key = &CP31_CKEYS_FLMNG_Q_LIM_N[0];
+        // Same length and a perfectly plausible rpm axis - one breakpoint
+        // differs, so the key does not match.
+        let mut x = key.x.to_vec();
+        x[0] += 2;
+        let z: Vec<i16> = (0..x.len()).map(|i| 3_000 + i as i16 * 300).collect();
+        let img = image_with(0x1A813C, &kl_curve(&x, &z));
+
+        assert!(EDC16CP31Detector::exploratory()
+            .detect(&img)
+            .iter()
+            .all(|m| !matches!(m.dimensions, MapDimensions::OneDimensional { .. })));
+    }
+
+    #[test]
+    fn every_calibrated_curve_template_is_consistent_with_its_key() {
+        for template in CURVE_TEMPLATES.iter().filter(|t| t.calibrated) {
+            assert!(template.z_range_tuned.1 >= template.z_range_stock.1, "{}", template.name);
+            for key in template.axis_keys {
+                assert_eq!(key.nx, key.x.len(), "{}: nx vs X length", template.name);
+                assert!(
+                    template.lengths.is_empty() || template.lengths.contains(&key.nx),
+                    "{}: key length {} is not declared",
+                    template.name,
+                    key.nx
+                );
+                assert!(
+                    EDC16CP31Detector::axis_is_valid(key.x, template.axis),
+                    "{}: X axis of the key fails its own validator",
+                    template.name
+                );
+            }
+        }
     }
 }

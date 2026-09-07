@@ -92,7 +92,11 @@ pub fn identify_ecu(
 ///       thermique). Les noms de maps changent, et un fichier déjà modifié
 ///       ne perd plus ses cartes remontées : les projets CP31 doivent être
 ///       re-scannés.
-pub const DETECTOR_VERSION: u32 = 41;
+///   42 — EDC16CP31 : lecture des courbes Kl_Xs16_Ws16. Deux familles
+///       ajoutées (FlMng_qLimN, la limite de quantité par régime, et
+///       Rail_pMaxSetSubst). Le détecteur remonte des éléments qu'il ne
+///       produisait pas : les projets CP31 doivent être re-scannés.
+pub const DETECTOR_VERSION: u32 = 42;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -175,6 +179,8 @@ fn build_expected_report_edc16cp31(maps: &[DetectedMap]) -> Option<Vec<ExpectedM
         ("Torque to IQ Conversion", 1, "Torque to IQ Conversion"),
         ("Start of injection", 1, "Start of injection"),
         ("EGR air mass target", 1, "EGR air mass target"),
+        ("Quantity Limiter by RPM", 1, "Quantity Limiter by RPM"),
+        ("Rail Pressure Substitute Limit", 1, "Rail Pressure Substitute Limit"),
     ];
 
     Some(
@@ -718,19 +724,21 @@ mod tests {
     /// through to the VAG rules.
     #[test]
     fn cp31_report_matches_every_detector_family() {
-        let names = [
-            "Rail Pressure Target",
-            "Rail Pressure Limiter",
-            "Boost Target",
-            "Boost Limiter",
-            "VNT Duty Cycle",
-            "Smoke Limiter by boost pressure",
-            "Driver Wish",
-            "Quantity Limiter by boost pressure",
-            "Torque to IQ Conversion",
-            "Start of injection",
-            "EGR air mass target",
-        ];
+        use crate::detector::ecu::bosch::edc16cp31::{CURVE_TEMPLATES, MAP_TEMPLATES};
+        // Driven by the detector's own tables rather than a copy of them:
+        // a hard-coded list here is exactly what lets the report and the
+        // detector drift apart when a family is added, split or renamed.
+        let names: Vec<&str> = MAP_TEMPLATES
+            .iter()
+            .filter(|t| t.calibrated)
+            .map(|t| t.name)
+            .chain(
+                CURVE_TEMPLATES
+                    .iter()
+                    .filter(|t| t.calibrated)
+                    .map(|t| t.name),
+            )
+            .collect();
         let maps: Vec<DetectedMap> = names.iter().map(|n| map_named(n)).collect();
         let report = build_expected_report(Some("EDC16CP31"), &maps).expect("CP31 report");
 
@@ -741,15 +749,19 @@ mod tests {
         }
     }
 
-    /// Every name in the report must come from a real MAP_TEMPLATES entry:
-    /// the two tables are edited in different files and drift silently.
+    /// Every name in the report must come from a real detector family - maps
+    /// or curves: the tables are edited in different files and drift silently.
     #[test]
     fn cp31_report_prefixes_exist_in_the_detector() {
-        use crate::detector::ecu::bosch::edc16cp31::MAP_TEMPLATES;
-        let maps: Vec<DetectedMap> = MAP_TEMPLATES.iter().map(|t| map_named(t.name)).collect();
+        use crate::detector::ecu::bosch::edc16cp31::{CURVE_TEMPLATES, MAP_TEMPLATES};
+        let maps: Vec<DetectedMap> = MAP_TEMPLATES
+            .iter()
+            .map(|t| map_named(t.name))
+            .chain(CURVE_TEMPLATES.iter().map(|t| map_named(t.name)))
+            .collect();
         let report = build_expected_report(Some("EDC16CP31"), &maps).expect("CP31 report");
         for row in &report {
-            assert!(row.found >= 1, "{} matches no MAP_TEMPLATES name", row.label);
+            assert!(row.found >= 1, "{} matches no detector family name", row.label);
         }
     }
 

@@ -449,6 +449,55 @@ pub const CP31_KEYS_AIRCTL_M_DES_BAS: &[AxisKey] = &[
     },
 ];
 
+
+/// A curve's identity card: `[nx]` followed by its X breakpoints, byte for
+/// byte. Same idea and same guarantees as `AxisKey`, for the one-dimensional
+/// `Kl_Xs16_Ws16` layout.
+///
+/// It carries more weight here than on maps. A 2D block can be recognised by
+/// its two axes plus its grid; a curve has a single axis, so a blind walk
+/// would mistake any ascending vector for one. That is why the detector emits
+/// a curve ONLY when a key matches - there is no zone walk for curves.
+#[derive(Debug, Clone)]
+pub struct CurveKey {
+    pub nx: usize,
+    pub x: &'static [i16],
+}
+
+impl CurveKey {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(2 + 2 * self.x.len());
+        out.extend_from_slice(&(self.nx as u16).to_be_bytes());
+        for v in self.x {
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+        out
+    }
+}
+
+/// Curve key for `FlMng_qLimN_CUR`.
+/// 20 points, read at 0x1A813C on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_CKEYS_FLMNG_Q_LIM_N: &[CurveKey] = &[
+    CurveKey {
+        nx: 20,
+        x: &[
+            500, 1000, 1200, 1400, 1600, 1800, 2000, 2400, 2800, 3000, 3200, 3600, 3750, 3800,
+            3900, 4000, 4200, 4300, 4350, 4550
+        ],
+    },
+];
+
+/// Curve key for `Rail_pMaxSetSubst_CUR`.
+/// 8 points, read at 0x1F319A on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_CKEYS_RAIL_P_MAX_SET_SUBST: &[CurveKey] = &[
+    CurveKey {
+        nx: 8,
+        x: &[
+            0, 1350, 5000, 5960, 5970, 5980, 5990, 6000
+        ],
+    },
+];
+
 /// Signature database for EDC16CP31.
 ///
 /// One entry per map family confirmed on the corpus. `address_range` is the
