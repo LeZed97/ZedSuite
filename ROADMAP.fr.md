@@ -20,7 +20,6 @@ Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](ht
 - Import et export CSV, et import de damos.
 - Édition des maps directement dans la vue 3D.
 - Édition de plusieurs versions du même projet côte à côte et comparaison des maps.
-- Compatibilité macOS.
 
 ## Pas prévu pour l'instant
 

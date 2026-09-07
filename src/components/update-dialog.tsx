@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { openExternal, ZEDSUITE_RELEASES_URL } from "@/lib/open-external";
 import { MODAL_GLASS } from "@/lib/modal-glass";
 import { useI18n } from "@/contexts/i18n-context";
-import { downloadAndInstallUpdate, type UpdateInfo } from "@/lib/update";
+import { describeUpdateError, downloadAndInstallUpdate, type UpdateInfo } from "@/lib/update";
+import { isMacOS } from "@/lib/platform";
 
 interface UpdateDialogProps {
   info: UpdateInfo;
@@ -54,7 +55,8 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
 
   const startUpdate = async () => {
     if (!info.download_url) {
-      setError(t.updateDialog.noInstaller);
+      // Release sans build pour cette plateforme (macOS publié après Windows)
+      setError(isMacOS() ? t.updateDialog.noInstallerMac : t.updateDialog.noInstaller);
       return;
     }
     setError(null);
@@ -64,7 +66,7 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
       // On success the app exits by itself; nothing more to do here.
     } catch (e) {
       setDownloading(false);
-      setError(String(e));
+      setError(describeUpdateError(String(e), t.updateDialog));
     }
   };
 

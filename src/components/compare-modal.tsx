@@ -1314,6 +1314,14 @@ export function CompareModal({
             >
               {t.compare.selectVersions}
             </p>
+            {/* Comparaison binaire seulement pour l'instant ; la comparaison
+                des maps de deux versions viendra ici aussi (07/09) */}
+            <p
+              className="text-[11px] text-center leading-snug px-2"
+              style={{ color: theme === "light" ? "rgba(0, 0, 0, 0.5)" : "rgba(255, 255, 255, 0.45)" }}
+            >
+              {t.compare.binaryOnlyNotice}
+            </p>
 
             <div className="flex gap-3 items-center">
               {/* Left version */}

@@ -7,7 +7,7 @@ import { ArrowLeft, Bell, LayoutDashboard, Check, RefreshCw } from "lucide-react
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings, type UserSettings } from "@/contexts/settings-context";
 import { ThemeProvider, useTheme, type Theme } from "@/contexts/theme-context";
-import { WindowControls } from "@/components/window-controls";
+import { MacTitlebarSpacer, WindowControls } from "@/components/window-controls";
 import { StyledSelect } from "@/components/styled-select";
 import ZedGradientDefs from "@/components/zed-gradient-defs";
 import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
@@ -311,6 +311,7 @@ function SettingsContent() {
         <div data-tauri-drag-region className="pl-4 pr-2 py-2.5">
           <div data-tauri-drag-region className="flex items-center justify-between">
             <div data-tauri-drag-region className="flex items-center gap-4 min-w-0 overflow-hidden">
+              <MacTitlebarSpacer />
               <Button
                 variant="ghost"
                 size="icon"

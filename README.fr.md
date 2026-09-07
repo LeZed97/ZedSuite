@@ -2,9 +2,9 @@
 
 [English](README.md) · **Français**
 
-![Platform](https://img.shields.io/badge/plateforme-Windows-0078d4) ![Engine](https://img.shields.io/badge/moteur%20de%20d%C3%A9tection-Rust-e6522c) ![License](https://img.shields.io/badge/licence-GPL--3.0-2ea44f) ![Downloads](https://img.shields.io/github/downloads/LeZed97/ZedSuite/total)
+![Platform](https://img.shields.io/badge/plateforme-Windows%20%7C%20macOS-0078d4) ![Engine](https://img.shields.io/badge/moteur%20de%20d%C3%A9tection-Rust-e6522c) ![License](https://img.shields.io/badge/licence-GPL--3.0-2ea44f) ![Downloads](https://img.shields.io/github/downloads/LeZed97/ZedSuite/total)
 
-**Éditeur de cartographies open source pour les ECU Bosch EDC15/EDC16 du groupe VAG — 100 % en local.**
+**Éditeur de cartographies open source pour les ECU Bosch EDC15/EDC16 du groupe VAG — 100 % en local, sur Windows et macOS.**
 
 Ouvrez un dump d'ECU et ZedSuite trouve les cartographies tout seul : Driver Wish, Turbo Boost, N75, SOI, limiteurs de couple, etc. Modifiez-les en tableau, en 2D, en 3D ou directement dans l'hexadécimal. Créez des versions, comparez-les, désactivez ou réactivez des DTC, corrigez le checksum, puis exportez votre binaire ou un mappack WinOLS.
 
@@ -16,7 +16,7 @@ Pas de compte, pas de cloud, pas de limites : tout est en local, vos fichiers ne
 
 | ECU | Détection |
 |-----|-----------|
-| Bosch EDC15P | patterns + codeblocks, y compris les premiers logiciels PD (1999-2002) |
+| Bosch EDC15P | patterns + codeblocks |
 | Bosch EDC15VM+ | patterns + codeblocks |
 | Bosch EDC16U1 | signatures |
 | Bosch EDC16U31 | signatures |
@@ -68,6 +68,12 @@ Le moteur de détection, lui, est le fruit de longues sessions de reverse engine
 
 Le choix de Rust pour le moteur de détection n'est pas un hasard. À la base le projet était un SaaS qui devait être hébergé : au-delà d'être beaucoup plus performant que le C# d'EDCSuite (pas de runtime .NET ni de garbage collector, du code machine natif dans un binaire léger et autonome), j'ai cherché à tout optimiser au maximum pour une version web où chaque détection tournait côté serveur. Résultat, la détection complète prend moins d'une seconde quel que soit le fichier : environ 0,1 s pour un EDC15VM (512 Ko), 0,3 à 0,5 s pour un EDC16 (1 à 2 Mo) et autour d'une seconde pour un EDC15P, le balayage le plus lourd. Face au C/C++ : la même vitesse, mais un compilateur beaucoup plus strict qui attrape dès la compilation les erreurs qui font planter un outil sur un fichier inattendu. Et comme Tauri est lui-même en Rust, le moteur qui tournait hier sur un serveur tourne aujourd'hui embarqué dans l'app, sans une ligne de changée.
 
+L'interface elle-même est une page web : HTML, CSS et TypeScript, affichés par le moteur de navigateur déjà présent sur le système (WebView2 sur Windows, WebKit sur macOS). Autour, la coque Rust ouvre la fenêtre, lit et écrit les fichiers, et fait tourner le moteur de détection, compilé nativement pour chaque plateforme.
+
+C'est pour ça que la version macOS n'a rien demandé de réécrire. Le dashboard, l'éditeur de maps, les vues 2D et 3D, l'hexadécimal, les outils DTC et puissance sont le même code sur les deux systèmes, au pixel près. Seule la coque sait où elle tourne : barre de titre, boîtes de dialogue de fichiers, emplacement des projets, installation des mises à jour.
+
+La pile web apporte plus que la portabilité. Aucun navigateur n'est embarqué : l'installateur Windows pèse environ 6 Mo et l'app démarre en une seconde. Les graphiques, les thèmes et les cinq langues sont faits avec des outils prévus pour ça. Et chaque correction de l'interface arrive sur Windows et macOS en même temps ; une version Linux ne demanderait que le côté coque.
+
 ## 🤝 Contribuer
 
 Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce qui a le plus de valeur. Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour comprendre l'architecture des détecteurs. Un bug, une map non détectée ? Ouvrez une issue avec le type d'ECU et, si possible, le numéro logiciel du fichier.
@@ -79,9 +85,15 @@ Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce q
 
 ## ⬇️ Téléchargement
 
-Récupérez l'installateur depuis la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest) : dans la section **Assets**, téléchargez le fichier `ZedSuite_x.y.z_x64-setup.exe` et lancez-le (sur un Windows 32 bits, prenez `ZedSuite_x.y.z_x86-setup.exe`). L'application se met ensuite à jour toute seule.
+Tout est dans la section **Assets** de la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest). Une fois installée, l'application se met à jour toute seule, sur les deux systèmes.
 
-ZedSuite demande **Windows 10 ou 11**. L'application n'est pas compatible avec les Windows antérieurs à Windows 10 : l'adapter à Windows 7 aurait demandé encore beaucoup de travail.
+**Windows** — téléchargez `ZedSuite_x.y.z_x64-setup.exe` et lancez-le (sur un Windows 32 bits, prenez `ZedSuite_x.y.z_x86-setup.exe`). ZedSuite demande **Windows 10 ou 11** : l'adapter à Windows 7 aurait demandé encore beaucoup de travail.
+
+**macOS** — téléchargez `ZedSuite_x.y.z_macos-universal.dmg`, ouvrez-le et glissez ZedSuite dans le dossier Applications. Une seule build pour les Mac Apple Silicon et Intel, **macOS 12 ou plus récent**. ZedSuite n'est pas signée avec un certificat développeur Apple, le premier lancement demande donc une étape de plus : macOS refuse de l'ouvrir, puis **Réglages Système > Confidentialité et sécurité > Ouvrir quand même** (sur macOS 14 et antérieurs, clic droit sur l'app > Ouvrir). C'est une seule fois ; les mises à jour installées par l'app elle-même s'ouvrent directement. Si vous préférez le Terminal, cette ligne installe ou met à jour ZedSuite dans Applications sans aucune étape supplémentaire :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
+```
 
 ## 🗺️ Feuille de route
 
@@ -109,7 +121,7 @@ ZedSuite est gratuit et le restera. S'il vous a fait gagner du temps ou une lice
 Prérequis :
 - [Node.js](https://nodejs.org) ≥ 18
 - [Rust](https://rustup.rs) (stable) — le moteur de détection et l'application sont en Rust/Tauri
-- Windows 10/11 (WebView2 est préinstallé sur Windows 11)
+- Windows 10/11 (WebView2 est préinstallé sur Windows 11) ou macOS 12+ avec les outils en ligne de commande Xcode (`xcode-select --install`)
 
 ```bash
 npm install
@@ -121,6 +133,8 @@ Construire l'installeur :
 ```bash
 npm run app:build   # produit l'installeur NSIS dans src-tauri/target/release/bundle/
 ```
+
+Sur macOS, `npx tauri build --target universal-apple-darwin` produit le `.app` et le `.dmg` pour les deux architectures (`src-tauri/tauri.macos.conf.json` porte les réglages propres à macOS). Le [workflow macOS](.github/workflows/macos.yml) fait la même chose sur un runner GitHub, vérifie le bundle, y exerce la mise à jour et attache les fichiers à une release.
 
 ## 🧱 Architecture
 
@@ -135,7 +149,7 @@ src-tauri/            Application Rust
   src/commands.rs     commandes IPC exposées au frontend
 ```
 
-Les projets sont stockés dans `%APPDATA%/com.zedsuite.app/projects/` — un dossier par projet, avec le binaire d'origine, les métadonnées et les versions.
+Les projets sont stockés dans `%APPDATA%/com.zedsuite.app/projects/` sur Windows et `~/Library/Application Support/com.zedperf.zedsuite/projects/` sur macOS — un dossier par projet, avec le binaire d'origine, les métadonnées et les versions.
 
 ## ⚖️ Licence et marques
 

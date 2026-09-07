@@ -20,7 +20,6 @@ Funktionswunsch oder Fehler: ein Issue auf [GitHub](https://github.com/LeZed97/Z
 - CSV-Import und -Export sowie DAMOS-Import.
 - Kennfelder direkt in der 3D-Ansicht bearbeiten.
 - Mehrere Versionen desselben Projekts nebeneinander bearbeiten und ihre Kennfelder vergleichen.
-- macOS-Kompatibilität.
 
 ## Vorerst nicht geplant
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo } from 'react';
+import { isWebGLUsable } from '@/lib/webgl-support';
 import {
   Scene,
   OrthographicCamera,
@@ -323,13 +324,23 @@ export default function FloatingLines({
     if (initializedRef.current) return;
     initializedRef.current = true;
     if (!containerRef.current) return;
+    // Décor optionnel : sans WebGL utilisable (VM sans GPU, bureau distant,
+    // accélération coupée) on laisse le fond du thème plutôt que de faire
+    // tomber toute la page
+    if (!isWebGLUsable()) return;
 
     const scene = new Scene();
 
     const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     camera.position.z = 1;
 
-    const renderer = new WebGLRenderer({ antialias: true, alpha: false });
+    let renderer: WebGLRenderer;
+    try {
+      renderer = new WebGLRenderer({ antialias: true, alpha: false });
+    } catch (error) {
+      console.warn('FloatingLines: WebGL renderer unavailable, background disabled', error);
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';

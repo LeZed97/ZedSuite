@@ -9,7 +9,8 @@ import { StyledSelect } from "@/components/styled-select";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useToast } from "@/hooks/use-toast";
 import { ProjectCreator } from "@/components/project-creator";
-import { WindowControls } from "@/components/window-controls";
+import { MacTitlebarSpacer, WindowControls } from "@/components/window-controls";
+import { isMacOS } from "@/lib/platform";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
@@ -794,6 +795,7 @@ function DashboardContent() {
         <div data-tauri-drag-region className="pl-4 pr-2 pt-1 pb-1">
           <div data-tauri-drag-region className="flex items-start justify-between">
             <div data-tauri-drag-region className="flex items-center gap-3 pt-2 pl-2 min-w-0 overflow-hidden">
+              <MacTitlebarSpacer />
               {/* Même wordmark que l'éditeur : « Zed » en dégradé + BETA */}
               <div data-tauri-drag-region className="relative inline-block select-none">
                 <h1 data-tauri-drag-region className="text-xl font-bold">
@@ -829,8 +831,12 @@ function DashboardContent() {
               >
                 <Settings className="w-4 h-4" />
               </button>
-              <div className="w-px h-4 bg-white/[0.12] mx-1.5" />
-              <WindowControls strong={onCustomLight || onCustomDark} />
+              {!isMacOS() && (
+                <>
+                  <div className="w-px h-4 bg-white/[0.12] mx-1.5" />
+                  <WindowControls strong={onCustomLight || onCustomDark} />
+                </>
+              )}
             </div>
           </div>
         </div>

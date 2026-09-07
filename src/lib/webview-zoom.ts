@@ -57,8 +57,9 @@ let resizeListenerInstalled = false;
 
 /** Largeur CSS minimale de la barre d'outils de l'éditeur (+60 px depuis
  *  le bouton HiLo/LoHi de la pastille 8b/16b : en dessous, la barre
- *  recouvrait les contrôles de fenêtre à largeur minimale). */
-export const EDITOR_TOOLBAR_MIN_CSS_WIDTH = 1095;
+ *  recouvrait les contrôles de fenêtre à largeur minimale ; −70 px le 07/09,
+ *  le bouton Compare est parti dans la liste des maps). */
+export const EDITOR_TOOLBAR_MIN_CSS_WIDTH = 1025;
 /** Largeur par défaut de la liste des maps de l'éditeur. */
 export const EDITOR_SIDEBAR_DEFAULT_WIDTH = 335;
 
@@ -67,7 +68,7 @@ export function storedEditorZoomPercent(): number {
   if (typeof window === "undefined") return 100;
   try {
     const saved = parseInt(localStorage.getItem("zedsuite-editor-zoom") || "100", 10);
-    return Number.isFinite(saved) && saved >= 60 && saved <= 150 ? saved : 100;
+    return Number.isFinite(saved) && saved >= 60 && saved <= 100 ? saved : 100;
   } catch {
     return 100;
   }

@@ -44,6 +44,11 @@ export interface DTCDetectionResult {
   codeblocks: CodeblockInfo[];
   dtcs: DetectedDTC[];
   errors: string[];
+  /**
+   * Compact EDC15 layout: codes are grouped by fault path and switched
+   * together (see edc15-fault-paths.ts). The DTC window says so.
+   */
+  grouped?: boolean;
 }
 
 /**

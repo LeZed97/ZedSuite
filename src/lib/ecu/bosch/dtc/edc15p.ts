@@ -19,6 +19,12 @@
 
 import { VAG_DTC_DATABASE, convertVagToPCode } from './dtc-database';
 import type { DetectedDTC, CodeblockInfo, DTCDetectionResult } from './types';
+import {
+  detectFaultPathDTCs,
+  disableFaultPathDTC,
+  enableFaultPathDTC,
+  hasCompactV41Layout,
+} from './edc15-fault-paths';
 
 // EDC15P Codeblock definitions
 const EDC15P_CODEBLOCKS: CodeblockInfo[] = [
@@ -212,10 +218,44 @@ function hasStandardV41Layout(data: Uint8Array): boolean {
   return standard && !compact;
 }
 
+/** Classic scan of the 8-byte entries (marker 0x23) over the valid codeblocks. */
+function scanClassicTable(data: Uint8Array): { codeblocks: CodeblockInfo[]; dtcs: DetectedDTC[] } {
+  const codeblocks = detectCodeblocks(data);
+  const allDTCs: DetectedDTC[] = [];
+  const seenCodes = new Set<string>();
+  for (const codeblock of codeblocks.filter((cb) => cb.isValid)) {
+    for (const dtc of scanCodeblockForDTCs(data, codeblock)) {
+      if (!seenCodes.has(dtc.code)) {
+        seenCodes.add(dtc.code);
+        allDTCs.push(dtc);
+      }
+    }
+  }
+  allDTCs.sort((a, b) => a.code.localeCompare(b.code));
+  return { codeblocks, dtcs: allDTCs };
+}
+
+// Below this many codes the classic scan only picked stray bytes: the file
+// uses the fault path records (038906012AP, a6 352222: V4.1 at 0x70001 only,
+// the same position as the classic layout, but no 0x23 entries at all).
+const CLASSIC_MIN_CODES = 20;
+
+/**
+ * True when the file stores its DTCs as fault path records: the compact
+ * signatures, or a classic-looking file whose 0x23 table is empty while the
+ * fault path records are there.
+ */
+export function usesFaultPathRecords(data: Uint8Array): boolean {
+  if (hasCompactV41Layout(data)) return true;
+  if (!hasStandardV41Layout(data)) return false;
+  if (scanClassicTable(data).dtcs.length >= CLASSIC_MIN_CODES) return false;
+  return detectFaultPathDTCs(data, 'EDC15P').dtcs.length >= CLASSIC_MIN_CODES;
+}
+
 /**
  * Detect all DTCs in an EDC15P file
  */
-export function detectEDC15PDTCs(data: Uint8Array): DTCDetectionResult {
+export function detectEDC15PDTCs(data: Uint8Array, family: string = 'EDC15P'): DTCDetectionResult {
   const errors: string[] = [];
 
   // Validate file size (EDC15P files are typically 512KB)
@@ -230,12 +270,19 @@ export function detectEDC15PDTCs(data: Uint8Array): DTCDetectionResult {
     };
   }
 
-  // Dispositions compacte (blocs de 0xC000 signés V4.1 à 0x58001/0x64001,
-  // ex. 038906019AJ) et précoce (aucune signature V4.1, 038906019A) : la
-  // table des DTC n'y a pas le format 8 octets à marqueur 0x23 — les plages
-  // classiques y lisaient des entrées fantaisistes. Non supportées pour l'instant.
+  // Disposition compacte (blocs de 0xC000 signés V4.1 à 0x58001/0x64001 :
+  // EDC15VM 012K / 012L / 012AA / 012AP / 012CP, EDC15P 019AJ / 019AN) : la
+  // table des DTC n'y a pas le format 8 octets à marqueur 0x23 mais des
+  // enregistrements par chemin de défaut, lus par edc15-fault-paths.ts.
+  if (usesFaultPathRecords(data)) {
+    return detectFaultPathDTCs(data, family);
+  }
+
+  // Disposition précoce (aucune signature V4.1, 038906019A) : format encore
+  // inconnu — les plages classiques y lisaient des entrées fantaisistes.
+  // Non supportée pour l'instant ; le message nomme la famille réelle.
   if (!hasStandardV41Layout(data)) {
-    errors.push('EDC15P early software layout: DTC table format not supported yet');
+    errors.push(`${family}: the DTC table of this software version uses another layout, not supported yet`);
     return {
       success: false,
       ecuType: 'EDC15P',
@@ -245,41 +292,23 @@ export function detectEDC15PDTCs(data: Uint8Array): DTCDetectionResult {
     };
   }
 
-  const codeblocks = detectCodeblocks(data);
-  const validCodeblocks = codeblocks.filter((cb) => cb.isValid);
-
-  if (validCodeblocks.length === 0) {
+  const { codeblocks, dtcs } = scanClassicTable(data);
+  if (!codeblocks.some((cb) => cb.isValid)) {
     errors.push('No valid codeblocks detected in the file');
     return {
       success: false,
-      ecuType: 'EDC15P',
+      ecuType: family,
       codeblocks,
       dtcs: [],
       errors,
     };
   }
 
-  const allDTCs: DetectedDTC[] = [];
-  const seenCodes = new Set<string>();
-
-  for (const codeblock of validCodeblocks) {
-    const dtcs = scanCodeblockForDTCs(data, codeblock);
-
-    for (const dtc of dtcs) {
-      if (!seenCodes.has(dtc.code)) {
-        seenCodes.add(dtc.code);
-        allDTCs.push(dtc);
-      }
-    }
-  }
-
-  allDTCs.sort((a, b) => a.code.localeCompare(b.code));
-
   return {
     success: true,
-    ecuType: 'EDC15P',
+    ecuType: family,
     codeblocks,
-    dtcs: allDTCs,
+    dtcs,
     errors,
   };
 }
@@ -304,6 +333,9 @@ export function disableEDC15PDTC(
   dtc: DetectedDTC,
   codeblocks: CodeblockInfo[]
 ): { modifiedData: Uint8Array; changedAddresses: number[] } {
+  if (usesFaultPathRecords(data)) {
+    return disableFaultPathDTC(data, dtc);
+  }
   const modifiedData = new Uint8Array(data);
   const changedAddresses: number[] = [];
 
@@ -370,6 +402,9 @@ export function enableEDC15PDTC(
   dtc: DetectedDTC,
   codeblocks: CodeblockInfo[]
 ): { modifiedData: Uint8Array; changedAddresses: number[] } {
+  if (usesFaultPathRecords(data)) {
+    return enableFaultPathDTC(data, dtc);
+  }
   const modifiedData = new Uint8Array(data);
   const changedAddresses: number[] = [];
 

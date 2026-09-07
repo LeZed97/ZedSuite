@@ -4,14 +4,31 @@
 // window — the native Windows title bar is disabled (decorations: false in
 // tauri.conf.json), so every page header embeds these instead.
 // Theme-aware: follows the ambient ThemeProvider (dashboard or editor).
+//
+// macOS keeps its native traffic lights (title bar shown as an overlay, see
+// src-tauri/tauri.macos.conf.json): nothing is drawn here, and the headers
+// leave room for the lights at their left with <MacTitlebarSpacer />.
 
 import { useEffect, useState } from "react";
 import { Minus, Square, Copy, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useThemeOptional } from "@/contexts/theme-context";
+import { isMacOS } from "@/lib/platform";
 
 // strong : icônes en noir (clair) / blanc (sombre) — image personnalisée, sans pastille
-export function WindowControls({ strong = false }: { strong?: boolean } = {}) {
+export function WindowControls(props: { strong?: boolean } = {}) {
+  if (isMacOS()) return null;
+  return <WindowsControls {...props} />;
+}
+
+/** Room for the macOS traffic lights (x 14 to ~68 px) at the left of a
+ *  header row; renders nothing on Windows. */
+export function MacTitlebarSpacer() {
+  if (!isMacOS()) return null;
+  return <div data-tauri-drag-region aria-hidden className="w-[74px] flex-shrink-0 self-stretch" />;
+}
+
+function WindowsControls({ strong = false }: { strong?: boolean }) {
   const [isMaximized, setIsMaximized] = useState(false);
   const L = (useThemeOptional()?.theme ?? "default") === "light";
 

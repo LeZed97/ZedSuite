@@ -14,7 +14,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/contexts/theme-context";
 import { useI18n } from "@/contexts/i18n-context";
-import { WindowControls } from "@/components/window-controls";
+import { MacTitlebarSpacer, WindowControls } from "@/components/window-controls";
+import { isMacOS } from "@/lib/platform";
 
 // Opération de la pastille de modification : ajouter une valeur, remplacer
 // (fill) ou ajouter un POURCENTAGE de la valeur courante
@@ -38,6 +39,8 @@ interface EditorToolbarProps {
   zoomPercent?: number;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
+  /** Valeur saisie par l'utilisateur (60 à 100, bornée par l'éditeur). */
+  onZoomSet?: (percent: number) => void;
   onCloseProject?: () => void;
   // Modify map values
   hasActiveMap?: boolean;
@@ -49,7 +52,6 @@ interface EditorToolbarProps {
   modifyOperation?: ModifyOperation;
   onModifyOperationChange?: (operation: ModifyOperation) => void;
   // Compare versions
-  onCompareClick?: () => void;
 }
 
 export function EditorToolbar({
@@ -68,6 +70,7 @@ export function EditorToolbar({
   zoomPercent = 100,
   onZoomIn,
   onZoomOut,
+  onZoomSet,
   onCloseProject,
   hasActiveMap = false,
   onModifyApply,
@@ -75,13 +78,20 @@ export function EditorToolbar({
   onModifyValueChange,
   modifyOperation: controlledModifyOperation,
   onModifyOperationChange,
-  onCompareClick,
 }: EditorToolbarProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const { t } = useI18n();
 
   // State for modify controls - use controlled value if provided
+  // Saisie directe du zoom (clic sur la valeur) — bornée par l'éditeur
+  const [zoomEditing, setZoomEditing] = useState(false);
+  const [zoomDraft, setZoomDraft] = useState("");
+  const commitZoomDraft = () => {
+    setZoomEditing(false);
+    const v = parseInt(zoomDraft, 10);
+    if (Number.isFinite(v)) onZoomSet?.(v);
+  };
   const [internalModifyOperation, setInternalModifyOperation] = useState<ModifyOperation>('add');
   const modifyOperation = controlledModifyOperation ?? internalModifyOperation;
   const setModifyOperation = (op: ModifyOperation) => {
@@ -212,6 +222,7 @@ export function EditorToolbar({
         borderBottom: `1px solid ${getBorderColor()}`
       }}
     >
+        <MacTitlebarSpacer />
         {/* Groupe unifié : 8b / 16b / Hex / Dec */}
         <div className="flex items-center rounded-lg px-0.5 sm:px-1 flex-shrink-0" style={{ background: getButtonBg(), border: `1px solid ${getBorderColor()}` }}>
           <Button
@@ -284,19 +295,6 @@ export function EditorToolbar({
           </Button>
         </div>
 
-        {/* Compare button - hover orange */}
-        <div className="flex items-center rounded-lg px-1 ml-0.5 sm:ml-1 flex-shrink-0" style={{ background: getButtonBg(), border: `1px solid ${getBorderColor()}` }}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onCompareClick?.()}
-            className="h-7 px-2 sm:px-3 text-xs hover:bg-orange-600/40 hover:text-black-400 transition-colors duration-200"
-            style={{ color: getTextColor() }}
-            title={t.toolbar.compare}
-          >
-            {t.toolbar.compare}
-          </Button>
-        </div>
 
         {/* Ecart souple : large quand la fenetre l'est (position
             d'origine des pastilles), reduit a l'ecart commun sinon */}
@@ -448,12 +446,36 @@ export function EditorToolbar({
           >
             <Minus className="w-3.5 h-3.5" />
           </Button>
-          <span
-            className="text-xs tabular-nums w-9 text-center select-none"
-            style={{ color: getTextColor() }}
-          >
-            {zoomPercent}%
-          </span>
+          {zoomEditing ? (
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              value={zoomDraft}
+              onChange={(e) => setZoomDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+              onBlur={commitZoomDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitZoomDraft();
+                else if (e.key === "Escape") setZoomEditing(false);
+                e.stopPropagation();
+              }}
+              className="text-xs tabular-nums w-9 text-center bg-transparent outline-none rounded border"
+              style={{ color: getTextColor(), borderColor: getBorderColor() }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="text-xs tabular-nums w-9 text-center select-none rounded hover:opacity-80"
+              style={{ color: getTextColor() }}
+              title="60 – 100 %"
+              onClick={() => {
+                setZoomDraft(String(zoomPercent));
+                setZoomEditing(true);
+              }}
+            >
+              {zoomPercent}%
+            </button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -490,13 +512,16 @@ export function EditorToolbar({
         </Button>
 
         {/* Contrôles fenêtre groupés dans une pastille — même langage visuel
-            que le groupe 8b/16b/Hex/Dec à gauche de la toolbar */}
-        <div
-          className="flex items-center rounded-lg px-0.5 sm:px-1 ml-0.5 sm:ml-1"
-          style={{ background: getButtonBg(), border: `1px solid ${getBorderColor()}` }}
-        >
-          <WindowControls />
-        </div>
+            que le groupe 8b/16b/Hex/Dec à gauche de la toolbar. Sur macOS
+            les feux natifs sont à gauche : ni pastille ni boutons ici. */}
+        {!isMacOS() && (
+          <div
+            className="flex items-center rounded-lg px-0.5 sm:px-1 ml-0.5 sm:ml-1"
+            style={{ background: getButtonBg(), border: `1px solid ${getBorderColor()}` }}
+          >
+            <WindowControls />
+          </div>
+        )}
     </div>
   );
 }

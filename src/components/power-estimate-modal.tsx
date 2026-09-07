@@ -6,7 +6,7 @@
 // Each codeblock (EDC15) or driver-wish map (EDC16) is a selectable curve;
 // the sheet can be exported as a PDF dyno report with the project info.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -17,7 +17,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { X, Gauge, FileDown } from "lucide-react";
+import { X, Gauge, FileDown, RefreshCw } from "lucide-react";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useThemeOptional } from "@/contexts/theme-context";
 import { StyledSelect } from "@/components/styled-select";
@@ -35,9 +35,29 @@ import {
 } from "@/lib/power-estimation";
 import { exportPowerPdf, type PdfCurve, type PdfTheme } from "@/lib/power-pdf";
 
+/** Source vivante fournie par l'éditeur : l'état en mémoire de la version
+ *  ouverte (modifications non enregistrées comprises). `refreshKey` change à
+ *  chaque enregistrement ; le bouton Actualiser relit l'état à la demande. */
+export interface LivePowerSource {
+  versionId: string;
+  getState: () => { bytes: Uint8Array; edits: Array<{ map_address: number; payload?: any }> };
+  refreshKey: number;
+}
+
 interface PowerEstimateModalProps {
   file: FileRecord;
   onClose: () => void;
+  live?: LivePowerSource;
+  /** Rendu dans une fenêtre flottante de l'éditeur : pas de voile ni de
+   *  carte modale, le contenu remplit le cadre qui l'héberge (qui porte
+   *  déjà la barre de titre et la croix). */
+  embedded?: boolean;
+  /** Fenêtre flottante : largeur minimale que le contenu réclame (la barre
+   *  des pics par codeblock ne doit jamais être rognée). */
+  onMinWidthChange?: (px: number) => void;
+  /** Fenêtre flottante : hauteur naturelle du contenu (padding compris),
+   *  pour ouvrir la fenêtre à la taille de son contenu. */
+  onContentHeightChange?: (px: number) => void;
 }
 
 // Une teinte par codeblock/carte — mêmes familles sur l'écran et le PDF
@@ -59,7 +79,11 @@ const PDF_LOCALES: Record<string, string> = {
   DE: "de-DE",
 };
 
-export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
+export function PowerEstimateModal({ file, onClose, live, embedded = false, onMinWidthChange, onContentHeightChange }: PowerEstimateModalProps) {
+  // Lu au moment du calcul, sans relancer l'effet à chaque rendu de l'éditeur
+  const liveRef = useRef<LivePowerSource | undefined>(live);
+  liveRef.current = live;
+  const [refreshTick, setRefreshTick] = useState(0);
   const { t, language } = useI18n();
   const { settings } = useSettings();
   // Suit le thème de l'écran hôte (dashboard)
@@ -75,6 +99,55 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
   const [nozzle, setNozzle] = useState<string>("stock");
   const [results, setResults] = useState<SourceCurveResult[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  // Largeur naturelle de la barre des pics : remontée au cadre flottant
+  // comme largeur minimale de la fenêtre. On additionne la largeur des
+  // pastilles (whitespace-nowrap, donc indépendante du conteneur) : la barre
+  // elle-même s'étire avec la fenêtre (justify-between), la mesurer
+  // directement créerait une boucle d'agrandissement.
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const lastMinWidthRef = useRef(0);
+  useEffect(() => {
+    if (!embedded || !onMinWidthChange) return;
+    const el = summaryRef.current;
+    if (!el) return;
+    const measure = () => {
+      const chips = Array.from(el.children) as HTMLElement[];
+      if (chips.length === 0) return;
+      const content = chips.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0);
+      const gaps = 16 * (chips.length - 1); // gap-x-4
+      const barPadding = 2 * 16 + 2; // px-4 + bordure
+      const framePadding = 2 * 16 + 4; // p-4 de la racine + cadre
+      const min = Math.ceil(content + gaps + barPadding + framePadding);
+      if (min === lastMinWidthRef.current) return;
+      lastMinWidthRef.current = min;
+      onMinWidthChange(min);
+    };
+    measure();
+    // Les polices peuvent arriver après le premier rendu
+    document.fonts?.ready.then(measure).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, onMinWidthChange, results, selected, L]);
+
+  // Hauteur naturelle du contenu (indépendante de la hauteur de la fenêtre :
+  // le bloc mesuré n'est pas étiré, seule sa largeur suit la fenêtre)
+  const contentRef = useRef<HTMLDivElement>(null);
+  const lastContentHeightRef = useRef(0);
+  useEffect(() => {
+    if (!embedded || !onContentHeightChange) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const report = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height + 2 * 16); // + p-4 de la racine
+      if (h === lastContentHeightRef.current) return;
+      lastContentHeightRef.current = h;
+      onContentHeightChange(h);
+    };
+    report();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(report) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [embedded, onContentHeightChange]);
+
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +187,14 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
         const version = versions.find((v) => v.id === versionId);
         let bytes = binary;
         let edits: Array<{ map_address: number; payload?: any }> = [];
-        if (version && version.name !== "Ori") {
+        const liveSource = liveRef.current;
+        if (liveSource && liveSource.versionId === versionId) {
+          // Version ouverte dans l'éditeur : état en mémoire, modifications
+          // non enregistrées comprises
+          const state = liveSource.getState();
+          bytes = state.bytes;
+          edits = state.edits;
+        } else if (version && version.name !== "Ori") {
           edits = await store.listMapEdits(versionId);
           bytes = new Uint8Array(binary);
           for (const edit of edits) {
@@ -172,7 +252,8 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [versionId, preset, efficiency, nozzle, versions, file]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versionId, preset, efficiency, nozzle, versions, file, live?.versionId, live?.refreshKey, refreshTick]);
 
   const shown = useMemo(
     () => results.filter((r) => selected.includes(r.source.id)),
@@ -321,34 +402,55 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center backdrop-blur-sm"
-      style={{ backgroundColor: "#000000a2", animation: "backdropFadeIn 0.2s ease-out forwards" }}
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-5xl mx-4 border rounded-lg p-6 max-h-[92vh] overflow-y-auto"
-        style={{ ...(L ? MODAL_GLASS_LIGHT : MODAL_GLASS), animation: "modalExpand 0.2s ease-out forwards" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 via-red-500 to-orange-500 flex items-center justify-center shadow-lg shadow-red-500/25">
-              <Gauge className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className={`text-lg font-semibold leading-tight ${L ? "text-slate-900" : "text-white"}`}>
-                {t.dashboard.powerTitle}
-              </h2>
-              <p className="text-xs text-slate-400 truncate max-w-md">
-                {file.project_name || file.original_name}
-                {file.customer ? ` — ${file.customer}` : ""}
-              </p>
-            </div>
-          </div>
+  // Boutons Actualiser / Export PDF (et la croix en modale)
+  // Mêmes boutons, séparés pour la grille de la fenêtre de l'éditeur
+  const refreshButton = <>{live && (
+              <button
+                onClick={() => setRefreshTick((n) => n + 1)}
+                disabled={loading}
+                title={t.dashboard.powerRefresh}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                  L
+                    ? "border-black/10 bg-black/5 text-slate-700 hover:bg-black/10"
+                    : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                } ${loading ? "opacity-60 cursor-wait" : ""}`}
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                {t.dashboard.powerRefresh}
+              </button>
+            )}</>;
+  const exportButton = <>{!loading && !error && shown.length > 0 && (
+              <button
+                onClick={openExportDialog}
+                disabled={exporting}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                  L
+                    ? "border-blue-600/30 bg-blue-600/10 text-blue-700 hover:bg-blue-600/20"
+                    : "border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20"
+                } ${exporting ? "opacity-60 cursor-wait" : ""}`}
+              >
+                <FileDown className="w-4 h-4" />
+                {t.dashboard.powerExportPdf}
+              </button>
+            )}</>;
+
+  const headerActions = (
           <div className="flex items-center gap-2">
+            {live && (
+              <button
+                onClick={() => setRefreshTick((n) => n + 1)}
+                disabled={loading}
+                title={t.dashboard.powerRefresh}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                  L
+                    ? "border-black/10 bg-black/5 text-slate-700 hover:bg-black/10"
+                    : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                } ${loading ? "opacity-60 cursor-wait" : ""}`}
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                {t.dashboard.powerRefresh}
+              </button>
+            )}
             {!loading && !error && shown.length > 0 && (
               <button
                 onClick={openExportDialog}
@@ -363,19 +465,63 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
                 {t.dashboard.powerExportPdf}
               </button>
             )}
-            <button
-              onClick={onClose}
-              className={`p-2 rounded-lg transition-colors ${L ? "hover:bg-black/5" : "hover:bg-white/5"}`}
-              style={{ color: L ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.6)" }}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {!embedded && (
+              <button
+                onClick={onClose}
+                className={`p-2 rounded-lg transition-colors ${L ? "hover:bg-black/5" : "hover:bg-white/5"}`}
+                style={{ color: L ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.6)" }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
+  );
+
+  return (
+    <div
+      className={embedded ? "w-full h-full" : "fixed inset-0 z-[80] flex items-center justify-center backdrop-blur-sm"}
+      style={embedded ? undefined : { backgroundColor: "#000000a2", animation: "backdropFadeIn 0.2s ease-out forwards" }}
+      onClick={embedded ? undefined : onClose}
+    >
+      <div
+        className={
+          embedded
+            ? "pw-root relative w-full h-full p-4 overflow-y-auto"
+            : "relative w-full max-w-5xl mx-4 border rounded-lg p-6 max-h-[92vh] overflow-y-auto"
+        }
+        style={embedded ? undefined : { ...(L ? MODAL_GLASS_LIGHT : MODAL_GLASS), animation: "modalExpand 0.2s ease-out forwards" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+      <div ref={contentRef} style={{ display: "flow-root" }}>
+        {/* Header — modale seulement : dans l'éditeur le cadre porte l'icône
+            et le titre, et les boutons rejoignent la ligne des réglages */}
+        {!embedded && (
+        <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              {/* Icône neutre, noire ou blanche selon le thème (pas de dégradé orange) */}
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center border ${L ? "border-black/10 bg-black/5" : "border-white/10 bg-white/5"}`}
+              >
+                <Gauge className="w-5 h-5" style={{ color: L ? "#000000" : "#ffffff" }} />
+              </div>
+              <div>
+                <h2 className={`text-lg font-semibold leading-tight ${L ? "text-slate-900" : "text-white"}`}>
+                  {t.dashboard.powerTitle}
+                </h2>
+                <p className="text-xs text-slate-400 truncate max-w-md">
+                  {file.project_name || file.original_name}
+                  {file.customer ? ` — ${file.customer}` : ""}
+                </p>
+              </div>
+            </div>
+
+          {headerActions}
         </div>
+        )}
 
         {/* Controls */}
-        <div className="flex flex-wrap items-center gap-4 mb-3">
-          <div className="flex items-center gap-2">
+        <div className={embedded ? "pw-grid mb-3" : "flex flex-wrap items-center gap-4 mb-3"}>
+          <div className="flex items-center gap-2 pw-ctrl">
             <span className="text-sm text-slate-400">{t.dashboard.powerVersion}:</span>
             <StyledSelect
               appearance="auto"
@@ -385,7 +531,7 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
               options={versions.map((v) => ({ value: v.id, label: v.name }))}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pw-ctrl">
             <span className="text-sm text-slate-400">{t.dashboard.powerEngine}:</span>
             <StyledSelect
               appearance="auto"
@@ -395,7 +541,7 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
               options={ENGINE_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pw-ctrl">
             <span className="text-sm text-slate-400">{t.dashboard.powerEfficiency}:</span>
             <StyledSelect
               appearance="auto"
@@ -411,7 +557,7 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
             />
           </div>
           {anyIqBased && !isVmPump && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 pw-ctrl">
               <span className="text-sm text-slate-400">{t.dashboard.powerNozzle}:</span>
               <StyledSelect
                 appearance="auto"
@@ -421,6 +567,12 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
                 options={NOZZLE_PRESETS.map((n) => ({ value: n.id, label: n.label }))}
               />
             </div>
+          )}
+          {embedded && (
+            <>
+              <div className="pw-refresh">{refreshButton}</div>
+              <div className="pw-export">{exportButton}</div>
+            </>
           )}
         </div>
 
@@ -490,7 +642,7 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
                 </div>
               </div>
             ) : (
-              <div className={`flex flex-nowrap items-center justify-between gap-x-4 overflow-x-auto rounded-xl border px-4 py-2.5 mb-4 ${L ? "border-black/[0.08] bg-black/[0.03]" : "border-white/[0.08] bg-white/[0.03]"}`}>
+              <div ref={summaryRef} className={`flex flex-nowrap items-center justify-between gap-x-4 overflow-x-auto rounded-xl border px-4 py-2.5 mb-4 ${L ? "border-black/[0.08] bg-black/[0.03]" : "border-white/[0.08] bg-white/[0.03]"}`}>
                 {shown.map((r) => (
                   <div key={r.source.id} className="flex items-center gap-2 text-xs whitespace-nowrap">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorOf(r.source.id) }} />
@@ -593,6 +745,7 @@ export function PowerEstimateModal({ file, onClose }: PowerEstimateModalProps) {
             </p>
           </>
         )}
+      </div>
       </div>
 
       {/* Boîte de pré-export : renommer le projet et les courbes du PDF */}

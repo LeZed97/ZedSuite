@@ -26,6 +26,8 @@ import {
   Eye,
   RefreshCw,
   FileJson,
+  Gauge,
+  ArrowLeftRight,
 } from "lucide-react";
 import { PiHeadCircuit } from "react-icons/pi";
 import { HexdumpViewer, type MapRegion } from "@/components/hexdump-viewer";
@@ -44,6 +46,9 @@ import {
   EDITOR_TOOLBAR_MIN_CSS_WIDTH,
 } from "@/lib/webview-zoom";
 import { DTCModal } from "@/components/dtc-modal";
+import { MacTitlebarSpacer } from "@/components/window-controls";
+import { PowerEstimateModal } from "@/components/power-estimate-modal";
+import type { FileRecord } from "@/lib/types";
 import { SolutionsModal } from "@/components/solutions-modal";
 import { getSolutionImplementation } from "@/lib/ecu/solutions";
 import { CompareModal } from "@/components/compare-modal";
@@ -1097,6 +1102,157 @@ interface PreviewWindowProps {
 // Persiste entre les re-renders et les montages/démontages du composant
 const previewCameraPositions: Record<number, { eye: {x: number, y: number, z: number}, center: {x: number, y: number, z: number}, up: {x: number, y: number, z: number} }> = {};
 
+/** Cadre flottant de l'espace de travail (barre de titre déplaçable,
+ *  poignée de redimensionnement, bornes de la zone de travail, mise au
+ *  premier plan au clic) : mêmes règles que les fenêtres de maps et
+ *  l'aperçu. Héberge la fenêtre de puissance. */
+function FloatingWindow({
+  title,
+  icon,
+  zIndex,
+  layout,
+  onLayoutChange,
+  onClose,
+  onFocus,
+  minWidth = 480,
+  minHeight = 360,
+  getWindowHeaderBg,
+  getWindowHeaderTextColor,
+  getBorderColor,
+  getButtonHoverClass,
+  getWindowBg,
+  workspaceRef,
+  closeTitle,
+  onDragActiveChange,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  zIndex: number;
+  layout: { x: number; y: number; width: number; height: number };
+  onLayoutChange: (layout: { x: number; y: number; width: number; height: number }) => void;
+  onClose: () => void;
+  onFocus: () => void;
+  minWidth?: number;
+  minHeight?: number;
+  getWindowHeaderBg: () => string;
+  getWindowHeaderTextColor: () => string;
+  getBorderColor: () => string;
+  getButtonHoverClass: () => string;
+  getWindowBg: () => string;
+  workspaceRef: React.RefObject<HTMLDivElement>;
+  closeTitle: string;
+  onDragActiveChange?: (active: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const dragState = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const resizeState = useRef<{ startX: number; startY: number; originW: number; originH: number } | null>(null);
+
+  const clampPosition = (x: number, y: number, width: number, height: number) => {
+    const rect = workspaceRef.current?.getBoundingClientRect();
+    if (!rect) return { x, y };
+    return {
+      x: Math.min(Math.max(0, x), Math.max(0, rect.width - width)),
+      y: Math.min(Math.max(0, y), Math.max(0, rect.height - height)),
+    };
+  };
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    onFocus();
+    dragState.current = { startX: e.clientX, startY: e.clientY, originX: layout.x, originY: layout.y };
+    const move = (ev: MouseEvent) => {
+      if (!dragState.current) return;
+      onDragActiveChange?.(true);
+      const { x, y } = clampPosition(
+        dragState.current.originX + ev.clientX - dragState.current.startX,
+        dragState.current.originY + ev.clientY - dragState.current.startY,
+        layout.width,
+        layout.height,
+      );
+      onLayoutChange({ ...layout, x, y });
+    };
+    const up = () => {
+      dragState.current = null;
+      onDragActiveChange?.(false);
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onFocus();
+    resizeState.current = { startX: e.clientX, startY: e.clientY, originW: layout.width, originH: layout.height };
+    const move = (ev: MouseEvent) => {
+      if (!resizeState.current) return;
+      let width = Math.max(minWidth, resizeState.current.originW + ev.clientX - resizeState.current.startX);
+      let height = Math.max(minHeight, resizeState.current.originH + ev.clientY - resizeState.current.startY);
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      if (rect) {
+        width = Math.min(width, rect.width - layout.x);
+        height = Math.min(height, rect.height - layout.y);
+      }
+      onLayoutChange({ ...layout, width, height });
+    };
+    const up = () => {
+      resizeState.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  return (
+    <div
+      className="absolute border shadow-xl shadow-black/40 rounded-md overflow-hidden flex flex-col"
+      style={{
+        left: layout.x,
+        top: layout.y,
+        width: layout.width,
+        height: layout.height,
+        zIndex,
+        background: getWindowBg(),
+        borderColor: getBorderColor(),
+      }}
+      onMouseDown={onFocus}
+    >
+      <div
+        className="flex items-center justify-between px-3 py-1.5 cursor-move select-none flex-shrink-0"
+        style={{ background: getWindowHeaderBg(), borderBottom: `1px solid ${getBorderColor()}` }}
+        onMouseDown={handleDragStart}
+      >
+        <div className="flex items-center gap-2 min-w-0" style={{ color: getWindowHeaderTextColor() }}>
+          {icon}
+          <span className="text-sm font-medium truncate">{title}</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-6 w-6 p-0 ${getButtonHoverClass()} hover:bg-red-500/20`}
+          style={{ color: getWindowHeaderTextColor() }}
+          onClick={onClose}
+          onMouseDown={(e) => e.stopPropagation()}
+          title={closeTitle}
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+      <div className="flex-1 min-h-0 overflow-hidden bg-transparent relative">{children}</div>
+      <div
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+        style={{ background: `linear-gradient(135deg, transparent 50%, ${getBorderColor()} 50%)` }}
+        onMouseDown={handleResizeStart}
+      />
+    </div>
+  );
+}
+
 function PreviewWindow({
   activeMapAddress,
   openMaps,
@@ -1197,6 +1353,15 @@ function PreviewWindow({
   // orientation par défaut mais zoom conservé (bug signalé).
   const plotDivRef = useRef<any>(null);
   const plotDivMapRef = useRef<number | null>(null);
+  type PreviewCamera = (typeof previewCameraPositions)[number];
+  // Caméra demandée par les boutons +/− et pas encore appliquée par Plotly.
+  // Elle prime sur la caméra vivante : sans ça, la relecture ci-dessous
+  // écrasait la nouvelle caméra avec l'ancienne avant même le rendu, et les
+  // boutons ne faisaient rien (bug signalé). Levée dès que le graphique la
+  // porte (onUpdate).
+  const pendingCameraRef = useRef<{ address: number; camera: PreviewCamera } | null>(null);
+  const sameEye = (a?: { x: number; y: number; z: number }, b?: { x: number; y: number; z: number }) =>
+    !!a && !!b && Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6 && Math.abs(a.z - b.z) < 1e-6;
   const liveCameraFor = (address: number | null) => {
     if (address === null || plotDivMapRef.current !== address) return null;
     const cam = plotDivRef.current?._fullLayout?.scene?.camera;
@@ -1207,7 +1372,11 @@ function PreviewWindow({
       up: { ...(cam.up || { x: 0, y: 0, z: 1 }) },
     };
   };
-  const liveCamera = liveCameraFor(activeMapAddress);
+  const pendingCamera =
+    pendingCameraRef.current && pendingCameraRef.current.address === activeMapAddress
+      ? pendingCameraRef.current.camera
+      : null;
+  const liveCamera = pendingCamera || liveCameraFor(activeMapAddress);
   if (liveCamera && activeMapAddress) previewCameraPositions[activeMapAddress] = liveCamera;
 
   // Obtenir la position de caméra actuelle
@@ -1230,7 +1399,9 @@ function PreviewWindow({
     // Bornes : ne pas traverser la surface ni partir à l'infini
     const dist = Math.hypot(eye.x - c.x, eye.y - c.y, eye.z - c.z);
     if (dist < 0.35 || dist > 8) return;
-    previewCameraPositions[activeMapAddress] = { ...cam, eye };
+    const next = { ...cam, eye };
+    previewCameraPositions[activeMapAddress] = next;
+    pendingCameraRef.current = { address: activeMapAddress, camera: next };
     setZoomRev((r) => r + 1);
   };
 
@@ -1440,6 +1611,11 @@ function PreviewWindow({
               onUpdate={(_figure: unknown, graphDiv: unknown) => {
                 plotDivRef.current = graphDiv;
                 plotDivMapRef.current = activeMapAddress;
+                // Zoom des boutons appliqué : la caméra vivante redevient la référence
+                const pending = pendingCameraRef.current;
+                if (pending && sameEye((graphDiv as any)?._fullLayout?.scene?.camera?.eye, pending.camera.eye)) {
+                  pendingCameraRef.current = null;
+                }
               }}
             />
             {/* Zoom +/− du graphique 3D — coin bas-gauche, comme sur l'EasyView */}
@@ -1864,6 +2040,44 @@ function EditorPageContent() {
   // Clé: address, Valeur: { oldValue, newValue }
   const [binaryModifications, setBinaryModifications] = useState<Map<number, { oldValue: number; newValue: number }>>(new Map());
 
+  // Estimation de puissance depuis l'éditeur : la fenêtre lit l'état EN
+  // MÉMOIRE (modifications non enregistrées comprises) via getLivePowerState,
+  // se recalcule sur son bouton Actualiser et à chaque enregistrement
+  // (powerRefreshKey). Demande du forum : voir l'effet d'une modif sans
+  // repasser par le dashboard.
+  const [powerFile, setPowerFile] = useState<FileRecord | null>(null);
+  const [powerRefreshKey, setPowerRefreshKey] = useState(0);
+  // Fenêtre flottante de la puissance : même cadre et mêmes règles que les
+  // fenêtres de maps et l'aperçu (glisser, redimensionner, premier plan)
+  const [powerLayout, setPowerLayout] = useState({ x: 80, y: 40, width: 860, height: 600 });
+  const [powerZIndex, setPowerZIndex] = useState(100);
+  // Largeur minimale réclamée par le contenu (barre des pics par codeblock) :
+  // la fenêtre ne peut pas être plus étroite, et s'élargit si elle l'était
+  const [powerMinWidth, setPowerMinWidth] = useState(480);
+  // À l'ouverture la fenêtre prend la hauteur de son contenu (bornée au
+  // workspace) tant que l'utilisateur ne l'a pas déplacée ou redimensionnée
+  const POWER_FRAME_OVERHEAD = 40; // barre de titre + bordures du cadre
+  const powerAutoHeightRef = useRef(false);
+  const handlePowerContentHeight = useCallback((contentHeight: number) => {
+    if (!powerAutoHeightRef.current) return;
+    setPowerLayout((prev) => {
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      const wanted = contentHeight + POWER_FRAME_OVERHEAD;
+      const height = Math.max(360, rect ? Math.min(wanted, rect.height) : wanted);
+      if (Math.abs(height - prev.height) < 1) return prev;
+      return { ...prev, height };
+    });
+  }, []);
+  useEffect(() => {
+    setPowerLayout((prev) => {
+      if (prev.width >= powerMinWidth) return prev;
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      const width = rect ? Math.min(powerMinWidth, rect.width) : powerMinWidth;
+      const x = rect ? Math.max(0, Math.min(prev.x, rect.width - width)) : prev.x;
+      return { ...prev, x, width };
+    });
+  }, [powerMinWidth]);
+
   // Tracks the display-vs-file row/col flip state for each open map. MapViewer
   // reorders rows/cols for human-friendly display (e.g. RPM descending), so
   // when we re-encode display-coord edits into file bytes we need to know
@@ -1958,7 +2172,7 @@ function EditorPageContent() {
   const [editorZoom, setEditorZoom] = useState<number>(() => {
     if (typeof window === "undefined") return 100;
     const saved = parseInt(localStorage.getItem("zedsuite-editor-zoom") || "100", 10);
-    return Number.isFinite(saved) && saved >= 60 && saved <= 150 ? saved : 100;
+    return Number.isFinite(saved) && saved >= 60 && saved <= 100 ? saved : 100;
   });
   useEffect(() => {
     localStorage.setItem("zedsuite-editor-zoom", String(editorZoom));
@@ -1969,8 +2183,19 @@ function EditorPageContent() {
   // 150 %…). Le zoom réglé par l'utilisateur reste le maximum.
   const [windowLogicalW, setWindowLogicalW] = useState<number | null>(null);
   // sidebarWidth est déclaré plus bas ; l'effet de mesure est près de setAppMinWidth.
+  // Plafond imposé par la largeur de la fenêtre (effet plus bas) : la barre
+  // d'outils et la liste des maps doivent tenir. Bornes 60 à 100 %.
+  const zoomCapRef = useRef<number>(100);
+  const clampEditorZoom = (value: number) =>
+    Math.min(Math.min(100, zoomCapRef.current), Math.max(60, Math.round(value)));
+  // Pas de 5 % pour les boutons − / + ; valeur libre par saisie (règle du 07/09,
+  // un zoom abaissé à 85 % par la fenêtre ne pouvait plus être remis à 80 %)
   const changeEditorZoom = (delta: number) =>
-    setEditorZoom((z) => Math.min(150, Math.max(60, z + delta)));
+    setEditorZoom((z) => clampEditorZoom(z + delta));
+  const setEditorZoomValue = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    setEditorZoom(clampEditorZoom(value));
+  };
 
 
   // Map Properties Modal state
@@ -2236,7 +2461,8 @@ function EditorPageContent() {
   useEffect(() => {
     if (!windowLogicalW) return;
     const fit = (windowLogicalW - 8) / (EDITOR_TOOLBAR_MIN_CSS_WIDTH + sidebarWidth);
-    const cap = Math.max(Math.round(EDITOR_MIN_ZOOM * 100), Math.floor(fit * 100));
+    const cap = Math.min(100, Math.max(Math.round(EDITOR_MIN_ZOOM * 100), Math.floor(fit * 100)));
+    zoomCapRef.current = cap;
     setEditorZoom((z) => (z > cap ? cap : z));
   }, [windowLogicalW, sidebarWidth]);
   const effectiveZoom = editorZoom / 100;
@@ -2289,6 +2515,8 @@ function EditorPageContent() {
         return changed ? next : prev;
       });
       setHexdumpLayout((prev) => fit(prev, rect.width, rect.height));
+      setPreviewLayout((prev) => fit(prev, rect.width, rect.height));
+      setPowerLayout((prev) => fit(prev, rect.width, rect.height));
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -4156,6 +4384,51 @@ function EditorPageContent() {
     });
   }, []);
 
+  /** Binaire et modifications de la version ouverte, tels qu'en mémoire
+   *  (enregistrés ou non) — même forme que les édits du store, pour que la
+   *  fenêtre de puissance calcule exactement ce que l'éditeur affiche. */
+  const getLivePowerState = useCallback(() => {
+    const bytes = Uint8Array.from(projectData?.file_data || []);
+    binaryModifications.forEach(({ newValue }, addr) => {
+      if (addr >= 0 && addr < bytes.length) bytes[addr] = newValue & 0xff;
+    });
+    const edits = Array.from(allMapModifications.entries()).map(([map_address, cells]) => ({
+      map_address,
+      payload: {
+        changedCells: Object.entries(cells)
+          .map(([key, value]) => {
+            const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
+            return { row: parseInt(rowStr), col: parseInt(colStr), value };
+          })
+          .filter((c) => Number.isFinite(c.row) && Number.isFinite(c.col)),
+      },
+    }));
+    return { bytes, edits };
+  }, [projectData?.file_data, binaryModifications, allMapModifications]);
+
+  /** Ouvre la fenêtre de puissance sur le projet courant, avec la liste de
+   *  maps de l'éditeur (celle du store peut être en retard d'une détection). */
+  const openPowerEstimate = async () => {
+    if (!projectData?.fileId) return;
+    try {
+      const record = await localStore.getFile(projectData.fileId);
+      if (!record) return;
+      // Ouverture centrée en largeur (jamais plus étroite que la barre des
+      // pastilles) ; la hauteur s'ajuste ensuite au contenu
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      if (rect) {
+        const width = Math.min(Math.max(860, powerMinWidth), Math.max(480, rect.width));
+        const height = Math.min(600, Math.max(360, rect.height));
+        setPowerLayout({ x: Math.max(0, (rect.width - width) / 2), y: 0, width, height });
+      }
+      powerAutoHeightRef.current = true;
+      setPowerZIndex(Math.max(hexdumpZIndex, previewZIndex, ...openMaps.map((_, i) => 50 + i)) + 1);
+      setPowerFile({ ...record, detection_data: { maps: projectData.detectionResults.maps } });
+    } catch (e) {
+      console.error("power estimate: project record unavailable", e);
+    }
+  };
+
   // Handle applying changes to similar maps
   const handleApplyToSimilarMaps = useCallback((sourceMapAddress: number, targetMaps: number[], copyType: 'modifications' | 'all') => {
     if (!projectData) return;
@@ -5077,6 +5350,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       skipNextVersionChangeRef.current = true;
       isLoadingVersionRef.current = true;
       await refreshVersions(projectData.fileId);
+      setPowerRefreshKey((k) => k + 1);
 
       // Show project saved notification
       setSaveNotification({ type: 'save', visible: true, fading: false });
@@ -5506,6 +5780,12 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     });
     // S'assurer que l'hexdump est derrière les maps
     setHexdumpZIndex(10);
+    // Les fenêtres flottantes (aperçu, puissance) passent juste sous la map
+    // cliquée, au-dessus des autres — avant, l'aperçu restait devant une map
+    // qu'on faisait glisser (signalé le 07/09)
+    const under = 18 + openMaps.length;
+    setPreviewZIndex((z) => Math.min(z, under));
+    setPowerZIndex((z) => Math.min(z, under));
     // Définir cette map comme active pour le curseur global
     setActiveMapAddress(mapAddress);
     setIsHexdumpActive(false);
@@ -5668,6 +5948,8 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     // Mettre l'hexdump au premier plan (au-dessus de toutes les maps)
     const maxMapZIndex = 20 + openMaps.length;
     setHexdumpZIndex(maxMapZIndex + 1);
+    setPreviewZIndex((z) => Math.min(z, maxMapZIndex));
+    setPowerZIndex((z) => Math.min(z, maxMapZIndex));
     // Définir l'hexdump comme actif pour le curseur global
     setIsHexdumpActive(true);
     setActiveMapAddress(null);
@@ -5713,8 +5995,13 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
 
   // Handler pour amener la fenêtre Preview au premier plan
   const bringPreviewToFront = () => {
-    const maxZ = Math.max(hexdumpZIndex, ...openMaps.map((_, i) => 50 + i));
+    const maxZ = Math.max(hexdumpZIndex, powerZIndex, ...openMaps.map((_, i) => 50 + i));
     setPreviewZIndex(maxZ + 1);
+  };
+
+  const bringPowerToFront = () => {
+    const maxZ = Math.max(hexdumpZIndex, previewZIndex, ...openMaps.map((_, i) => 50 + i));
+    setPowerZIndex(maxZ + 1);
   };
 
   // Store pour garder les infos de sélection de chaque map
@@ -5874,11 +6161,16 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             barre d'outils : cliquer-glisser ici déplace l'application
             (les champs interactifs plus bas gardent leurs propres clics). */}
         <div data-tauri-drag-region className="p-4 flex-shrink-0" style={{ borderBottom: `1px solid ${getBorderColor()}` }}>
-          <div data-tauri-drag-region className="mb-4 relative inline-block">
-  <div data-tauri-drag-region className="text-xl font-bold">
-    <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent">Zed</span><span style={{ color: getTextColor() }}>Suite</span>
-  </div>
-</div>
+          {/* Sur macOS les feux de la fenêtre occupent ce coin : le logo
+              se décale à leur droite, comme sur le dashboard */}
+          <div data-tauri-drag-region className="mb-4 flex items-center">
+            <MacTitlebarSpacer />
+            <div data-tauri-drag-region className="relative inline-block">
+              <div data-tauri-drag-region className="text-xl font-bold">
+                <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent">Zed</span><span style={{ color: getTextColor() }}>Suite</span>
+              </div>
+            </div>
+          </div>
 
           <div data-tauri-drag-region className="space-y-2 text-sm">
             <div>
@@ -6137,6 +6429,36 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
               {/* Icône triangle — blanche sur le dégradé plein, comme l'icône du menu DTC */}
               <AlertTriangle className="w-5 h-5 transition-colors duration-300" style={{ color: '#ffffff' }} />
               <span className="font-medium text-sm" style={{ color: '#ffffff' }}>{t.sidebar.dtcCodes}</span>
+            </button>
+
+            {/* Estimation de puissance — dégradé bleu ; lecture seule, donc
+                pas soumis au déverrouillage du mappack */}
+            <button
+              onClick={() => void openPowerEstimate()}
+              className={`relative overflow-hidden rounded-xl backdrop-blur-md border px-4 py-2 flex items-center justify-center gap-2.5 transition-all duration-500 group hover:scale-105 hover:shadow-2xl ${
+                theme === 'light'
+                  ? 'bg-gradient-to-l from-blue-600 via-blue-500 to-sky-500 border-black/10 hover:shadow-blue-600/35'
+                  : 'bg-gradient-to-l from-blue-600/90 via-blue-500/90 to-sky-500/90 border-white/15 hover:shadow-blue-500/35'
+              }`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-l from-transparent via-white/20 to-transparent translate-x-full group-hover:-translate-x-full transition-transform duration-1000" />
+              <Gauge className="w-5 h-5 transition-colors duration-300" style={{ color: '#ffffff' }} />
+              <span className="font-medium text-sm whitespace-nowrap" style={{ color: '#ffffff' }}>{t.sidebar.powerEstimate}</span>
+            </button>
+
+            {/* Comparaison de versions — dégradé violet ; déplacé depuis la
+                barre d'outils (07/09), qui perd 70 px de largeur minimale */}
+            <button
+              onClick={() => setIsCompareOpen(true)}
+              className={`relative overflow-hidden rounded-xl backdrop-blur-md border px-4 py-2 flex items-center justify-center gap-2.5 transition-all duration-500 group hover:scale-105 hover:shadow-2xl ${
+                theme === 'light'
+                  ? 'bg-gradient-to-l from-violet-600 via-purple-500 to-fuchsia-500 border-black/10 hover:shadow-violet-600/35'
+                  : 'bg-gradient-to-l from-violet-600/90 via-purple-500/90 to-fuchsia-500/90 border-white/15 hover:shadow-violet-500/35'
+              }`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-l from-transparent via-white/20 to-transparent translate-x-full group-hover:-translate-x-full transition-transform duration-1000" />
+              <ArrowLeftRight className="w-5 h-5 transition-colors duration-300" style={{ color: '#ffffff' }} />
+              <span className="font-medium text-sm whitespace-nowrap" style={{ color: '#ffffff' }}>{t.toolbar.compare}</span>
             </button>
           </div>
         </div>
@@ -6441,8 +6763,9 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             onPreviewClick={handlePreviewToggle}
             onSettingsClick={() => setIsSettingsOpen(true)}
             zoomPercent={Math.round(effectiveZoom * 100)}
-            onZoomIn={() => changeEditorZoom(10)}
-            onZoomOut={() => changeEditorZoom(-10)}
+            onZoomIn={() => changeEditorZoom(5)}
+            onZoomOut={() => changeEditorZoom(-5)}
+            onZoomSet={setEditorZoomValue}
             onCloseProject={handleCloseProject}
             hasActiveMap={activeMapAddress !== null}
             onModifyApply={handleModifyApply}
@@ -6450,7 +6773,6 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             onModifyValueChange={setModifyValue}
             modifyOperation={modifyOperation}
             onModifyOperationChange={setModifyOperation}
-            onCompareClick={() => setIsCompareOpen(true)}
           />
         </div>
 
@@ -7073,6 +7395,48 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
                     );
                   })}
                 </div>
+              )}
+
+              {/* Fenêtre de puissance — flottante, dans le même container
+                  que les maps, calculée sur l'état en mémoire de la version */}
+              {powerFile && projectData && (
+                <FloatingWindow
+                  title={t.dashboard.powerTitle}
+                  icon={<Gauge className="w-4 h-4" />}
+                  zIndex={powerZIndex}
+                  layout={powerLayout}
+                  onLayoutChange={(l) => {
+                    powerAutoHeightRef.current = false;
+                    setPowerLayout(l);
+                  }}
+                  onClose={() => setPowerFile(null)}
+                  onFocus={bringPowerToFront}
+                  minWidth={Math.max(480, powerMinWidth)}
+                  getWindowHeaderBg={getWindowHeaderBg}
+                  getWindowHeaderTextColor={getWindowHeaderTextColor}
+                  getBorderColor={getBorderColor}
+                  getButtonHoverClass={getButtonHoverClass}
+                  getWindowBg={getWindowBg}
+                  workspaceRef={workspaceRef}
+                  closeTitle={t.common.close}
+                  onDragActiveChange={(active) => {
+                    setOverlayCursor('move');
+                    setIsWindowDragActive(active);
+                  }}
+                >
+                  <PowerEstimateModal
+                    embedded
+                    onMinWidthChange={setPowerMinWidth}
+                    onContentHeightChange={handlePowerContentHeight}
+                    file={powerFile}
+                    onClose={() => setPowerFile(null)}
+                    live={{
+                      versionId: currentVersionId || "",
+                      getState: getLivePowerState,
+                      refreshKey: powerRefreshKey,
+                    }}
+                  />
+                </FloatingWindow>
               )}
 
               {/* Preview Window - dans le même container que les maps */}
