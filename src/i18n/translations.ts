@@ -837,6 +837,10 @@ export const translations = {
         other: "Other",
       },
       // Solution names and descriptions
+      edc16cp31_egr_off: {
+        name: "EGR Off (OM642)",
+        description: "Disables the EGR valve and neutralises its fault detection. Byte-for-byte replay of a modification verified on a real OM642 (SW 1037393817); writes nothing if the file does not match.",
+      },
       egr_off: {
         name: "EGR Off",
         description: "Disable Exhaust Gas Recirculation valve. Reduces carbon buildup and improves engine longevity.",
@@ -1797,6 +1801,10 @@ export const translations = {
         other: "Autre",
       },
       // Solution names and descriptions
+      edc16cp31_egr_off: {
+        name: "EGR Off (OM642)",
+        description: "Désactive la vanne EGR et neutralise ses défauts. Rejeu à l'octet près d'une modification vérifiée sur un OM642 réel (SW 1037393817) ; n'écrit rien si le fichier ne correspond pas.",
+      },
       egr_off: {
         name: "EGR Off",
         description: "Désactiver la vanne de recirculation des gaz d'échappement. Réduit l'encrassement et améliore la longévité du moteur.",
@@ -2721,6 +2729,10 @@ export const translations = {
         diagnostics: "Diagnóstico",
         other: "Otras",
       },
+      edc16cp31_egr_off: {
+        name: "EGR Off (OM642)",
+        description: "Desactiva la válvula EGR y neutraliza sus fallos. Réplica byte a byte de una modificación verificada en un OM642 real (SW 1037393817); no escribe nada si el archivo no coincide.",
+      },
       egr_off: {
         name: "EGR Off",
         description: "Desactiva la válvula de recirculación de gases de escape. Reduce la carbonilla y mejora la longevidad del motor.",
@@ -3644,6 +3656,10 @@ export const translations = {
         diagnostics: "Diagnostica",
         other: "Altre",
       },
+      edc16cp31_egr_off: {
+        name: "EGR Off (OM642)",
+        description: "Disattiva la valvola EGR e neutralizza i suoi guasti. Replica byte per byte di una modifica verificata su un OM642 reale (SW 1037393817); non scrive nulla se il file non corrisponde.",
+      },
       egr_off: {
         name: "EGR Off",
         description: "Disattiva la valvola di ricircolo dei gas di scarico. Riduce i depositi carboniosi e migliora la durata del motore.",
@@ -4566,6 +4582,10 @@ export const translations = {
         performance: "Leistung",
         diagnostics: "Diagnose",
         other: "Sonstiges",
+      },
+      edc16cp31_egr_off: {
+        name: "EGR Off (OM642)",
+        description: "Deaktiviert das AGR-Ventil und unterdrückt seine Fehlererkennung. Byte-genaue Wiedergabe einer an einem echten OM642 geprüften Änderung (SW 1037393817); schreibt nichts, wenn die Datei nicht passt.",
       },
       egr_off: {
         name: "EGR Off",
