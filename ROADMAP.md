@@ -20,7 +20,6 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - CSV import and export, and DAMOS import.
 - Editing maps directly in the 3D view.
 - Editing several versions of the same project side by side and comparing their maps.
-- macOS compatibility.
 
 ## Not planned for now
 

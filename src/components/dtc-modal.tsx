@@ -69,7 +69,7 @@ export function DTCModal({
         let result: DTCDetectionResult;
 
         if (ecuFamily.includes('EDC15')) {
-          result = detectEDC15PDTCs(dataArray);
+          result = detectEDC15PDTCs(dataArray, ecuFamily.includes('VM') ? 'EDC15VM' : 'EDC15P');
         } else if (ecuFamily.includes('EDC16')) {
           result = detectEDC16DTCs(dataArray);
         } else {
@@ -324,6 +324,13 @@ export function DTCModal({
                       </span>
                     )}
                   </p>
+                  {/* Disposition compacte : codes commutés par chemin de défaut —
+                      sous la ligne du calculateur, couleur secondaire du thème */}
+                  {!isDetecting && detectionResult?.success && detectionResult.grouped && (
+                    <p className="text-xs mt-1" style={{ color: getSecondaryTextColor() }}>
+                      {t.dtcModal.groupedNotice}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

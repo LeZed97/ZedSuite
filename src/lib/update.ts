@@ -44,6 +44,26 @@ export async function downloadAndInstallUpdate(url: string, version: string): Pr
   return invoke("download_and_install_update", { url, version });
 }
 
+/** Strings of the update dialog needed to word an install error. */
+export interface UpdateErrorStrings {
+  macMoveToApplications: string;
+  macInstallFailed: string;
+}
+
+/**
+ * Error line of the update dialog. The Rust side reports macOS cases with a
+ * `macos:<code>` prefix (running from the disk image, swap refused) so the
+ * dialog can word them in the app language; anything else is shown as is.
+ */
+export function describeUpdateError(raw: string, t: UpdateErrorStrings): string {
+  if (raw.startsWith("macos:not_in_applications")) return t.macMoveToApplications;
+  if (raw.startsWith("macos:install_failed")) {
+    const detail = raw.slice("macos:install_failed".length).replace(/^:\s*/, "").trim();
+    return detail ? `${t.macInstallFailed} (${detail})` : t.macInstallFailed;
+  }
+  return raw;
+}
+
 export function markUpdateCheckDone(): void {
   localStorage.setItem(LS_LAST_CHECK, String(Date.now()));
 }

@@ -76,7 +76,7 @@ export function detectDTCs(
 
   if (family.startsWith('EDC15')) {
     const { detectEDC15PDTCs } = require('./edc15p');
-    return detectEDC15PDTCs(data);
+    return detectEDC15PDTCs(data, family);
   }
 
   if (family.startsWith('EDC16')) {

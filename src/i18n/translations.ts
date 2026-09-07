@@ -169,6 +169,7 @@ export const translations = {
       unitRpm: "rpm",
       powerSources: "Codeblocks / maps",
       powerExportPdf: "Export PDF",
+      powerRefresh: "Refresh",
       pdfClient: "Customer",
       pdfTuner: "Tuner",
       pdfProject: "Project",
@@ -310,6 +311,7 @@ export const translations = {
       delete: "DELETE",
       solutions: "Solutions",
       dtcCodes: "DTC codes",
+      powerEstimate: "Power",
       mappack: "Mappack",
       exportMappackShort: "Export",
       sortByName: "Sort maps by name (A→Z)",
@@ -435,6 +437,9 @@ export const translations = {
       skipVersion: "Skip this version",
       noInstaller: "No installer is attached to this release.",
       error: "Update failed:",
+      noInstallerMac: "This release has no macOS build yet. It will be offered as soon as it is available.",
+      macMoveToApplications: "ZedSuite is running from the disk image or a temporary folder. Drag it into the Applications folder, open it from there and try again.",
+      macInstallFailed: "ZedSuite could not replace itself in the Applications folder. Download the new version from the releases page and drag it into Applications.",
     },
     // DTC Modal
     dtcModal: {
@@ -465,6 +470,7 @@ export const translations = {
       notImplemented: "DTC detection not yet implemented for",
       alreadyDisabled: "This DTC is already disabled",
       noMapping: "This DTC cannot be disabled (no known mapping)",
+      groupedNotice: "On this software version the codes are grouped by fault path (one sensor or actuator): switching one code switches the whole group.",
     },
     // DTC Systems
     dtcSystems: {
@@ -606,6 +612,7 @@ export const translations = {
     compare: {
       title: "Compare Versions",
       selectVersions: "Select two versions to compare",
+      binaryOnlyNotice: "For now this window compares the two versions as binary files, byte by byte. Comparing the maps of two versions is in development and will come here too, so you can choose between the binary comparison and a map by map comparison in the project window.",
       left: "Left",
       right: "Right",
       selectVersion: "Select a version",
@@ -1129,6 +1136,7 @@ export const translations = {
       unitRpm: "tr/min",
       powerSources: "Codeblocks / cartes",
       powerExportPdf: "Exporter en PDF",
+      powerRefresh: "Actualiser",
       pdfClient: "Client",
       pdfTuner: "Mappeur",
       pdfProject: "Projet",
@@ -1270,6 +1278,7 @@ export const translations = {
       delete: "SUPPRIMER",
       solutions: "Solutions",
       dtcCodes: "Codes DTC",
+      powerEstimate: "Puissance",
       mappack: "Mappack",
       exportMappackShort: "Exporter",
       sortByName: "Trier les maps par nom (A→Z)",
@@ -1395,6 +1404,9 @@ export const translations = {
       skipVersion: "Passer cette version",
       noInstaller: "Aucun installateur n'est attaché à cette release.",
       error: "Échec de la mise à jour :",
+      noInstallerMac: "Cette version n'a pas encore de build macOS. Elle sera proposée dès qu'elle sera disponible.",
+      macMoveToApplications: "ZedSuite tourne depuis l'image disque ou un dossier temporaire. Glissez-la dans le dossier Applications, ouvrez-la depuis là et réessayez.",
+      macInstallFailed: "ZedSuite n'a pas pu se remplacer dans le dossier Applications. Téléchargez la nouvelle version depuis la page des releases et glissez-la dans Applications.",
     },
     // DTC Modal
     dtcModal: {
@@ -1425,6 +1437,7 @@ export const translations = {
       notImplemented: "Détection DTC pas encore implémentée pour",
       alreadyDisabled: "Ce DTC est déjà désactivé",
       noMapping: "Ce DTC ne peut pas être désactivé (pas de mapping connu)",
+      groupedNotice: "Sur cette version de logiciel les codes sont groupés par chemin de défaut (un capteur ou un actionneur) : désactiver un code désactive tout le groupe.",
     },
     // DTC Systems
     dtcSystems: {
@@ -1566,6 +1579,7 @@ export const translations = {
     compare: {
       title: "Comparer les versions",
       selectVersions: "Sélectionnez deux versions à comparer",
+      binaryOnlyNotice: "Pour l'instant cette fenêtre compare les deux versions en binaire, octet par octet. La comparaison des maps de deux versions est en développement et arrivera ici aussi, pour choisir entre la comparaison binaire et une comparaison map par map dans la fenêtre du projet.",
       left: "Gauche",
       right: "Droite",
       selectVersion: "Sélectionner une version",
@@ -2082,6 +2096,7 @@ export const translations = {
       unitRpm: "rpm",
       powerSources: "Codeblocks / mapas",
       powerExportPdf: "Exportar PDF",
+      powerRefresh: "Actualizar",
       pdfClient: "Cliente",
       pdfTuner: "Preparador",
       pdfProject: "Proyecto",
@@ -2219,6 +2234,7 @@ export const translations = {
       delete: "ELIMINAR",
       solutions: "Soluciones",
       dtcCodes: "Códigos DTC",
+      powerEstimate: "Potencia",
       mappack: "Mappack",
       exportMappackShort: "Exportar",
       sortByName: "Ordenar mapas por nombre (A→Z)",
@@ -2340,6 +2356,9 @@ export const translations = {
       skipVersion: "Omitir esta versión",
       noInstaller: "No hay ningún instalador adjunto a esta versión.",
       error: "La actualización falló:",
+      noInstallerMac: "Esta versión aún no tiene compilación para macOS. Se ofrecerá en cuanto esté disponible.",
+      macMoveToApplications: "ZedSuite se está ejecutando desde la imagen de disco o una carpeta temporal. Arrástrala a la carpeta Aplicaciones, ábrela desde ahí y vuelve a intentarlo.",
+      macInstallFailed: "ZedSuite no ha podido reemplazarse en la carpeta Aplicaciones. Descarga la nueva versión desde la página de releases y arrástrala a Aplicaciones.",
     },
     dtcModal: {
       title: "Códigos DTC",
@@ -2369,6 +2388,7 @@ export const translations = {
       notImplemented: "Detección de DTC aún no implementada para",
       alreadyDisabled: "Este DTC ya está desactivado",
       noMapping: "Este DTC no se puede desactivar (sin correspondencia conocida)",
+      groupedNotice: "En esta versión de software los códigos están agrupados por vía de fallo (un sensor o un actuador): desactivar un código desactiva todo el grupo.",
     },
     dtcSystems: {
       FUEL: "Combustible",
@@ -2499,6 +2519,7 @@ export const translations = {
     compare: {
       title: "Comparar versiones",
       selectVersions: "Selecciona dos versiones para comparar",
+      binaryOnlyNotice: "Por ahora esta ventana compara las dos versiones como archivos binarios, byte a byte. La comparación de los mapas de dos versiones está en desarrollo y llegará aquí también, para elegir entre la comparación binaria y una comparación mapa por mapa en la ventana del proyecto.",
       left: "Izquierda",
       right: "Derecha",
       selectVersion: "Selecciona una versión",
@@ -3005,6 +3026,7 @@ export const translations = {
       unitRpm: "giri/min",
       powerSources: "Codeblock / mappe",
       powerExportPdf: "Esporta PDF",
+      powerRefresh: "Aggiorna",
       pdfClient: "Cliente",
       pdfTuner: "Preparatore",
       pdfProject: "Progetto",
@@ -3142,6 +3164,7 @@ export const translations = {
       delete: "ELIMINA",
       solutions: "Soluzioni",
       dtcCodes: "Codici DTC",
+      powerEstimate: "Potenza",
       mappack: "Mappack",
       exportMappackShort: "Esporta",
       sortByName: "Ordina mappe per nome (A→Z)",
@@ -3263,6 +3286,9 @@ export const translations = {
       skipVersion: "Salta questa versione",
       noInstaller: "Nessun installer allegato a questa versione.",
       error: "Aggiornamento non riuscito:",
+      noInstallerMac: "Questa versione non ha ancora una build per macOS. Verrà proposta appena disponibile.",
+      macMoveToApplications: "ZedSuite è in esecuzione dall'immagine disco o da una cartella temporanea. Trascinala nella cartella Applicazioni, aprila da lì e riprova.",
+      macInstallFailed: "ZedSuite non è riuscita a sostituirsi nella cartella Applicazioni. Scarica la nuova versione dalla pagina delle release e trascinala in Applicazioni.",
     },
     dtcModal: {
       title: "Codici DTC",
@@ -3292,6 +3318,7 @@ export const translations = {
       notImplemented: "Rilevamento DTC non ancora implementato per",
       alreadyDisabled: "Questo DTC è già disattivato",
       noMapping: "Questo DTC non può essere disattivato (nessuna mappatura nota)",
+      groupedNotice: "In questa versione del software i codici sono raggruppati per percorso di guasto (un sensore o un attuatore): disattivare un codice disattiva tutto il gruppo.",
     },
     dtcSystems: {
       FUEL: "Carburante",
@@ -3422,6 +3449,7 @@ export const translations = {
     compare: {
       title: "Confronta versioni",
       selectVersions: "Seleziona due versioni da confrontare",
+      binaryOnlyNotice: "Per ora questa finestra confronta le due versioni come file binari, byte per byte. Il confronto delle mappe di due versioni è in sviluppo e arriverà anche qui, per scegliere tra il confronto binario e un confronto mappa per mappa nella finestra del progetto.",
       left: "Sinistra",
       right: "Destra",
       selectVersion: "Seleziona una versione",
@@ -3928,6 +3956,7 @@ export const translations = {
       unitRpm: "U/min",
       powerSources: "Codeblöcke / Kennfelder",
       powerExportPdf: "PDF exportieren",
+      powerRefresh: "Aktualisieren",
       pdfClient: "Kunde",
       pdfTuner: "Tuner",
       pdfProject: "Projekt",
@@ -4065,6 +4094,7 @@ export const translations = {
       delete: "LÖSCHEN",
       solutions: "Lösungen",
       dtcCodes: "DTC-Codes",
+      powerEstimate: "Leistung",
       mappack: "Mappack",
       exportMappackShort: "Export",
       sortByName: "Kennfelder nach Name sortieren (A→Z)",
@@ -4186,6 +4216,9 @@ export const translations = {
       skipVersion: "Diese Version überspringen",
       noInstaller: "Dieser Version ist kein Installer angehängt.",
       error: "Update fehlgeschlagen:",
+      noInstallerMac: "Diese Version hat noch keinen macOS-Build. Er wird angeboten, sobald er verfügbar ist.",
+      macMoveToApplications: "ZedSuite läuft vom Disk-Image oder aus einem temporären Ordner. Zieh die App in den Ordner Programme, öffne sie von dort und versuch es erneut.",
+      macInstallFailed: "ZedSuite konnte sich im Ordner Programme nicht ersetzen. Lade die neue Version von der Releases-Seite herunter und zieh sie in den Ordner Programme.",
     },
     dtcModal: {
       title: "DTC-Codes",
@@ -4215,6 +4248,7 @@ export const translations = {
       notImplemented: "DTC-Erkennung noch nicht implementiert für",
       alreadyDisabled: "Dieser DTC ist bereits deaktiviert",
       noMapping: "Dieser DTC kann nicht deaktiviert werden (keine bekannte Zuordnung)",
+      groupedNotice: "In dieser Softwareversion sind die Codes nach Fehlerpfad gruppiert (ein Sensor oder ein Aktor): wird ein Code deaktiviert, wird die ganze Gruppe deaktiviert.",
     },
     dtcSystems: {
       FUEL: "Kraftstoff",
@@ -4345,6 +4379,7 @@ export const translations = {
     compare: {
       title: "Versionen vergleichen",
       selectVersions: "Wähle zwei Versionen zum Vergleichen",
+      binaryOnlyNotice: "Im Moment vergleicht dieses Fenster die beiden Versionen als Binärdateien, Byte für Byte. Der Vergleich der Kennfelder zweier Versionen ist in Entwicklung und kommt auch hierher, damit du zwischen dem binären Vergleich und einem Vergleich Kennfeld für Kennfeld im Projektfenster wählen kannst.",
       left: "Links",
       right: "Rechts",
       selectVersion: "Version auswählen",

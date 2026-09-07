@@ -3396,10 +3396,11 @@ impl EDC15PDetector {
             m.correction_factor = Some(corr);
             m.offset = Some(off);
             m.confidence = 0.6;
-            // Description détaillée avec format X: ... Y: ... Z: ...
+            // Texte affiché tel quel sous le nom de la map (une valeur seule,
+            // pas d'axes) : pas d'habillage « X: … Y: Z: », il apparaissait
+            // dans la fenêtre (signalé sur le forum).
             if !description.is_empty() {
-                m.description = Some(format!("X: {} Y: Z:", description));
-                m.x_label = Some(description.to_string());
+                m.description = Some(description.to_string());
             }
             if !unit.is_empty() {
                 m.unit = Some(unit.to_string());
@@ -3456,8 +3457,8 @@ impl EDC15PDetector {
                 "VCDS Diagnostic Torque Limit",
                 0.00390625,
                 -0.203125,
-                "Torque limit for VCDS display. Real torque=displayed×4.12. Ex: 100→412Nm, 146→601Nm, 195→803Nm. Raw×0.0039-0.2=displayed value",
-                "NM",
+                "Torque clamp for the VCDS display, in display units, not Nm: real torque = value × 4.12 (100 = 412 Nm, 146 = 601 Nm, 195 = 803 Nm). Raw × 0.0039 - 0.2 = value",
+                "",
                 true // signed
             );
         }
@@ -3471,10 +3472,20 @@ impl EDC15PDetector {
             // Ces valeurs sont des facteurs de mise à l'échelle pour VCDS
             // Pour calculer la limite max affichable: Limite_Max = 255 / Valeur × Multiplicateur
             // Exemple: IQ=364 → 255/364×100 = 70mg max | IQ=255 → 255/255×100 = 100mg max
+            // Sur les premiers PD (019AJ, 019AN) la séquence perd 12 octets
+            // après le facteur MAP : le facteur IQ (364 en stock) est à +126,
+            // et +138 tombe dans la suite de trois mots 1280 qui le suit.
+            let word = |off: u32| -> u16 {
+                let i = (base_u32 + off) as usize;
+                if i + 1 < data.len() { u16::from_le_bytes([data[i], data[i + 1]]) } else { 0 }
+            };
+            let iq_off = if word(134) == word(138) && word(138) == word(142) { 126_u32 } else { 138_u32 };
+            // « Display offset » chez EDCSuite, mais c'est un facteur d'échelle,
+            // pas un décalage : nommées « Display scaling » (signalé sur le forum).
             let entries: [(u32, &str, &str); 3] = [
-                (42_u32, "VCDS Diagnostic Torque Display offset", "Scaling factor for VCDS torque display. Calculate max: 255/VALUE×1000=Nm. Ex: 620→411Nm, 425→600Nm. To change: new_value=255/desired_Nm×1000"),
-                (66_u32, "VCDS Diagnostic MAP Display offset", "Scaling factor for VCDS MAP display. Calculate max: 255/VALUE×10000=mbar. Ex: 638→4000mbar(4bar), 833→3061mbar(3bar). To change: new_value=255/desired_mbar×10000"),
-                (138_u32, "VCDS Diagnostic IQ Display offset", "Scaling factor for VCDS IQ display. Calculate max: 255/VALUE×100=mg. Ex: 255→100mg, 364→70mg. To change: new_value=255/desired_mg×100"),
+                (42_u32, "VCDS Diagnostic Torque Display scaling", "Scaling factor of the VCDS torque display (Display offset in EDCSuite), not an offset. Max shown = 255 / value × 1000 Nm: 620 = 411 Nm, 425 = 600 Nm. New value = 255 / wanted Nm × 1000"),
+                (66_u32, "VCDS Diagnostic MAP Display scaling", "Scaling factor of the VCDS boost display (Display offset in EDCSuite), not an offset. Max shown = 255 / value × 10000 mbar: 980 = 2602 mbar (stock 2.5 bar sensor), 833 = 3061 mbar (3 bar), 638 = 4000 mbar (4 bar). New value = 255 / wanted mbar × 10000"),
+                (iq_off, "VCDS Diagnostic IQ Display scaling", "Scaling factor of the VCDS injection quantity display (Display offset in EDCSuite), not an offset. Max shown = 255 / value × 100 mg: 364 = 70 mg, 255 = 100 mg. New value = 255 / wanted mg × 100"),
             ];
             for (off, label, desc) in entries {
                 let addr = base_u32 + off;

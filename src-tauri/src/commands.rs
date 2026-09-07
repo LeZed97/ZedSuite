@@ -79,7 +79,7 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
-pub const DETECTOR_VERSION: u32 = 38;
+pub const DETECTOR_VERSION: u32 = 40;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -364,7 +364,7 @@ fn build_expected_report_edc15p(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapS
         ("VCDS Diagnostic IQ Limit (10)", 10, 1, "VCDS Diagnostic IQ Limit"),
         ("VCDS Diagnostic MAP Limit (3)", 3, 1, "VCDS Diagnostic MAP Limit"),
         ("VCDS Diagnostic Torque Limit", 1, 0, "VCDS Diagnostic Torque Limit"),
-        ("VCDS Diagnostic Display offsets (3)", 3, 2, "Display offset"),
+        ("VCDS Diagnostic Display scaling (3)", 3, 2, "Display scaling"),
         // Paire de courbes 20 points par codeblock (seuils IQ d'activation et
         // de coupure), présente sur les 31 fichiers du banc
         ("EGR hysteresis (2)", 2, 1, "EGR hysteresis"),
@@ -435,10 +435,10 @@ fn build_expected_report_edc15vm(maps: &[DetectedMap]) -> Option<Vec<ExpectedMap
         ("SVRL - RPM Limiter", 1, 1, "SVRL"),
         ("IQ by MAP limiter", 1, 1, "IQ by MAP"),
         ("IQ by MAF limiter", 1, 1, "IQ by MAF"),
-        // Pas de règle « MAP/MAF switch » sur le VM : la structure
-        // 41 01 xx xx 00 01 01 00 n'existe que sur une partie des softs
-        // VP37 (012FN, 012GN, 110 ch), pas sur 012L/jetta où l'on ne sait
-        // pas où est le drapeau — plutôt aucun switch qu'un faux à zéro.
+        // Switch au bout de la même table d'octets sur tous les softs VP37
+        // 512 Ko du banc (identifiant 41 01 / 01 01 / 01 02, issue #10) ;
+        // absent des A6 1 Mo, famille non couverte de toute façon.
+        ("MAP/MAF switch", 1, 1, "MAP/MAF switch"),
         ("Start of injection (>=1)", 1, 1, "Start of injection"),
         ("SVBL (Single value boost limiter)", 1, 1, "SVBL"),
         ("Boost target map", 1, 1, "Boost target map"),
@@ -550,11 +550,32 @@ pub fn open_external_url(url: String) -> Result<(), String> {
     {
         return Err("URL not allowed".to_string());
     }
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", &url])
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    open_with_system(&url).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Hands a URL or a folder to the desktop: `start` on Windows, `open` on
+/// macOS, `xdg-open` elsewhere.
+fn open_with_system(target: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", "", target]);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg(target);
+        c
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(target);
+        c
+    };
+    cmd.spawn().map(|_| ())
 }
 
 /// Total size in bytes of the projects folder (every project, every
@@ -588,7 +609,7 @@ fn dir_size(dir: &std::path::Path) -> u64 {
         .sum()
 }
 
-/// Open a project's folder in the Windows Explorer.
+/// Open a project's folder in the file manager (Explorer, Finder).
 #[tauri::command]
 pub fn open_project_dir(app: tauri::AppHandle, file_id: String) -> Result<(), String> {
     use tauri::Manager;
@@ -610,10 +631,12 @@ pub fn open_project_dir(app: tauri::AppHandle, file_id: String) -> Result<(), St
         return Err("Project folder not found".to_string());
     }
 
-    std::process::Command::new("explorer")
-        .arg(&dir)
-        .spawn()
-        .map_err(|e| format!("Failed to open Explorer: {}", e))?;
+    // Explorer on Windows (opens the folder itself), Finder on macOS
+    #[cfg(target_os = "windows")]
+    let launched = std::process::Command::new("explorer").arg(&dir).spawn().map(|_| ());
+    #[cfg(not(target_os = "windows"))]
+    let launched = open_with_system(&dir.to_string_lossy());
+    launched.map_err(|e| format!("Failed to open the folder: {}", e))?;
     Ok(())
 }
 

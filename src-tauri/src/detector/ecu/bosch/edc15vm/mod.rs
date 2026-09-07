@@ -1456,6 +1456,9 @@ impl EDC15VMDetector {
     /// chaque codeblock (golf : 2×14x7 à 0x60EFC/0x61010, limiteur à
     /// 0x611C6). Confirme l'intuition de ZedPerf (« certains ont juste une
     /// seule map SOI »).
+    /// Bornes des axes et des valeurs volontairement larges (IQ jusqu'à 100 mg,
+    /// régime jusqu'à 7000, avance ±40°) : un fichier tuné dont l'axe IQ de la
+    /// N108 a été étendu au-delà de 60 mg perdait sa SOI (issue #10, 012M).
     fn detect_single_soi_maps(
         &self,
         data: &[u8],
@@ -1488,7 +1491,7 @@ impl EDC15VMDetector {
                 }
                 let rpm: Vec<u16> = (0..l1).map(|k| le16(i + 4 + k * 2)).collect();
                 if rpm.windows(2).any(|w| w[0] > w[1])
-                    || !(3000..=6000).contains(&rpm[l1 - 1])
+                    || !(3000..=7000).contains(&rpm[l1 - 1])
                 {
                     i += 2;
                     continue;
@@ -1500,7 +1503,7 @@ impl EDC15VMDetector {
                     continue;
                 }
                 let iq: Vec<u16> = (0..l2).map(|k| le16(j + 4 + k * 2)).collect();
-                if iq.windows(2).any(|w| w[0] > w[1]) || !(2000..=6000).contains(&iq[l2 - 1]) {
+                if iq.windows(2).any(|w| w[0] > w[1]) || !(2000..=10000).contains(&iq[l2 - 1]) {
                     i += 2;
                     continue;
                 }
@@ -1513,7 +1516,7 @@ impl EDC15VMDetector {
                 // Données SOI : degrés signés faibles (±3000 = ±70° max)
                 let vals_ok = (0..l1 * l2).all(|k| {
                     let v = le16(d0 + k * 2) as i16;
-                    (-3000..=3000).contains(&v)
+                    (-4000..=4000).contains(&v)
                 });
                 if !vals_ok || detected_addresses.contains(&(d0 as u32)) {
                     i += 2;
@@ -1535,7 +1538,7 @@ impl EDC15VMDetector {
                     }
                     let rpm: Vec<u16> = (0..l1).map(|k| le16(i + 4 + k * 2)).collect();
                     if rpm.windows(2).any(|w| w[0] > w[1])
-                        || !(3000..=6000).contains(&rpm[l1 - 1])
+                        || !(3000..=7000).contains(&rpm[l1 - 1])
                     {
                         i += 2;
                         continue;
@@ -1547,7 +1550,7 @@ impl EDC15VMDetector {
                         continue;
                     }
                     let iq: Vec<u16> = (0..l2).map(|k| le16(j + 4 + k * 2)).collect();
-                    if iq.windows(2).any(|w| w[0] > w[1]) || !(2000..=6000).contains(&iq[l2 - 1])
+                    if iq.windows(2).any(|w| w[0] > w[1]) || !(2000..=10000).contains(&iq[l2 - 1])
                     {
                         i += 2;
                         continue;
@@ -1560,7 +1563,7 @@ impl EDC15VMDetector {
                     }
                     let vals_ok = (0..l1 * l2).all(|k| {
                         let v = le16(d0 + k * 2) as i16;
-                        (-3000..=3000).contains(&v)
+                        (-4000..=4000).contains(&v)
                     });
                     if !vals_ok {
                         i += 2;
@@ -1922,27 +1925,34 @@ impl EDC15VMDetector {
         for svbl_addr in svbl_addrs {
             {
                 // Même structure que le switch MAP/MAF de l'EDC15P
-                // (41 02 xx xx 00 01 01 00, valeur à +2) avec l'identifiant
-                // 41 01 sur le VM : 41 01 xx xx 00 01 01 00, dans les 0x100
-                // octets qui précèdent la SVBL (012FN/012GN : svbl - 0x4E).
+                // (41 02 xx xx 00 01 01 00, valeur à +2), dans les 0x100 octets
+                // qui précèdent la SVBL, au bout de la même table d'octets
+                // « … 00 01 01 00 01 » sur tous les softs VM. Seul l'identifiant
+                // change : 41 01 (012FN/GN/FB, A6), 01 01 (012M/L/AA/AP/CP),
+                // 01 02 (012K) — issue #10 : le 012M n'avait plus de switch en
+                // 1.1.6 alors que sa table est identique au 012FN à cet octet
+                // près. Le contexte de cinq octets évite les faux positifs.
                 // L'ancienne heuristique « mot ≤ 1 à svbl - 0x4C » tombait
                 // dans une zone vide sur les softs 012L/jetta (faux switch à
                 // zéro) et rejetait un vrai switch en mode MAP (257) —
-                // issue #4. Valeur : 0 = MAF, 257 = MAP, comme sur l'EDC15P.
+                // issue #4. Valeur : 0 = MAF, 257 = MAP, comme sur l'EDC15P
+                // (le 012L du banc est en MAP sur son premier codeblock).
                 if svbl_addr < 0x100 {
                     continue;
                 }
                 let search_start = svbl_addr - 0x100;
                 let search_end = svbl_addr.min(data.len().saturating_sub(8));
                 let mut found: Option<usize> = None;
-                let mut t = search_start;
+                const CONTEXT: [u8; 5] = [0x00, 0x01, 0x01, 0x00, 0x01];
+                let mut t = search_start.max(CONTEXT.len());
                 while t + 8 <= search_end + 8 && t + 8 <= data.len() {
-                    if data[t] == 0x41
-                        && data[t + 1] == 0x01
+                    if (data[t] == 0x41 || data[t] == 0x01)
+                        && (data[t + 1] == 0x01 || data[t + 1] == 0x02)
                         && data[t + 4] == 0x00
                         && data[t + 5] == 0x01
                         && data[t + 6] == 0x01
                         && data[t + 7] == 0x00
+                        && data[t - CONTEXT.len()..t] == CONTEXT
                     {
                         found = Some(t + 2);
                         break;

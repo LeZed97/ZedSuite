@@ -884,3 +884,16 @@ a {
   -webkit-user-drag: none;
   user-drag: none;
 }
+
+/* Fenêtre de puissance dans l'éditeur : réglages en grille quand le cadre est
+   étroit (Version | Actualiser, Moteur | Export PDF, Rendement, Nez), une
+   seule ligne quand il est large — container query sur le cadre. */
+.pw-root { container-type: inline-size; }
+.pw-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 1rem; row-gap: 0.5rem; align-items: center; }
+.pw-grid > .pw-ctrl { grid-column: 1; }
+.pw-grid > .pw-refresh { grid-column: 2; grid-row: 1; justify-self: end; }
+.pw-grid > .pw-export { grid-column: 2; grid-row: 2; justify-self: end; }
+@container (min-width: 1000px) {
+  .pw-grid { display: flex; flex-wrap: wrap; gap: 1rem; }
+  .pw-grid > .pw-refresh { margin-left: auto; }
+}

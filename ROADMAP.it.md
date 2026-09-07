@@ -20,7 +20,6 @@ Per chiedere una funzione o segnalare un bug: apri una issue su [GitHub](https:/
 - Importazione ed esportazione CSV, e importazione di DAMOS.
 - Modifica delle mappe direttamente nella vista 3D.
 - Modifica di più versioni dello stesso progetto affiancate e confronto delle mappe.
-- Compatibilità con macOS.
 
 ## Non previsto per ora
 

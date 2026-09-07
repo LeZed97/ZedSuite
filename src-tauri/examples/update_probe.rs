@@ -1,24 +1,13 @@
 //! Banc d'essai du système de mise à jour (src/update.rs) SANS publier de
 //! release : rejoue la même requête GitHub, le même parsing, le même choix
-//! d'asset et le même téléchargement streamé que `check_for_update` /
-//! `download_and_install_update` — mais n'exécute PAS l'installeur.
+//! d'asset (`pick_asset`, le code livré) et le même téléchargement streamé
+//! que `check_for_update` / `download_and_install_update` — mais n'installe
+//! rien.
 //!
-//! Usage : cargo run --example update_probe -- <owner/repo> [version_courante] [x64|x86]
+//! Usage : cargo run --example update_probe -- <owner/repo> [version_courante] [x64|x86|macos]
 
 use std::io::Write;
-
-/// Copie conforme de update.rs::parse_version.
-fn parse_version(v: &str) -> (u64, u64, u64) {
-    let v = v.trim().trim_start_matches(['v', 'V']);
-    let mut parts = v
-        .split(['.', '-', '+'])
-        .map(|p| p.parse::<u64>().unwrap_or(0));
-    (
-        parts.next().unwrap_or(0),
-        parts.next().unwrap_or(0),
-        parts.next().unwrap_or(0),
-    )
-}
+use zedsuite_lib::update::{parse_version, pick_asset, UpdateTarget};
 
 fn main() {
     tokio::runtime::Builder::new_current_thread()
@@ -28,16 +17,54 @@ fn main() {
         .block_on(run());
 }
 
+fn asset(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "name": name,
+        "browser_download_url": format!("https://example.invalid/{name}")
+    })
+}
+
+/// Choix d'asset sur une release type (les trois plateformes publiées).
+fn self_test_pick_asset() {
+    let release = [
+        asset("ZedSuite_1.2.0_x64-setup.exe"),
+        asset("ZedSuite_1.2.0_x86-setup.exe"),
+        asset("ZedSuite_1.2.0_macos-universal.dmg"),
+        asset("ZedSuite_1.2.0_macos-universal.app.tar.gz"),
+    ];
+    let name = |t| pick_asset(&release, t).map(|(n, _)| n).unwrap_or_default();
+    assert_eq!(name(UpdateTarget::WindowsX64), "zedsuite_1.2.0_x64-setup.exe");
+    assert_eq!(name(UpdateTarget::WindowsX86), "zedsuite_1.2.0_x86-setup.exe");
+    assert_eq!(name(UpdateTarget::MacOS), "zedsuite_1.2.0_macos-universal.app.tar.gz");
+
+    // Release Windows seule : rien pour macOS (fenêtre « pas encore de build macOS »)
+    let windows_only = [asset("ZedSuite_1.2.0_x64-setup.exe"), asset("ZedSuite_1.2.0_x86-setup.exe")];
+    assert!(pick_asset(&windows_only, UpdateTarget::MacOS).is_none());
+    // Une build x86 ne prend jamais l'installateur x64, et inversement
+    let x64_only = [asset("ZedSuite_1.2.0_x64-setup.exe")];
+    assert!(pick_asset(&x64_only, UpdateTarget::WindowsX86).is_none());
+    // Le .dmg n'est jamais choisi par l'updater
+    let dmg_only = [asset("ZedSuite_1.2.0_macos-universal.dmg")];
+    assert!(pick_asset(&dmg_only, UpdateTarget::MacOS).is_none());
+    // Archive par architecture, sans universelle : la bonne est prise
+    let per_arch = [
+        asset("ZedSuite_1.2.0_macos-x86_64.app.tar.gz"),
+        asset("ZedSuite_1.2.0_macos-aarch64.app.tar.gz"),
+    ];
+    let picked = pick_asset(&per_arch, UpdateTarget::MacOS).map(|(n, _)| n).unwrap();
+    assert!(picked.contains(if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" }));
+    println!("pick_asset: OK (x64 / x86 / macOS, release Windows seule, dmg ignoré, par architecture)");
+}
+
 async fn run() {
     let args: Vec<String> = std::env::args().collect();
     let repo = args.get(1).cloned().unwrap_or_else(|| "LeZed97/ZedSuite".to_string());
     let current_version = args.get(2).cloned().unwrap_or_else(|| "1.0.0".to_string());
-    // Simule l'architecture du client (défaut : celle de la compilation)
-    let want_x86 = match args.get(3).map(String::as_str) {
-        Some("x86") => true,
-        Some("x64") => false,
-        _ => cfg!(target_arch = "x86"),
-    };
+    // Simule la cible du client (défaut : celle de la compilation)
+    let target = args
+        .get(3)
+        .and_then(|s| UpdateTarget::parse(s))
+        .unwrap_or_else(UpdateTarget::current);
 
     // Auto-tests parse_version (mêmes règles que update.rs)
     assert_eq!(parse_version("v1.0.0"), (1, 0, 0));
@@ -47,6 +74,7 @@ async fn run() {
     assert!(parse_version("v2.0") > parse_version("1.9.9"));
     assert!(!(parse_version("v1.0.0") > parse_version("1.0.0")));
     println!("parse_version: OK (v1.0.0==1.0.0, 1.0.1>1.0.0, 1.1.0>1.0.10, 2.0>1.9.9)");
+    self_test_pick_asset();
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -75,53 +103,37 @@ async fn run() {
     let release_notes = json["body"].as_str().unwrap_or_default();
     let release_url = json["html_url"].as_str().unwrap_or_default();
 
-    // Choix de l'asset : même boucle (par architecture) que update.rs
-    let mut download_url: Option<String> = None;
-    let mut picked_name = String::new();
-    if let Some(assets) = json["assets"].as_array() {
-        for asset in assets {
-            let name = asset["name"].as_str().unwrap_or("").to_lowercase();
-            if !name.ends_with(".exe") {
-                continue;
-            }
-            let is_x64 =
-                name.contains("x64") || name.contains("x86_64") || name.contains("amd64");
-            let is_x86 = !is_x64 && (name.contains("x86") || name.contains("i686"));
-            if want_x86 != is_x86 {
-                continue;
-            }
-            if download_url.is_none() || name.contains("setup") {
-                download_url = asset["browser_download_url"].as_str().map(String::from);
-                picked_name = name.clone();
-            }
-            if name.contains("setup") {
-                break;
-            }
-        }
-    }
-    println!("architecture simulée: {}", if want_x86 { "x86" } else { "x64" });
+    // Choix de l'asset : le code livré (update.rs::pick_asset)
+    let picked = json["assets"]
+        .as_array()
+        .and_then(|assets| pick_asset(assets, target));
+    println!("cible simulée: {}", target.label());
 
     let update_available = parse_version(&latest_version) > parse_version(&current_version);
     println!("tag: {latest_version} | courante: {current_version} | update_available: {update_available}");
     println!("notes: {} caractères | page: {release_url}", release_notes.len());
-    match &download_url {
-        Some(u) => println!("asset choisi: {picked_name}\n  -> {u}"),
+    let (picked_name, download_url) = match picked {
+        Some(p) => {
+            println!("asset choisi: {}\n  -> {}", p.0, p.1);
+            p
+        }
         None => {
-            println!("AUCUN asset .exe trouvé — la fenêtre afficherait « installeur indisponible »");
+            println!("AUCUN asset pour cette cible — la fenêtre afficherait « installeur indisponible »");
             return;
         }
-    }
+    };
 
-    // Téléchargement streamé (comme download_and_install_update), SANS lancer l'exe
+    // Téléchargement streamé (comme download_and_install_update), SANS installer
     let mut res = client
-        .get(download_url.as_deref().unwrap())
+        .get(&download_url)
         .header("User-Agent", "ZedSuite-Updater")
         .send()
         .await
         .expect("download");
     assert!(res.status().is_success(), "download: HTTP {}", res.status());
     let total = res.content_length();
-    let path = std::env::temp_dir().join("zedsuite-update-probe.exe");
+    let ext = if picked_name.ends_with(".exe") { "exe" } else { "tar.gz" };
+    let path = std::env::temp_dir().join(format!("zedsuite-update-probe.{ext}"));
     let mut file = std::fs::File::create(&path).expect("temp file");
     let mut downloaded: u64 = 0;
     while let Some(chunk) = res.chunk().await.expect("chunk") {

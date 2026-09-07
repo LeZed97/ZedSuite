@@ -994,6 +994,17 @@ export function computePowerCurves(
   const sources = listCurveSources(maps);
   const ctx: Ctx = { bytes, oriBytes, maps, ecuType, edits };
   const results: SourceCurveResult[] = [];
+  // Below this speed the engine has not the efficiency the model assumes
+  // (rendement trop faible : certaines courbes affichaient une puissance
+  // irréaliste à bas régime) — the curves start at 1900 rpm.
+  const MIN_RPM = 1900;
+  const clipLowRpm = (r: SourceCurveResult): SourceCurveResult => {
+    const points = r.points.filter((pt) => pt.rpm >= MIN_RPM);
+    if (points.length < 2) return r;
+    const peakPower = points.reduce((x, y) => (y.powerKw > x.powerKw ? y : x));
+    const peakTorque = points.reduce((x, y) => (y.torqueNm > x.torqueNm ? y : x));
+    return { ...r, points, peakPower, peakTorque };
+  };
   for (const source of sources) {
     const dwMaps = maps.filter(
       (m) => isDriverWish(m) && source.mapAddresses.includes(m.address)
@@ -1008,7 +1019,7 @@ export function computePowerCurves(
       ? computeEdc16FuelCurve(ctx, source, dwMaps, opts) ??
         computeTorqueBasedCurve(ctx, source, dwMaps, opts)
       : computeIqBasedCurve(ctx, source, dwMaps, opts);
-    if (result) results.push(result);
+    if (result) results.push(clipLowRpm(result));
   }
   return results;
 }
