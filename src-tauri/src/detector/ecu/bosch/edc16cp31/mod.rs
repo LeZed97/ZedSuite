@@ -52,8 +52,11 @@
 mod signatures;
 
 pub use signatures::{
-    AxisSignature, BlockMarker, DimensionRange, EDC16MapSignature, StructureType, CP31_MARKERS,
-    CP31_SIGNATURES,
+    AxisKey, AxisSignature, BlockMarker, DimensionRange, EDC16MapSignature, StructureType,
+    CP31_KEYS_ACCPED_TRQ_ENG, CP31_KEYS_AIRCTL_M_DES_BAS, CP31_KEYS_FLMNG_Q_LIM_BST_PRES,
+    CP31_KEYS_FLMNG_Q_SMK, CP31_KEYS_FMTC_TRQ2Q_BAS, CP31_KEYS_INJCRV_PHI_MI1,
+    CP31_KEYS_PCR_P_BDES_MAX_AP, CP31_KEYS_PCR_P_DES_BAS, CP31_KEYS_PCR_R_CTL_BAS,
+    CP31_KEYS_RAIL_P_SETPOINT_BASE, CP31_KEYS_RAIL_P_SETPOINT_LIM_N, CP31_MARKERS, CP31_SIGNATURES,
 };
 
 use crate::models::{DataType, DetectedMap, MapCategory, MapDimensions};
@@ -173,6 +176,12 @@ pub struct MapTemplate {
     pub max_count: usize,
     /// Higher is scanned first.
     pub priority: u8,
+    /// Exact axis vectors of this family's block(s), as read from a real
+    /// dump. Matched byte for byte, independently of any address, so the
+    /// family is still identified on a build where every zone has moved.
+    /// Empty means "no key on file"; the detector then relies on the zone
+    /// walk alone, exactly as before.
+    pub axis_keys: &'static [AxisKey],
     /// Tight address window this family was found in, widened to a round
     /// boundary. Narrower than the per-category `CP31_ZONES` entry.
     pub zone: Option<(usize, usize)>,
@@ -203,6 +212,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 3,
         priority: 95,
+        axis_keys: CP31_KEYS_RAIL_P_SETPOINT_BASE,
         zone: Some((0x1F1000, 0x1F3200)),
         calibrated: true,
     },
@@ -221,6 +231,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 2,
         priority: 93,
+        axis_keys: CP31_KEYS_RAIL_P_SETPOINT_LIM_N,
         zone: Some((0x1F1000, 0x1F3200)),
         calibrated: true,
     },
@@ -239,6 +250,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 2,
         priority: 94,
+        axis_keys: CP31_KEYS_PCR_P_DES_BAS,
         zone: Some((0x1E4000, 0x1E5000)),
         calibrated: true,
     },
@@ -258,6 +270,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 2,
         priority: 88,
+        axis_keys: CP31_KEYS_PCR_P_BDES_MAX_AP,
         zone: Some((0x1E3800, 0x1E4400)),
         calibrated: true,
     },
@@ -276,6 +289,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 4,
         priority: 86,
+        axis_keys: CP31_KEYS_PCR_R_CTL_BAS,
         zone: Some((0x1DB000, 0x1DC000)),
         calibrated: true,
     },
@@ -296,6 +310,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 2,
         priority: 92,
+        axis_keys: CP31_KEYS_FLMNG_Q_SMK,
         zone: Some((0x1A8000, 0x1A9000)),
         calibrated: true,
     },
@@ -314,6 +329,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 3,
         priority: 90,
+        axis_keys: CP31_KEYS_ACCPED_TRQ_ENG,
         zone: Some((0x191000, 0x192000)),
         calibrated: true,
     },
@@ -332,6 +348,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 3,
         priority: 87,
+        axis_keys: CP31_KEYS_FLMNG_Q_LIM_BST_PRES,
         zone: Some((0x1A7C00, 0x1A8400)),
         calibrated: true,
     },
@@ -350,6 +367,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 2,
         priority: 84,
+        axis_keys: CP31_KEYS_FMTC_TRQ2Q_BAS,
         zone: Some((0x1A9000, 0x1AA000)),
         calibrated: true,
     },
@@ -369,6 +387,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: true,
         max_count: 8,
         priority: 83,
+        axis_keys: CP31_KEYS_INJCRV_PHI_MI1,
         zone: Some((0x1B0000, 0x1B2000)),
         calibrated: true,
     },
@@ -387,6 +406,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         signed: false,
         max_count: 3,
         priority: 80,
+        axis_keys: CP31_KEYS_AIRCTL_M_DES_BAS,
         zone: Some((0x194000, 0x196000)),
         calibrated: true,
     },
@@ -482,6 +502,18 @@ pub const CP31_BLOCK_HEADER_LEN: usize = 4;
 /// sensor maps declare 32).
 const CP31_MAX_AXIS_PTS: usize = 32;
 
+/// Confidence added to a block whose full breakpoint grid matched a key.
+/// Deliberately modest: the key identifies the family beyond doubt, but the
+/// score it is added to also carries how well the DATA fits the template,
+/// and that part is unchanged.
+const CP31_AXIS_KEY_BONUS: f32 = 0.15;
+
+/// An axis key matching more places than this identifies nothing useful, so
+/// the key is dropped rather than used to emit dozens of look-alike blocks.
+/// The worst calibrated key (the shared injection-timing grid) hits 11 times
+/// on the corpus dump, so this leaves a wide margin.
+const CP31_MAX_KEY_HITS: usize = 64;
+
 // ============================= DETECTOR =============================
 
 pub struct EDC16CP31Detector {
@@ -532,7 +564,13 @@ impl EDC16CP31Detector {
         let mut maps: Vec<DetectedMap> = Vec::new();
         let mut claimed: HashSet<(u32, u32)> = HashSet::new();
 
-        // PHASE 1 - marker-anchored detection (highest reliability).
+        // PHASE 0 - axis-key anchored detection (highest reliability, and
+        // the only phase that does not depend on an address).
+        for map in self.detect_by_axis_keys(data) {
+            self.push_if_free(&mut maps, &mut claimed, map);
+        }
+
+        // PHASE 1 - marker-anchored detection.
         for map in self.detect_by_signatures(data) {
             self.push_if_free(&mut maps, &mut claimed, map);
         }
@@ -559,6 +597,95 @@ impl EDC16CP31Detector {
         }
         claimed.insert(range);
         maps.push(map);
+    }
+
+    // --------------------- PHASE 0: axis keys ---------------------
+
+    /// Axis-key walk.
+    ///
+    /// A `MapTemplate` can carry the exact `[nx][ny] + X + Y` bytes of the
+    /// block(s) it describes. Searching for those bytes identifies the
+    /// family without knowing where it lives, which is what makes this the
+    /// only phase that still works on a software build the corpus has never
+    /// seen: addresses move, breakpoint grids do not.
+    ///
+    /// It stays conservative on purpose:
+    ///   * a key that matches more than `CP31_MAX_KEY_HITS` places is
+    ///     discarded - it describes a grid shared by half the file, not a
+    ///     family;
+    ///   * when a key matches more often than the family can legitimately
+    ///     occur, the template zone is used to narrow it down, and the
+    ///     family is capped at `max_count` either way;
+    ///   * a hit is only a candidate ADDRESS. The block is decoded and
+    ///     range-checked by `try_block` exactly like in the other phases,
+    ///     so a coincidental byte match still cannot emit a map.
+    fn detect_by_axis_keys(&self, data: &[u8]) -> Vec<DetectedMap> {
+        let mut out = Vec::new();
+        let (scan_start, scan_end) = self.scan_range(data.len());
+        if scan_end <= scan_start || scan_end > data.len() {
+            return out;
+        }
+
+        for template in MAP_TEMPLATES {
+            if !self.exploratory && !template.calibrated {
+                continue;
+            }
+
+            for key in template.axis_keys {
+                let bytes = key.to_bytes();
+                // Header plus two points per axis is the shortest key that
+                // can carry any information at all.
+                if bytes.len() < CP31_BLOCK_HEADER_LEN + 8 {
+                    continue;
+                }
+
+                let mut hits: Vec<usize> = Vec::new();
+                let mut off = scan_start;
+                while off + bytes.len() <= scan_end {
+                    if data[off..off + bytes.len()] == bytes[..] {
+                        hits.push(off);
+                        if hits.len() > CP31_MAX_KEY_HITS {
+                            break;
+                        }
+                    }
+                    off += 2;
+                }
+                if hits.is_empty() || hits.len() > CP31_MAX_KEY_HITS {
+                    continue;
+                }
+
+                if hits.len() > template.max_count {
+                    if let Some((zstart, zend)) = template.zone {
+                        hits.retain(|&h| h >= zstart && h < zend);
+                    }
+                }
+
+                let mut found = 0usize;
+                for hit in hits {
+                    if found >= template.max_count {
+                        break;
+                    }
+                    if let Some(mut map) = self.try_block(data, hit, template) {
+                        // An exact match on the whole breakpoint grid is
+                        // stronger evidence than "plausible axes in the right
+                        // window", which is all the zone walk can offer. Say
+                        // so, but stay below 1.0: the key proves the block's
+                        // identity, not that its contents are sane.
+                        map.confidence = (map.confidence + CP31_AXIS_KEY_BONUS).min(0.99);
+                        out.push(map);
+                        found += 1;
+                    }
+                }
+                log::debug!(
+                    "[EDC16CP31] axis key {}x{} for {} -> {} block(s)",
+                    key.nx,
+                    key.ny,
+                    template.name,
+                    found
+                );
+            }
+        }
+        out
     }
 
     // ---------------------- PHASE 1: markers ----------------------
@@ -1140,11 +1267,18 @@ mod tests {
             .all(|m| m.name.as_deref() != Some("Boost Target")));
     }
 
-    /// A block planted outside its family window must not be reported by
-    /// that family: zones are a safety net, not only a speed-up.
+    /// A block that merely LOOKS like a family, planted outside that
+    /// family's window, must not be reported: for the zone walk, zones are a
+    /// safety net and not only a speed-up.
+    ///
+    /// The axes below are deliberately close to the real Boost Target grid
+    /// but not equal to it (first breakpoint 750 instead of 751), so no axis
+    /// key can fire and only the zone walk is under test. A block carrying
+    /// the EXACT grid is a different matter and is covered by
+    /// `axis_key_identifies_a_family_outside_its_calibrated_zone`.
     #[test]
     fn ignores_a_boost_target_planted_outside_its_zone() {
-        let x: Vec<i16> = vec![751, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2800,
+        let x: Vec<i16> = vec![750, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2800,
                                3200, 3600, 4000, 4200, 4400, 4600];
         let y: Vec<i16> = vec![0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000,
                                7000, 8000];
@@ -1160,5 +1294,88 @@ mod tests {
             .detect(&img)
             .iter()
             .all(|m| m.name.as_deref() != Some("Boost Target")));
+    }
+
+    #[test]
+    fn axis_key_encodes_the_block_head_byte_for_byte() {
+        let key = &CP31_KEYS_RAIL_P_SETPOINT_BASE[0];
+        let z = vec![10_000i16; key.nx * key.ny];
+        let block = kf_block(key.x, key.y, &z);
+        let bytes = key.to_bytes();
+        assert_eq!(bytes, block[..bytes.len()].to_vec());
+    }
+
+    #[test]
+    fn axis_key_identifies_a_family_outside_its_calibrated_zone() {
+        let key = &CP31_KEYS_RAIL_P_SETPOINT_BASE[0];
+        // Plausible stock rail pressure, 400 .. 1380 bar.
+        let z: Vec<i16> = (0..key.nx * key.ny)
+            .map(|i| 4_000 + (i % 50) as i16 * 200)
+            .collect();
+        let block = kf_block(key.x, key.y, &z);
+        // 0x1C0000 is inside the calibration area but far outside the
+        // 0x1F1000..0x1F3200 window this family occupies on the corpus dump,
+        // so only the address-independent phase can find it there.
+        let img = image_with(0x1C0000, &block);
+
+        // `DetectedMap::address` points at the Z data, which sits after the
+        // header and both axes.
+        let data_addr = 0x1C0000 + CP31_BLOCK_HEADER_LEN + 2 * (key.nx + key.ny);
+        let maps = EDC16CP31Detector::new().detect(&img);
+        let hit = maps
+            .iter()
+            .find(|m| m.address as usize == data_addr)
+            .expect("the axis key should locate the block outside its zone");
+        assert_eq!(hit.name.as_deref(), Some("Rail Pressure Target"));
+        assert_eq!(hit.y_axis_address, Some((0x1C0000 + CP31_BLOCK_HEADER_LEN) as u32));
+    }
+
+    #[test]
+    fn axis_key_does_not_fire_on_a_block_with_the_wrong_grid() {
+        let key = &CP31_KEYS_RAIL_P_SETPOINT_BASE[0];
+        // Same axes, one breakpoint short: the key no longer matches.
+        let x = &key.x[..key.nx - 1];
+        let z = vec![10_000i16; x.len() * key.ny];
+        let block = kf_block(x, key.y, &z);
+        let img = image_with(0x1C0000, &block);
+
+        // Nothing at all may be reported inside the planted block.
+        let end = (0x1C0000 + block.len()) as u32;
+        assert!(EDC16CP31Detector::new()
+            .detect(&img)
+            .iter()
+            .all(|m| m.address < 0x1C0000 || m.address >= end));
+    }
+
+    #[test]
+    fn every_calibrated_axis_key_is_consistent_with_its_template() {
+        for template in MAP_TEMPLATES.iter().filter(|t| t.calibrated) {
+            for key in template.axis_keys {
+                assert_eq!(key.nx, key.x.len(), "{}: nx vs X length", template.name);
+                assert_eq!(key.ny, key.y.len(), "{}: ny vs Y length", template.name);
+                assert!(
+                    template.grids.is_empty()
+                        || template
+                            .grids
+                            .iter()
+                            .any(|&(nx, ny)| nx == key.nx && ny == key.ny),
+                    "{}: key grid {}x{} is not in the declared grids",
+                    template.name,
+                    key.nx,
+                    key.ny
+                );
+                let (x_type, y_type) = template.axes;
+                assert!(
+                    EDC16CP31Detector::axis_is_valid(key.x, x_type),
+                    "{}: X axis of the key fails its own validator",
+                    template.name
+                );
+                assert!(
+                    EDC16CP31Detector::axis_is_valid(key.y, y_type),
+                    "{}: Y axis of the key fails its own validator",
+                    template.name
+                );
+            }
+        }
     }
 }

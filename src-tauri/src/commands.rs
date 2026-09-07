@@ -82,7 +82,11 @@ pub fn identify_ecu(
 ///   39 — EDC16CP31 : famille calibrée (11 familles de maps, lecture des
 ///       blocs Kf auto-descriptifs). Le détecteur produit des maps là où il
 ///       n'en produisait aucune : les projets CP31 doivent être re-scannés.
-pub const DETECTOR_VERSION: u32 = 39;
+///   40 — EDC16CP31 : localisation par clé d'axes exacte, indépendante de
+///       l'adresse. Sur le corpus les maps trouvées sont les mêmes, mais
+///       leur confiance change et un logiciel non catalogué peut désormais
+///       en produire : les projets CP31 doivent être re-scannés.
+pub const DETECTOR_VERSION: u32 = 40;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.

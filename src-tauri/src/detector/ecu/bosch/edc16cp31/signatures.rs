@@ -16,6 +16,26 @@
 //     block order), then each block was re-read from the dump and checked
 //     against the A2L physical limits before being written down here.
 //
+// How the labels were VERIFIED (second pass)
+// ------------------------------------------
+// The ASAP2 package ships the reference binary its addresses describe (a
+// Bosch development build, software number "0123456789P03_10"). Its image
+// maps to the ECU address space with a constant offset, which makes it a
+// GROUND TRUTH: every characteristic can be read at its declared address.
+//
+// Each family below was then re-derived independently of the alignment
+// above. The exact axis vectors of the reference block were searched for in
+// the corpus dump; 9 of the 13 calibrated blocks match in exactly ONE place,
+// and that place is the address the alignment had produced. The remaining 4
+// are families whose members legitimately share a grid (the Hi/Lo boost
+// limiter pair, the injection-timing set); those were resolved by the local
+// offset of a uniquely-matched neighbour, which agreed as well. Zero
+// contradictions, so the labels are no longer an inference.
+//
+// The reference binary and the ASAP2 file are third-party licensed material
+// and are NOT part of this repository. Only the byte patterns derived from
+// the corpus dump are stored here.
+//
 // What that means for trust
 // -------------------------
 // The record layout, the raw->physical factors and the axis semantics come
@@ -187,6 +207,232 @@ const fn ax(name: &'static str, unit: &'static str, factor: f64,
         value_range: Some((lo, hi)),
     }
 }
+
+/// One block's identity card: the exact `[nx][ny]` header followed by the
+/// two axis vectors, byte for byte, as they appear in a real dump.
+///
+/// This is the strongest anchor available on CP31 and the only one that does
+/// not depend on an address. Axis breakpoints are calibration data a tuner
+/// has no reason to touch - a remap moves the Z values, not the grid - so a
+/// key that matched the stock file still matches the tuned one. It also
+/// survives a different software build, where every address moves.
+///
+/// A key is a FILTER, never a proof on its own: `EDC16CP31Detector` still
+/// decodes the block and range-checks it against the template afterwards.
+/// Several families legitimately share a key (the Hi/Lo boost limiter pair,
+/// the five injection-timing maps), so the number of hits is compared with
+/// `MapTemplate::max_count` and narrowed by the template zone when needed.
+#[derive(Debug, Clone)]
+pub struct AxisKey {
+    pub nx: usize,
+    pub ny: usize,
+    /// First axis in memory (engine speed on every calibrated family).
+    pub x: &'static [i16],
+    /// Second axis in memory.
+    pub y: &'static [i16],
+}
+
+impl AxisKey {
+    /// Encode the key the way it appears in the file, so a match is a plain
+    /// byte comparison at the block head.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(4 + 2 * (self.x.len() + self.y.len()));
+        out.extend_from_slice(&(self.nx as u16).to_be_bytes());
+        out.extend_from_slice(&(self.ny as u16).to_be_bytes());
+        for v in self.x.iter().chain(self.y.iter()) {
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+        out
+    }
+}
+
+/// Axis keys for `Rail_pSetPointBase_MAP`.
+/// 16x16, read at 0x1F1BF2 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_RAIL_P_SETPOINT_BASE: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[
+            400, 500, 550, 750, 1000, 1201, 1400, 1600, 1800, 2000, 2400, 2800, 3200, 3600,
+            4200, 4400
+        ],
+        y: &[
+            0, 100, 200, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 6000, 7000,
+            8000
+        ],
+    },
+];
+
+/// Axis keys for `Rail_pSetPointLimN_MAP`.
+/// 8x12, read at 0x1F2964 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_RAIL_P_SETPOINT_LIM_N: &[AxisKey] = &[
+    AxisKey {
+        nx: 8,
+        ny: 12,
+        x: &[
+            100, 4675, 4725, 4775, 4825, 4875, 4900, 5000
+        ],
+        y: &[
+            0, 2000, 3000, 4000, 5000, 6000, 6500, 7000, 7500, 8000, 9500, 11000
+        ],
+    },
+];
+
+/// Axis keys for `PCR_pDesBas_MAP`.
+/// 16x12, read at 0x1E4BCE on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_PCR_P_DES_BAS: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 12,
+        x: &[
+            751, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2800, 3200, 3600, 4000, 4200,
+            4400, 4600
+        ],
+        y: &[
+            0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000
+        ],
+    },
+];
+
+/// Axis keys for `PCR_pBDesMaxAPGear{Hi,Lo}_MAP`.
+/// 16x12, read at 0x1E3E36 on SW 1037393817, 2 occurrence(s) in that file.
+pub const CP31_KEYS_PCR_P_BDES_MAX_AP: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 12,
+        x: &[
+            200, 1000, 1500, 2200, 3100, 3500, 4000, 5300, 6000, 7000, 8000, 8800, 9000, 9200,
+            9400, 10000
+        ],
+        y: &[
+            550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1100
+        ],
+    },
+];
+
+/// Axis keys for `PCR_rCtlBas_MAP`.
+/// 16x8, read at 0x1DB4F0 on SW 1037393817, 2 occurrence(s) in that file.
+pub const CP31_KEYS_PCR_R_CTL_BAS: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 8,
+        x: &[
+            659, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2800, 3200, 3600, 4000,
+            4400, 4700
+        ],
+        y: &[
+            0, 1000, 2000, 2500, 3000, 4000, 5000, 7000
+        ],
+    },
+];
+
+/// Axis keys for `FlMng_qSmk_MAP`.
+/// 16x16, read at 0x1A8986 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_FLMNG_Q_SMK: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[
+            750, 800, 1000, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 3600, 3800, 4000, 4200,
+            4400, 4800
+        ],
+        y: &[
+            700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 2000, 2200,
+            2400, 2500
+        ],
+    },
+];
+
+/// Axis keys for `AccPed_trqEng_MAP / AccPed_trqEng2_MAP`.
+/// 8x8, read at 0x1918DE on SW 1037393817, 1 occurrence(s) in that file.
+/// 8x8, read at 0x19169A on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_ACCPED_TRQ_ENG: &[AxisKey] = &[
+    AxisKey {
+        nx: 8,
+        ny: 8,
+        x: &[
+            0, 600, 1200, 1800, 2400, 3000, 3600, 4200
+        ],
+        y: &[
+            98, 655, 1229, 1638, 3277, 4915, 6554, 8192
+        ],
+    },
+    AxisKey {
+        nx: 8,
+        ny: 8,
+        x: &[
+            0, 600, 1200, 1800, 2400, 3000, 3600, 4200
+        ],
+        y: &[
+            0, 655, 1229, 1638, 3277, 4915, 6554, 8192
+        ],
+    },
+];
+
+/// Axis keys for `FlMng_qLimBstPres_MAP`.
+/// 12x12, read at 0x1A7FE8 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_FLMNG_Q_LIM_BST_PRES: &[AxisKey] = &[
+    AxisKey {
+        nx: 12,
+        ny: 12,
+        x: &[
+            1200, 1600, 2000, 2400, 2800, 3200, 3600, 3800, 4000, 4200, 4400, 4800
+        ],
+        y: &[
+            1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000, 2050, 2100, 2200
+        ],
+    },
+];
+
+/// Axis keys for `FMTC_trq2qBas_MAP`.
+/// 16x18, read at 0x1A9514 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_FMTC_TRQ2Q_BAS: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 18,
+        x: &[
+            0, 700, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2400, 2800, 3200, 3600, 4000,
+            4200, 4600
+        ],
+        y: &[
+            0, 200, 400, 600, 800, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5250,
+            5500, 5750, 6000
+        ],
+    },
+];
+
+/// Axis keys for `InjCrv_phiMI1Bas1..3 / Max1..2`.
+/// 16x16, read at 0x1B07EC on SW 1037393817, 11 occurrence(s) in that file.
+pub const CP31_KEYS_INJCRV_PHI_MI1: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[
+            400, 550, 750, 1000, 1200, 1400, 1600, 1800, 2000, 2400, 2800, 3200, 3600, 4000,
+            4200, 4400
+        ],
+        y: &[
+            0, 100, 200, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 6000, 7000,
+            8000
+        ],
+    },
+];
+
+/// Axis keys for `AirCtl_mDesBas_MAP`.
+/// 12x16, read at 0x194442 on SW 1037393817, 1 occurrence(s) in that file.
+pub const CP31_KEYS_AIRCTL_M_DES_BAS: &[AxisKey] = &[
+    AxisKey {
+        nx: 12,
+        ny: 16,
+        x: &[
+            620, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2400, 2800, 3200, 3300
+        ],
+        y: &[
+            0, 200, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000,
+            5000
+        ],
+    },
+];
 
 /// Signature database for EDC16CP31.
 ///
