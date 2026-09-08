@@ -181,9 +181,16 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
         const binary = await store.readBinary(file.id);
         if (!binary) throw new Error("no_binary");
 
-        // Reconstruct the selected version: original + binary patches;
-        // map-cell edits are overlaid in display units by the estimator.
-        // The untouched original anchors the injector-flow model.
+        // Reconstruct the selected version: its own base binary + binary
+        // patches; map-cell edits are overlaid in display units by the
+        // estimator. The untouched original anchors the injector-flow model.
+        //
+        // The base is the imported binary of the version when it exists
+        // (`version-<id>.bin`, written by the editor's import), otherwise
+        // the original file — same precedence as buildVersionFileData in the
+        // editor. Before, the non-live path always started from the original,
+        // so an imported version that had not been saved yet (no map edits
+        // persisted) was estimated on the stock file.
         const version = versions.find((v) => v.id === versionId);
         let bytes = binary;
         let edits: Array<{ map_address: number; payload?: any }> = [];
@@ -196,7 +203,15 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
           edits = state.edits;
         } else if (version && version.name !== "Ori") {
           edits = await store.listMapEdits(versionId);
-          bytes = new Uint8Array(binary);
+          let base: Uint8Array | null = null;
+          try {
+            base = await store.readVersionBinary(versionId);
+          } catch {
+            // pas de binaire importé pour cette version
+          }
+          bytes = new Uint8Array(
+            base && base.length === binary.length ? base : binary
+          );
           for (const edit of edits) {
             if (edit.map_address === -1 && edit.payload?.type === "binary") {
               for (const c of edit.payload.changes || []) {
