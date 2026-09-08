@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { PROJECT_NAME_MAX_LENGTH } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Upload, X, FileText, Check, Cpu, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -100,7 +101,7 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
       
       // Auto-fill project name from filename
       if (!projectName) {
-        setProjectName(file.name.replace(/\.[^/.]+$/, ""));
+        setProjectName(file.name.replace(/\.[^/.]+$/, "").slice(0, PROJECT_NAME_MAX_LENGTH));
       }
 
       // Automatically analyze the file to detect ECU type
@@ -479,7 +480,8 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
             <input
               type="text"
               value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
+              maxLength={PROJECT_NAME_MAX_LENGTH}
+              onChange={(e) => setProjectName(e.target.value.slice(0, PROJECT_NAME_MAX_LENGTH))}
               className={inputCls}
               placeholder=""
               disabled={isUploading}

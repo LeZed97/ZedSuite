@@ -181,9 +181,9 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
         const binary = await store.readBinary(file.id);
         if (!binary) throw new Error("no_binary");
 
-        // Reconstruct the selected version: original + binary patches;
-        // map-cell edits are overlaid in display units by the estimator.
-        // The untouched original anchors the injector-flow model.
+        // Reconstruct the selected version: its own base binary + binary
+        // patches; map-cell edits are overlaid in display units by the
+        // estimator. The untouched original anchors the injector-flow model.
         const version = versions.find((v) => v.id === versionId);
         let bytes = binary;
         let edits: Array<{ map_address: number; payload?: any }> = [];
@@ -196,7 +196,19 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
           edits = state.edits;
         } else if (version && version.name !== "Ori") {
           edits = await store.listMapEdits(versionId);
-          bytes = new Uint8Array(binary);
+          // Base de la version : son binaire importé quand il existe
+          // (version-<id>.bin), sinon le fichier d'origine — même priorité
+          // que buildVersionFileData dans l'éditeur. Sans ça, une version
+          // créée par import et jamais rouverte dans l'éditeur n'a aucune
+          // modification enregistrée : l'estimation repartait de l'origine
+          // et affichait la puissance d'origine (signalé par COSSART-FR).
+          let base: Uint8Array | null = null;
+          try {
+            base = await store.readVersionBinary(versionId);
+          } catch {
+            // pas de binaire importé pour cette version
+          }
+          bytes = new Uint8Array(base && base.length === binary.length ? base : binary);
           for (const edit of edits) {
             if (edit.map_address === -1 && edit.payload?.type === "binary") {
               for (const c of edit.payload.changes || []) {

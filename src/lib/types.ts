@@ -2,6 +2,10 @@
 // These shapes are inherited from the original web version (PocketBase
 // collections) so the editor and dashboard code keeps working unchanged.
 
+/** Longueur maximale d'un nom de projet : au-delà l'affichage du dashboard
+ *  et de la barre latérale n'a plus la place, même tronqué. */
+export const PROJECT_NAME_MAX_LENGTH = 64;
+
 export interface FileRecord {
   id: string;
   file_name: string;

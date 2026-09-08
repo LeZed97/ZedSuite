@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FileRecord } from "@/lib/types";
+import { PROJECT_NAME_MAX_LENGTH } from "@/lib/types";
 import * as store from "@/lib/local/store";
 import { Button } from "@/components/ui/button";
 import { StyledSelect } from "@/components/styled-select";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useToast } from "@/hooks/use-toast";
 import { ProjectCreator } from "@/components/project-creator";
-import { MacTitlebarSpacer, WindowControls } from "@/components/window-controls";
+import { WindowControls } from "@/components/window-controls";
 import { isMacOS } from "@/lib/platform";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
@@ -219,7 +220,8 @@ function ProjectInfoEditModal({
                 <input
                   type="text"
                   value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
+                  maxLength={PROJECT_NAME_MAX_LENGTH}
+                  onChange={(e) => setProjectName(e.target.value.slice(0, PROJECT_NAME_MAX_LENGTH))}
                   className={inputCls}
                   placeholder={t.projectInfo.projectNamePlaceholder}
                   spellCheck={false}
@@ -794,8 +796,14 @@ function DashboardContent() {
       <header data-tauri-drag-region className="relative z-[60]" style={{ animation: 'slideInFromTop 0.6s ease-out' }}>
         <div data-tauri-drag-region className="pl-4 pr-2 pt-1 pb-1">
           <div data-tauri-drag-region className="flex items-start justify-between">
-            <div data-tauri-drag-region className="flex items-center gap-3 pt-2 pl-2 min-w-0 overflow-hidden">
-              <MacTitlebarSpacer />
+            {/* macOS : les feux occupent le coin gauche, le wordmark est
+                centré dans la fenêtre. Windows : wordmark à gauche. */}
+            <div
+              data-tauri-drag-region
+              className={isMacOS()
+                ? "absolute left-1/2 top-3 -translate-x-1/2 select-none pointer-events-none"
+                : "flex items-center gap-3 pt-2 pl-2 min-w-0 overflow-hidden"}
+            >
               {/* Même wordmark que l'éditeur : « Zed » en dégradé + BETA */}
               <div data-tauri-drag-region className="relative inline-block select-none">
                 <h1 data-tauri-drag-region className="text-xl font-bold">
@@ -809,7 +817,7 @@ function DashboardContent() {
                 flex-shrink-0 : réduire/agrandir/fermer restent toujours
                 visibles quand la fenêtre rétrécit (c'est le wordmark à gauche
                 qui se comprime). */}
-            <div className="flex items-center pt-1 flex-shrink-0">
+            <div className="flex items-center pt-1 flex-shrink-0 ml-auto">
               <button
                 onClick={() => setShowAbout(true)}
                 className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
@@ -919,7 +927,7 @@ function DashboardContent() {
                       className={`group flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${isLight ? 'bg-white/60 border border-black/[0.08] hover:bg-white/90 hover:border-black/[0.16] shadow-sm' : onCustomDark ? 'bg-[#0d1017]/45 border border-white/[0.12] hover:bg-[#0d1017]/60 hover:border-white/[0.2]' : 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]'}`}
                       onClick={() => handleOpenProject(file)}
                     >
-                      <div className="flex items-center gap-4 flex-1">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
                         <div className={`w-12 h-12 rounded-xl ${iconStyles.background} flex items-center justify-center border ${iconStyles.border}`}>
                           {iconStyles.stageNumber ? (
                             <span className="text-xl font-bold" style={{ fontStyle: 'italic' }}>
@@ -973,7 +981,9 @@ function DashboardContent() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      {/* Bloc de droite jamais compressé ni replié : c'est le nom
+                          du projet (tronqué) qui absorbe le manque de place */}
+                      <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
                         <div className={`px-2.5 py-0.5 rounded-full border ${isLight ? 'border-black/[0.10] bg-black/[0.05]' : 'border-white/[0.08] bg-white/[0.05]'}`}>
                           <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-500' : 'text-slate-400')}`}>
                             {t.dashboard.versions} : <span className={subText ?? (isLight ? 'text-slate-900' : 'text-slate-200')}>{versionCounts[file.id] || 1}</span>

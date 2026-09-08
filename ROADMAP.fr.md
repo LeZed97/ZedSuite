@@ -2,27 +2,38 @@
 
 Cette page liste ce qui est prévu, ce que les utilisateurs ont demandé et ce qui n'est pas prévu.
 
-Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](https://github.com/LeZed97/ZedSuite/issues), postez dans le [fil ecuconnections](https://www.ecuconnections.com/forum/viewtopic.php?p=393279#p393279), ou contactez-moi via mes réseaux sociaux : [linktr.ee/zedperf](https://linktr.ee/zedperf). Chaque retour est lu.
+Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](https://github.com/LeZed97/ZedSuite/issues), postez dans le [fil ecuconnections](https://www.ecuconnections.com/forum/viewtopic.php?p=393279#p393279), ou contactez-moi sur mes réseaux : [linktr.ee/zedperf](https://linktr.ee/zedperf). Chaque retour est lu.
 
 ## Prévu
 
-- EDC15P des premiers PD (1999-2002, 038906019A / 019AJ) : la détection des maps est faite, le checksum et la table des DTC de ces fichiers ne sont pas encore supportés, et la map MAP linearisation n'est pas trouvée sur les 019A.
-- EDC16U31 : amélioration de la détection, il manque quelques fichiers EDC16U31 dans le banc de test pour la terminer correctement (la famille 12x12 en 0x1D7xxx n'a toujours pas de nom).
-- EDC16U1 : identification des Touareg V10, dont un seul des deux numéros est trouvé aujourd'hui (six fichiers du banc).
-- Amélioration de la détection EDC15VM : quelques fichiers ne sont pas encore complètement couverts, notamment les 2.5 V6. Des corrections ont déjà été apportées pour les numéros de software que les utilisateurs m'ont fait remonter, ainsi que pour les bugs d'édition signalés.
-- EDC15VM : vérifier sur véhicule que les maps SVRL sont bien actives lorsque la détection les trouve.
-- Détection des maps PID de la régulation de suralimentation (turbo), sur EDC15P d'abord.
+- Comparer les maps de deux versions d'un projet dans la fenêtre Compare, qui fait aujourd'hui la comparaison binaire : la même map des deux versions côte à côte, différences surlignées.
+- Annuler avec Ctrl+Z dans l'éditeur.
+- Vue 2D façon WinOLS pour les matrices complètes : une courbe par ligne, ligne sélectionnée mise en avant.
+- Un switch d'inversion du N75 sur EDC15VM, pour les voitures passées d'un turbo à wastegate à un VNT ou l'inverse : le bloc qui le pilote est localisé sur la plupart des fichiers du banc, le switch lui-même n'est pas encore fait.
+- DTC des logiciels EDC15 compacts (038906012K, 012L, 012AA, 012AP, 012CP, 019AJ, 019AN) : la lecture et la commutation par chemin de défaut fonctionnent depuis la 1.1.7, mais la commutation n'a pas encore été confirmée sur un véhicule. Retours bienvenus.
+- EDC15P des premiers PD (1999-2002, 038906019A / 019AJ) : la détection des maps est faite et la table des DTC est lue sur les 019AJ ; le checksum n'est pas encore supporté, la table des DTC des 019A a encore une autre disposition, et la map MAP linearisation n'est pas trouvée sur les 019A.
+- Meilleure détection EDC15VM : quelques fichiers ne sont pas encore entièrement couverts, le 2.5 V6 (dumps de 1 Mo) en particulier, et les maps N146 et N75 de la génération 012K / 012AP. Les corrections sont faites pour les numéros de logiciel envoyés par les utilisateurs (SOI unique et switch MAP/MAF du 012M dans la 1.1.7).
+- EDC15VM : vérifier sur véhicule que les maps SVRL sont réellement actives quand le détecteur les trouve.
+- EDC16U31 : meilleure détection, il manque encore quelques fichiers EDC16U31 au banc pour finir proprement (la famille 12x12 en 0x1D7xxx n'a toujours pas de nom).
+- EDC16U1 : identification des fichiers Touareg V10, où un seul des deux numéros d'ECU est trouvé aujourd'hui (six fichiers au banc).
+- Détection des maps PID de régulation de turbo, sur EDC15P d'abord.
 
 ## Demandé par les utilisateurs, à l'étude
 
-- Vue 2D façon WinOLS pour les matrices complètes : une courbe par ligne, ligne sélectionnée mise en avant.
-- Annulation avec Ctrl+Z dans l'éditeur.
-- Import et export CSV, et import de damos.
-- Édition des maps directement dans la vue 3D.
-- Édition de plusieurs versions du même projet côte à côte et comparaison des maps.
+- Import et export CSV (le mappack JSON pour WinOLS existe déjà), et import DAMOS.
+- Maps favorites, pour retrouver vite celles qu'on modifie le plus.
+- Une version de référence autre que l'Ori pour « valeur d'origine » et la comparaison.
+- Inverse driver wish et MAF linearisation dans la liste des maps (masquées volontairement aujourd'hui : ce sont des tables de conversion, pas des maps de tuning).
+- Modifier les maps directement dans la vue 3D.
+- Modifier deux versions du même projet côte à côte.
+- Plus de fonctions dans la fenêtre Propriétés des maps.
+- Surligner dans les fenêtres de maps toutes les valeurs différentes de l'origine : aujourd'hui seules les cellules que vous avez modifiées sont en rouge.
+- Une version Linux. L'interface est le même code que sur Windows et macOS, seule la partie coque serait à faire ; cela dépendra du nombre de demandes.
+- Ajuster d'un coup les durations d'injection et les maps SOI pour des nez d'injecteurs plus gros (Firad, Recambo…).
 
 ## Pas prévu pour l'instant
 
-- L'ajout de nouveaux calculateurs (EDC15/EDC16 BMW, PSA, etc.).
-- Plus de données de référence calculateurs (marques, moteurs) pour l'écran d'import.
+- Ajouter de nouveaux calculateurs (EDC15/EDC16 BMW et PSA, etc.).
+- Une routine de commutation de maps (multimap) patchée dans le calculateur : à faire dans WinOLS avec les routines qui circulent pour EDC15, puis importer le fichier comme version, le codeblock ajouté et ses maps sont affichés depuis la 1.1.6.
+- Plus de données de référence (marques, moteurs) pour l'écran d'import.
 - Compatibilité Windows 7.

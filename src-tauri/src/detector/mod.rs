@@ -54,6 +54,7 @@ impl MapDetector {
         );
 
         // Use smart detector (identifies ECU type first, then uses appropriate patterns)
+        let forced_for_family = forced.clone();
         let result = self.smart_detector.detect_maps_with_options(data, tuned_mode, forced);
 
         log::debug!("🎯 Smart Detection Results:");
@@ -75,7 +76,126 @@ impl MapDetector {
                 | ECUType::EDC16CP
         ) || forced_is_edc16;
 
-        Self::finalize_maps(result.maps, is_edc16)
+        // Famille pour la normalisation des axes : le type forcé par l'appelant
+        // prime, sinon l'identification automatique.
+        let family = match forced_for_family.unwrap_or(result.ecu_identification.ecu_type.clone()) {
+            ECUType::EDC15P | ECUType::EDC15V => "EDC15P",
+            ECUType::EDC15VM => "EDC15VM",
+            _ if is_edc16 => "EDC16",
+            _ => "",
+        };
+
+        Self::finalize_maps(result.maps, is_edc16, family)
+    }
+
+    /// Libellés, facteurs et unités d'axes : corrections centralisées, par
+    /// famille et par nom de map, de ce que les détecteurs émettent de faux
+    /// ou d'incomplet (audit du 08/09/2026 sur un fichier par famille). Ne
+    /// touche ni aux adresses ni aux dimensions : seulement ce qui est
+    /// affiché. Les libellés suivent la forme « Grandeur (unité) », l'unité
+    /// entre parenthèses étant celle que l'afficheur reprend dans le coin.
+    fn normalise_axis_metadata(map: &mut DetectedMap, family: &str) {
+        let name = map.name.clone().unwrap_or_default();
+        let lower = name.to_ascii_lowercase();
+        let x_label = map.x_label.clone().unwrap_or_default();
+        let y_label = map.y_label.clone().unwrap_or_default();
+        let is_edc16 = family == "EDC16";
+
+        // MAP linearisation (EDC15P / EDC15VM) : deux points « pression à
+        // une tension capteur ». L'axe est brut en pas de convertisseur
+        // 10 bits (82 = 0,40 V, 989 = 4,83 V), affiché en millivolts.
+        if lower == "map linearisation" {
+            map.x_label = Some("Sensor voltage (mV)".to_string());
+            map.x_axis_correction = Some(5000.0 / 1024.0);
+            map.x_axis_offset = Some(0.0);
+            if map.unit.as_deref().unwrap_or("").is_empty() {
+                map.unit = Some("mbar".to_string());
+            }
+            map.description = Some(
+                "Boost pressure read at two sensor voltages | X: Sensor voltage (mV)".to_string(),
+            );
+        }
+
+        // Débit d'air en abscisse des limiteurs de fumée : « mg/st » seul ne
+        // dit pas ce que c'est.
+        let airflow_x = lower.starts_with("smoke limiter")
+            || lower.starts_with("iq by maf limiter");
+        if airflow_x && (x_label == "mg/st" || x_label == "mg/stroke") {
+            map.x_label = Some(if is_edc16 { "Airflow (mg/stroke)" } else { "Airflow (mg/st)" }.to_string());
+        }
+
+        match family {
+            "EDC15VM" => {
+                // Correction de suralimentation par température : l'axe X est
+                // la température d'admission (bruts 2531..3431, dixièmes de
+                // kelvin) et l'axe Y la pression demandée (500..2500 mbar) ;
+                // l'annotation par identifiant les affichait en mg/st ×0.01.
+                if lower == "boost correction by temperature" {
+                    map.x_label = Some("IAT (°C)".to_string());
+                    map.x_axis_correction = Some(0.1);
+                    map.x_axis_offset = Some(-273.1);
+                    map.y_label = Some("Requested boost (mbar)".to_string());
+                    map.y_axis_correction = Some(1.0);
+                    map.y_axis_offset = Some(0.0);
+                    map.unit = Some("mbar".to_string());
+                    map.description = Some(
+                        "Boost correction (mbar) | X: IAT (°C) | Y: Requested boost (mbar)".to_string(),
+                    );
+                }
+                // N75 : sur certains logiciels (012GN) l'axe X sortait sans
+                // libellé et brut (0..4500) ; c'est la quantité injectée ×0.01
+                // comme sur le P et sur le 012M.
+                if lower == "n75 duty cycle" {
+                    if x_label.is_empty() || map.x_axis_correction.unwrap_or(1.0) == 1.0 {
+                        map.x_label = Some("IQ (mg/st)".to_string());
+                        map.x_axis_correction = Some(0.01);
+                        map.x_axis_offset = Some(0.0);
+                    } else if x_label == "mg/st" {
+                        map.x_label = Some("IQ (mg/st)".to_string());
+                    }
+                    if y_label.is_empty() || y_label == "rpm" {
+                        map.y_label = Some("Engine speed (rpm)".to_string());
+                    }
+                    if map.unit.as_deref().unwrap_or("").is_empty() {
+                        map.unit = Some("%".to_string());
+                    }
+                }
+                // Unités manquantes, alignées sur l'EDC15P
+                if map.unit.as_deref().unwrap_or("").is_empty()
+                    && (lower == "driver wish"
+                        || lower == "start iq"
+                        || lower.starts_with("iq by map limiter")
+                        || lower.starts_with("iq by maf limiter")
+                        || lower == "torque limiter")
+                {
+                    map.unit = Some("mg/st".to_string());
+                }
+            }
+            "EDC15P" => {
+                // Courbe 1×16 sur l'axe régime, sans libellé
+                if lower.starts_with("boost actuator upper limit curve") && x_label.is_empty() {
+                    map.x_label = Some("Engine speed (rpm)".to_string());
+                }
+            }
+            "EDC16" => {
+                // Limiteur de couple principal (20×3 / 22×4) : aucun libellé,
+                // X = régime, Y = pression atmosphérique
+                if lower == "torque limiter" && x_label.is_empty() && y_label.is_empty() {
+                    map.x_label = Some("Engine speed (rpm)".to_string());
+                    map.y_label = Some("Atm pressure (mbar)".to_string());
+                }
+                // SOI limiter : l'axe X est la température d'eau (bruts
+                // 2531..3521 en dixièmes de kelvin), pas des degrés vilebrequin
+                if lower == "soi limiter" {
+                    map.x_label = Some("Water temp (°C)".to_string());
+                }
+                // N75 : quantité injectée en abscisse, même forme que sur EDC15
+                if lower.starts_with("n75 duty cycle") && x_label == "mg/stroke" {
+                    map.x_label = Some("IQ (mg/stroke)".to_string());
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Post-traitement commun à toutes les familles, appliqué à la sortie de
@@ -92,7 +212,7 @@ impl MapDetector {
     ///   Injection system — demande des utilisateurs) ;
     /// - EDC16 : dossier « Fuel Correction » reversé dans « Injection
     ///   system », dossiers « Airflow » et « DPF » reversés dans « Other ».
-    fn finalize_maps(maps: Vec<DetectedMap>, is_edc16: bool) -> Vec<DetectedMap> {
+    fn finalize_maps(maps: Vec<DetectedMap>, is_edc16: bool, family: &str) -> Vec<DetectedMap> {
         let mut out: Vec<DetectedMap> = Vec::with_capacity(maps.len());
         for mut map in maps {
             if let Some(name) = map.name.take() {
@@ -101,6 +221,9 @@ impl MapDetector {
                         .replace("linearization", "linearisation"),
                 );
             }
+            // Après l'orthographe : la normalisation des axes travaille sur le
+            // nom définitif
+            Self::normalise_axis_metadata(&mut map, family);
             let lower = map.name.as_deref().unwrap_or("").to_ascii_lowercase();
 
             // Masquées partout

@@ -1385,7 +1385,7 @@ impl EDC15VMDetector {
             map.category = Some("Other".to_string());
             // Comme la SVBL : pas de valeur dans la description, la valeur
             // est déjà la cellule de la carte.
-            map.description = Some("Left foot brake behaviour (0=OFF, 1=ON)".to_string());
+            map.description = Some("Left foot brake behaviour: 0 = OFF, 1 = ON".to_string());
             map.confidence = 0.92;
             map.correction_factor = Some(1.0);
             map.is_little_endian = Some(true);
@@ -1438,7 +1438,7 @@ impl EDC15VMDetector {
             map.name = Some("SVRL - RPM Limiter".to_string());
             map.category = Some("Maximum RPM limiter".to_string());
             // Comme la SVBL : pas de valeur dans la description
-            map.description = Some("Maximum engine RPM limit:".to_string());
+            map.description = Some("Maximum engine speed (rpm)".to_string());
             map.unit = Some("rpm".to_string());
             map.confidence = 0.95;
             map.correction_factor = Some(1.0);
@@ -1890,7 +1890,7 @@ impl EDC15VMDetector {
             map.category = Some("Turbo boost pressure".to_string());
             // Description volontairement réduite au libellé : la valeur est
             // déjà la cellule de la carte (demande utilisateur).
-            map.description = Some("Maximum boost pressure limit:".to_string());
+            map.description = Some("Maximum boost pressure (mbar); 0 = no limit".to_string());
             map.unit = Some("mbar".to_string());
             map.confidence = 0.98;
             map.correction_factor = Some(1.0);
@@ -1973,7 +1973,7 @@ impl EDC15VMDetector {
                         map.name = Some("MAP/MAF switch".to_string());
                         map.category = Some("Smoke limitation".to_string());
                         // Même présentation que le switch de l'EDC15P
-                        map.description = Some(format!("Sensor mode: {} (0=MAF, 257=MAP)", mode));
+                        map.description = Some("Sensor used by the smoke limitation: 0 = MAF, 257 = MAP".to_string());
                         map.confidence = 0.95;
                         map.correction_factor = Some(1.0);
                         log::debug!("EDC15VM: MAP/MAF switch at 0x{:X} = {}", addr, val);

@@ -30,7 +30,7 @@ La détection n'est pas parfaite pour autant. Chaque famille a été calibrée s
 
 - **Détection automatique des cartographies** — moteur Rust embarqué, un détecteur par famille
 - **Vérification de complétude** — un badge de confiance indique si toutes les maps attendues pour la famille d'ECU ont été trouvées, avec le détail de ce qui manque en un clic
-- **Éditeur de maps** — tableau, graphe 2D et surface 3D, navigation clavier et copier/coller entre maps, modification absolue, additive ou en pourcentage, report vers les maps similaires, raccourcis façon WinOLS
+- **Éditeur de maps** — tableau, graphe 2D et surface 3D, navigation clavier et copier/coller entre maps, modification absolue, additive ou en pourcentage, report vers les maps similaires, raccourcis façon WinOLS. Le graphe 2D est fait pour les maps à une ligne (courbes, linéarisations, valeurs uniques) ; les matrices complètes s'ouvrent en 3D, où un pic ou un plat se voit d'un coup d'œil, et dans le tableau pour les valeurs exactes
 - **Éditeur hexadécimal** — virtualisé, minimap, modifications surlignées par rapport à l'origine
 - **Versions** — « Ori » + versions nommées par projet, vue de comparaison
 - **Stockage optimisé** — fichier d'origine + fichier de modifications par version, reconstruction automatique à l'export
@@ -44,6 +44,12 @@ La détection n'est pas parfaite pour autant. Chaque famille a été calibrée s
 - **3 thèmes** — sombre, clair et OLED, pour tous les types d'écrans
 - **Toutes les tailles d'écran** — menu des maps redimensionnable et zoom de l'éditeur façon navigateur, du portable à l'ultrawide
 - **Cinq langues** — anglais, français, espagnol, italien et allemand, pour l'app et l'installateur ; en ajouter une autre est simple (un seul fichier de traductions), et le nom des maps n'est volontairement pas traduit — il reste en anglais
+
+### Les maps que vous ne trouverez pas dans la liste
+
+Deux tables que d'autres outils affichent sont volontairement laissées de côté sur EDC15P : inverse driver wish et MAF linearisation. Ce sont des tables de conversion, pas des maps de tuning, et les retirer garde une liste courte et lisible. Sur EDC15VM, un jeu de petites tables de correction d'avance est également masqué : elles apparaissaient comme une deuxième map d'avance à l'injection et induisaient en erreur, et l'outil de référence ne les liste pas non plus. Si l'une d'elles vous sert, dites-le dans une issue : quelques demandes et elle revient.
+
+Si une map que vous attendez est vraiment absente, le badge de complétude vous le dit : il liste ce que la famille d'ECU doit contenir et ce qui n'a pas été trouvé.
 
 ## 🔧 Travailler avec des fichiers modifiés
 
@@ -76,7 +82,7 @@ La pile web apporte plus que la portabilité. Aucun navigateur n'est embarqué :
 
 ## 🤝 Contribuer
 
-Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce qui a le plus de valeur. Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour comprendre l'architecture des détecteurs. Un bug, une map non détectée ? Ouvrez une issue avec le type d'ECU et, si possible, le numéro logiciel du fichier.
+Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce qui a le plus de valeur. Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour l'architecture des détecteurs, la façon dont les familles existantes ont été construites et le niveau exigé d'une nouvelle famille avant sa sortie (corpus, banc, invariants, zéro faux positif). Un bug, une map non détectée ? Ouvrez une issue avec le type d'ECU et le numéro logiciel du fichier, et joignez le dump si vous le pouvez : c'est ce qui permet de corriger, la plupart des corrections de détection publiées jusqu'ici viennent d'un fichier envoyé par un utilisateur. Les fichiers servent uniquement à corriger le détecteur et ne sont jamais partagés.
 
 ## 🙏 Remerciements
 
@@ -95,6 +101,8 @@ Tout est dans la section **Assets** de la [dernière release](https://github.com
 curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
 ```
 
+**Linux** — pas encore de version. L'interface est le même code que sur Windows et macOS, seule la partie coque serait à faire. C'est sur la feuille de route comme demande d'utilisateurs : plus il y aura de demandes, plus vite ça arrivera.
+
 ## 🗺️ Feuille de route
 
 Ce qui est en cours, ce qui est prévu et ce que les utilisateurs ont demandé : [ROADMAP.fr.md](ROADMAP.fr.md) (aussi en [anglais](ROADMAP.md), [espagnol](ROADMAP.es.md), [italien](ROADMAP.it.md) et [allemand](ROADMAP.de.md)). La même page s'ouvre dans l'application, dans la langue de l'app, depuis le dashboard (bouton feuille de route, à côté de l'aide).
@@ -107,7 +115,7 @@ Ce qui est en cours, ce qui est prévu et ce que les utilisateurs ont demandé :
 - 👥 Facebook — [zedperf](https://www.facebook.com/zedperf.1/)
 - 🔗 Tout au même endroit : [linktr.ee/zedperf](https://linktr.ee/zedperf)
 
-## Buy me a coffee ☕
+## ☕ Buy me a coffee
 
 ZedSuite est gratuit et le restera. S'il vous a fait gagner du temps ou une licence WinOLS, vous pouvez financer les prochaines sessions de reverse engineering :
 

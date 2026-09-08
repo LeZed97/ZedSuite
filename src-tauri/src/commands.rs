@@ -79,7 +79,22 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
-pub const DETECTOR_VERSION: u32 = 40;
+///   41 — EDC15P : le switch MAP/MAF est trouvé sur la disposition compacte
+///       (019AJ, 019AN, 019BK, 019CJ), identifiant 01 02 et queue 00 01 01 01.
+///   42 — Libellés/facteurs d'axes normalisés (MAP linearisation en mV, boost
+///       correction by temperature et N75 sur VM, torque/SOI limiter EDC16,
+///       débit d'air des limiteurs de fumée, unités VM).
+///   43 — EDC15P 1.4 TDI 3 cylindres (045906019xx) : durations à tailles
+///       variables numérotées par chaîne, driver wish à 9-10 points de
+///       pédale, hystérésis EGR à 19 points, correction de boost par
+///       température sans identifiant DA sur l'axe de température.
+///   44 — EDC15P 1.4 TDI : SVBL par en-tête fixe, boost limit map 10×9,
+///       vraie EGR 16×11/16×12 (la carte de limitation qui partage le motif
+///       EGR n'est plus retenue, sur aucune disposition).
+///   45 — EDC15P : « Injector duration 00 » avec les corrections d'axes dans
+///       l'ordre de ses adresses (régime ×1 en X, IQ ×0,01 en Y) ; N75 16×11
+///       des 1.4 TDI lu 11 colonnes IQ × 16 lignes régime.
+pub const DETECTOR_VERSION: u32 = 45;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.

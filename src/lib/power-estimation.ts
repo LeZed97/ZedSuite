@@ -365,9 +365,10 @@ function isDriverWish(m: DetectedMapLite): boolean {
 }
 
 /** List the selectable curve sources of a detection result.
- *  EDC15P/VM: one source per codeblock (renumbered 1..n by ascending
- *  address — the detector's raw ids are not stable across files), each
- *  selectable in the UI. EDC16: a single codeblock with many driver-wish
+ *  EDC15P/VM: one source per codeblock, ordered by ascending address and
+ *  labelled with the codeblock number the rest of the app shows (2, 3, 5…
+ *  on some software), so a curve and its maps carry the same number
+ *  (issue #17). EDC16: a single codeblock with many driver-wish
  *  copies (active or not) — one single source; the per-RPM max keeps only
  *  the most demanding wish. */
 export function listCurveSources(maps: DetectedMapLite[]): CurveSource[] {
@@ -387,9 +388,9 @@ export function listCurveSources(maps: DetectedMapLite[]): CurveSource[] {
         Math.min(...byCb.get(a)!.map((m) => m.address)) -
         Math.min(...byCb.get(b)!.map((m) => m.address))
     );
-    return ids.map((cbId, i) => ({
+    return ids.map((cbId) => ({
       id: `cb-${cbId}`,
-      label: `Codeblock ${i + 1}`,
+      label: `Codeblock ${cbId}`,
       codeblockId: cbId,
       mapAddresses: byCb.get(cbId)!.map((m) => m.address),
     }));

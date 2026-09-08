@@ -46,9 +46,10 @@ import {
   EDITOR_TOOLBAR_MIN_CSS_WIDTH,
 } from "@/lib/webview-zoom";
 import { DTCModal } from "@/components/dtc-modal";
-import { MacTitlebarSpacer } from "@/components/window-controls";
+import { isMacOS } from "@/lib/platform";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
 import type { FileRecord } from "@/lib/types";
+import { PROJECT_NAME_MAX_LENGTH } from "@/lib/types";
 import { SolutionsModal } from "@/components/solutions-modal";
 import { getSolutionImplementation } from "@/lib/ecu/solutions";
 import { CompareModal } from "@/components/compare-modal";
@@ -900,7 +901,8 @@ function ProjectInfoEditModal({
                 <input
                   type="text"
                   value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
+                  maxLength={PROJECT_NAME_MAX_LENGTH}
+                  onChange={(e) => setProjectName(e.target.value.slice(0, PROJECT_NAME_MAX_LENGTH))}
                   className={inputCls}
                   placeholder={t.projectInfo.projectNamePlaceholder}
                   spellCheck={false}
@@ -6161,10 +6163,10 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             barre d'outils : cliquer-glisser ici déplace l'application
             (les champs interactifs plus bas gardent leurs propres clics). */}
         <div data-tauri-drag-region className="p-4 flex-shrink-0" style={{ borderBottom: `1px solid ${getBorderColor()}` }}>
-          {/* Sur macOS les feux de la fenêtre occupent ce coin : le logo
-              se décale à leur droite, comme sur le dashboard */}
-          <div data-tauri-drag-region className="mb-4 flex items-center">
-            <MacTitlebarSpacer />
+          {/* Sur macOS les feux de la fenêtre occupent ce coin : le logo est
+              centré dans l'en-tête du panneau, ce qui le garde propre à tous
+              les zooms (à 60 % il reste à droite des feux). Windows : à gauche. */}
+          <div data-tauri-drag-region className={isMacOS() ? "mb-4 flex items-center justify-center" : "mb-4 flex items-center"}>
             <div data-tauri-drag-region className="relative inline-block">
               <div data-tauri-drag-region className="text-xl font-bold">
                 <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent">Zed</span><span style={{ color: getTextColor() }}>Suite</span>

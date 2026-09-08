@@ -61,6 +61,8 @@ fn main() {
                 "x_off": m.x_axis_offset,
                 "y_off": m.y_axis_offset,
                 "description": m.description,
+                "data_type": format!("{:?}", m.data_type),
+                "is_little_endian": m.is_little_endian,
             })
         })
         .collect();

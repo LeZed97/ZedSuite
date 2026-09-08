@@ -9,7 +9,7 @@ import { useTheme } from "@/contexts/theme-context";
 import { useI18n } from "@/contexts/i18n-context";
 import { PromptModal } from "@/components/prompt-modal";
 import { isBigEndianEcu, hasUnsignedAxes } from "@/lib/ecu-endianness";
-import { resolveMapCellLayout } from "@/lib/map-cell-layout";
+import { resolveMapCellLayout, resolveAxisLabels } from "@/lib/map-cell-layout";
 import { getMapValueRange, clampMapValue } from "@/lib/map-value-range";
 
 // Import Plotly dynamiquement pour ├®viter les probl├¿mes SSR
@@ -24,7 +24,7 @@ type ViewMode = "text" | "2d" | "3d";
 
 // Cache pour mémoriser les données extraites de chaque map (par adresse)
 // Ce cache évite de recalculer les données à chaque changement de map
-const CACHE_VERSION = "2026-09-rows-reversed-v36";
+const CACHE_VERSION = "2026-09-axis-corrections-v38";
 
 // Map globale pour sauvegarder les positions de caméra de chaque map 3D
 // Persiste entre les montages/démontages du composant
@@ -103,6 +103,9 @@ interface CachedMapData {
   axesSwapped: boolean;
   rowsReversed: boolean;
   colsReversed: boolean;
+  /** Axe sans valeurs dans le fichier (sélecteurs, courbes 1×N) : affiché « . » */
+  xAxisIsIndex?: boolean;
+  yAxisIsIndex?: boolean;
   mapAddress: number;
   fileDataHash: string; // Hash simple pour vérifier si fileData a changé
   version?: string;
@@ -607,6 +610,9 @@ export function MapViewer({
 const [mapValues, setMapValues] = useState<number[][]>([]);
 const [xAxisLabels, setXAxisLabels] = useState<string[]>([]);
 const [yAxisLabels, setYAxisLabels] = useState<string[]>([]);
+// Axes sans valeurs dans le fichier (sélecteurs, courbes 1×N…) : l'en-tête
+// affiche « . » à la place d'un index, sur tous les calculateurs
+const [axisIsIndex, setAxisIsIndex] = useState<{ x: boolean; y: boolean }>({ x: false, y: false });
 const [changedCells, setChangedCells] = useState<Record<string, number>>({});
 const originalValuesRef = useRef<number[][]>([]);
 const [contextMenu, setContextMenu] = useState<{
@@ -823,6 +829,9 @@ const skipAutoSizeRef = useRef<boolean>(false);
     displayXAxisLabels = displayYAxisLabels;
     displayYAxisLabels = tmp;
   }
+  // Axe « index » (aucune valeur dans le fichier) : en-tête affiché « . »
+  const displayXIsIndex = displayTransposed ? axisIsIndex.y : axisIsIndex.x;
+  const displayYIsIndex = displayTransposed ? axisIsIndex.x : axisIsIndex.y;
 
   // Flips nets APRÈS transposition (les lignes d'affichage ↔ colonnes de
   // mapValues quand transposé), avant l'ordonnancement final ci-dessous.
@@ -1925,43 +1934,11 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
   // Extract axis units from description or use x_label/y_label fields if available
   // Format: "Z | X: X_desc (X_units) | Y: Y_desc (Y_units) | Axis IDs: X=0x... Y=0x..."
   const parseAxisUnits = () => {
-    let xUnit = "degC";
-    let yUnit = "rpm";
-    let xLabel = "Load";
-    let yLabel = "mbar";
-
-    // Helper function to extract just the unit from a label like "Engine speed (rpm)" -> "rpm"
-    const extractUnit = (label: string): string => {
-      const match = label.match(/\(([^)]+)\)/);
-      return match ? match[1].trim() : label;
-    };
-
-    // Priority 1: Use x_label/y_label fields if provided by backend
-    // Empty string is a valid override (e.g., for 1xN maps that don't have X axis)
-    if (mapData.x_label !== undefined && mapData.x_label !== null) {
-      xLabel = mapData.x_label;
-      xUnit = extractUnit(mapData.x_label);
-    }
-    if (mapData.y_label !== undefined && mapData.y_label !== null) {
-      yLabel = mapData.y_label;
-      yUnit = extractUnit(mapData.y_label);
-    }
-
-    // Priority 2: Fall back to parsing description
-    if (mapData.description && (!mapData.x_label || !mapData.y_label)) {
-      // Try to extract from description: "X: X_desc (X_units) | Y: Y_desc (Y_units)"
-      const xMatch = mapData.description.match(/X:\s*([^(]+)\s*\(([^)]+)\)/);
-      const yMatch = mapData.description.match(/Y:\s*([^(]+)\s*\(([^)]+)\)/);
-
-      if (!mapData.x_label && xMatch && xMatch.length >= 3) {
-        xLabel = xMatch[1].trim();
-        xUnit = xMatch[2].trim();
-      }
-      if (!mapData.y_label && yMatch && yMatch.length >= 3) {
-        yLabel = yMatch[1].trim();
-        yUnit = yMatch[2].trim();
-      }
-    }
+    // Sans libellé fourni par le détecteur on n'affiche RIEN : un « Load » ou
+    // un « mbar » par défaut est une fausse information
+    // Même résolution que l'export mappack (lib/map-cell-layout) : x_label /
+    // y_label du détecteur, sinon la description « X: … (unité) | Y: … »
+    const { xUnit, yUnit, xLabel, yLabel } = resolveAxisLabels(mapData);
 
     const mapNameLower = (mapData.name || "").toLowerCase();
     const looksBoostTarget = mapNameLower.includes("boost target map");
@@ -2098,6 +2075,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         axesSwapped: cached.axesSwapped,
         rowsReversed: cached.rowsReversed,
         colsReversed: cached.colsReversed,
+        xAxisIsIndex: cached.xAxisIsIndex ?? false,
+        yAxisIsIndex: cached.yAxisIsIndex ?? false,
       };
     }
 
@@ -2342,9 +2321,6 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // These maps have correct addresses but inverted correction factors from backend
     // Injector duration: swap corrections for 01-04 (backend factors inverted),
     // and fall back to heuristic for other duration maps when metadata looks inverted.
-    const isInjectorDuration01to04 = isInjectorDuration &&
-                                     !mapNameLower.includes("duration 00") &&
-                                     !mapNameLower.includes("duration 05");
     const xLabelLower = (mapData.x_label || "").toLowerCase();
     const yLabelLower = (mapData.y_label || "").toLowerCase();
     const xLooksRpm = xLabelLower.includes("rpm") || xLabelLower.includes("engine speed");
@@ -2363,7 +2339,10 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // - y_axis = RPM with y_axis_correction=1.0, y_axis_offset=0.0
     // For Injector duration 01-04: swap corrections only (addresses are correct but corrections are inverted)
     
-    const swapCorrectionsOnly = (isInjectorDuration00 || isInjectorDuration01to04 || correctionsLookInverted) && !boostNeedsAxisSwap;
+    // Les corrections du détecteur suivent ses adresses d'axes (durations
+    // comprises depuis la version 45) : seule l'heuristique sur les libellés
+    // reste, pour des données de détection anciennes encore en cache.
+    const swapCorrectionsOnly = correctionsLookInverted && !boostNeedsAxisSwap;
     // Bases génériques (non-boost)
     const baseXAxisCorrection = mapData.x_axis_correction ?? 1.0;
     const baseYAxisCorrection = mapData.y_axis_correction ?? 1.0;
@@ -2438,6 +2417,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // - Y axis (rows) needs apiCols values ÔåÆ read from yAxisAddr (which has apiCols values) Ô£ô
     // But wait: we read cols values from xAxisAddr and rows values from yAxisAddr
     // After swap: cols = apiRows, rows = apiCols, so this is correct!
+    let xAxisIsIndex = false;
+    let yAxisIsIndex = false;
     if (xAxisAddr > 0) {
       const tempXLabels = [];
       // After swap: cols = apiRows, so we read cols values from xAxisAddr (which has apiRows values)
@@ -2510,6 +2491,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       for (let i = 0; i < cols; i++) {
         xLabels.push(String(i + 1));
       }
+      xAxisIsIndex = true;
     }
     
     // CRITICAL FIX: Read Y axis from file for Y display (vertical/rows)
@@ -2631,6 +2613,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       for (let i = 0; i < rows; i++) {
         yLabels.push(String(i + 1));
       }
+      yAxisIsIndex = true;
     }
     
     // CRITICAL: Read map data in row-major order
@@ -2880,6 +2863,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       axesSwapped: needsAxisSwap,
       rowsReversed,
       colsReversed,
+      xAxisIsIndex,
+      yAxisIsIndex,
       mapAddress: mapData.address,
       fileDataHash: fileDataHash,
       version: CACHE_VERSION,
@@ -2896,6 +2881,8 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       axesSwapped: needsAxisSwap,
       rowsReversed,
       colsReversed,
+      xAxisIsIndex,
+      yAxisIsIndex,
     };
   }, [mapData, fileData, projectName, fileName, displaySettings]);
 
@@ -2921,6 +2908,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
   // Mettre ├á jour les ├®tats avec les donn├®es extraites
   useEffect(() => {
     if (extractedData) {
+      setAxisIsIndex({ x: !!extractedData.xAxisIsIndex, y: !!extractedData.yAxisIsIndex });
       // D'abord stocker les valeurs originales
       originalValuesRef.current = extractedData.mapValues.map(row => [...row]);
       originalXAxisLabelsRef.current = [...extractedData.xAxisLabels];
@@ -3517,11 +3505,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
   const effDisplayYCorrection = displayTransposed ? effXAxisCorrection : effYAxisCorrection;
   const displayXPrecisionOverride = displayTransposed ? yAxisPrecisionOverride : xAxisPrecisionOverride;
   const displayYPrecisionOverride = displayTransposed ? xAxisPrecisionOverride : yAxisPrecisionOverride;
-  // Précision par défaut selon le pas de la carte : un facteur très fin
-  // (ex. pompe N146 en volts, 0.001221/bit) demande 2 décimales — à une
-  // seule, 1.99 V s'affichait « 1.9 ».
+  // Précision par défaut selon le pas de la carte : autant de décimales que
+  // le pas en demande (WinOLS/EDCSuite), plafonné à 3. La pompe N146 en volts
+  // (0.001221/bit) s'affiche 1.455 et non 1.4 ; un pas de 0.01 garde 2
+  // décimales, un pas ≥ 0.01 garde l'affichage habituel à 1 décimale.
   const cellFactorAbs = Math.abs(mapData?.correction_factor ?? 1);
-  const defaultCellDecimals = cellFactorAbs > 0 && cellFactorAbs < 0.01 ? 2 : 1;
+  const defaultCellDecimals =
+    cellFactorAbs > 0 && cellFactorAbs < 0.01
+      ? Math.min(3, Math.ceil(-Math.log10(cellFactorAbs)))
+      : 1;
   const cellDecimals =
     typeof displaySettings?.map?.precision === 'number' &&
     isFinite(displaySettings.map.precision) &&
@@ -4265,7 +4257,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                             onDoubleClick={() => handleEditDisplayXAxis(i)}
                             onContextMenu={(e) => handleXAxisContextMenu(e, i)}
                           >
-                            {formatAxisDisplay(label, effDisplayXCorrection, displayXPrecisionOverride)}
+                            {displayXIsIndex ? "." : formatAxisDisplay(label, effDisplayXCorrection, displayXPrecisionOverride)}
                           </th>
                         ))}
                       </tr>
@@ -4299,7 +4291,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                               onDoubleClick={() => handleEditDisplayYAxis(rowIndex)}
                               onContextMenu={(e) => handleYAxisContextMenu(e, rowIndex)}
                             >
-                              {formatAxisDisplay(displayYAxisLabels[rowIndex], effDisplayYCorrection, displayYPrecisionOverride)}
+                              {displayYIsIndex ? "." : formatAxisDisplay(displayYAxisLabels[rowIndex], effDisplayYCorrection, displayYPrecisionOverride)}
                             </td>
                             {row.map((value, colIndex) => {
                               const mapCoords = toMapCoords(rowIndex, colIndex);
@@ -4816,7 +4808,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                       onDoubleClick={() => handleEditDisplayXAxis(i)}
                       onContextMenu={(e) => handleXAxisContextMenu(e, i)}
                     >
-                      {formatAxisDisplay(label, effDisplayXCorrection, displayXPrecisionOverride)}
+                      {displayXIsIndex ? "." : formatAxisDisplay(label, effDisplayXCorrection, displayXPrecisionOverride)}
                     </th>
                   ))}
                 </tr>
@@ -4852,7 +4844,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                         onDoubleClick={() => handleEditDisplayYAxis(rowIndex)}
                         onContextMenu={(e) => handleYAxisContextMenu(e, rowIndex)}
                       >
-                        {formatAxisDisplay(displayYAxisLabels[rowIndex], effDisplayYCorrection, displayYPrecisionOverride)}
+                        {displayYIsIndex ? "." : formatAxisDisplay(displayYAxisLabels[rowIndex], effDisplayYCorrection, displayYPrecisionOverride)}
                       </td>
                       {row.map((value, colIndex) => {
                         const mapCoords = toMapCoords(rowIndex, colIndex);

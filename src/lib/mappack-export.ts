@@ -21,10 +21,13 @@
  *  - Int16 maps -> bSigned=1, UInt8 maps -> eByte
  *  - Y axis rendered top-down like the app (AxisY.bBackwards = 1,
  *    matching every map of the reference packs)
+ *  - AxisX/Y.Name = the axis label the app shows, AxisX/Y.Unit = the unit
+ *    between its parentheses (resolveAxisLabels: x_label / y_label, else the
+ *    "X: … (unit) | Y: …" description — most EDC15P maps only have the latter)
  */
 
 import { isBigEndianEcu } from "./ecu-endianness";
-import { resolveMapCellLayout } from "./map-cell-layout";
+import { resolveAxisLabels, resolveMapCellLayout } from "./map-cell-layout";
 
 /** Superset of the editor MapData with the raw detection fields */
 export interface ExportMapData {
@@ -113,7 +116,6 @@ interface ExportAxis {
   address?: number | null;
   correction?: number | null;
   offset?: number | null;
-  label?: string | null;
 }
 
 /**
@@ -130,8 +132,8 @@ interface ExportAxis {
  * les montre transposées par rapport à l'app mais justes.
  */
 function exportLayout(m: ExportMapData): { rows: number; cols: number; xAxis: ExportAxis; yAxis: ExportAxis } {
-  const apiX: ExportAxis = { address: m.x_axis_address, correction: m.x_axis_correction, offset: m.x_axis_offset, label: m.x_label };
-  const apiY: ExportAxis = { address: m.y_axis_address, correction: m.y_axis_correction, offset: m.y_axis_offset, label: m.y_label };
+  const apiX: ExportAxis = { address: m.x_axis_address, correction: m.x_axis_correction, offset: m.x_axis_offset };
+  const apiY: ExportAxis = { address: m.y_axis_address, correction: m.y_axis_correction, offset: m.y_axis_offset };
   const two = m.dimensions?.TwoDimensional;
   if (!two || two.rows <= 0 || two.cols <= 0) {
     const { rows, cols } = mapRowsCols(m);
@@ -211,6 +213,10 @@ function buildWinolsMap(
   const hasX = typeof xAxis.address === "number" && xAxis.address > 0 && cols > 1;
   const hasY = typeof yAxis.address === "number" && yAxis.address > 0 && rows > 1;
   const axesOrg = dataOrgForAxes(ecuType);
+  // Libellés des axes AFFICHÉS (mêmes règles que le coin de la map dans
+  // l'app) : ils suivent l'orientation d'affichage, comme les adresses
+  // choisies ci-dessus.
+  const labels = resolveAxisLabels(m);
 
   return {
     "Name": name,
@@ -242,9 +248,9 @@ function buildWinolsMap(
     "Fieldvalues.Factor": fmtFactor(m.correction_factor),
     "Fieldvalues.Offset": fmtOffset(m.offset),
     "Fieldvalues.StartAddr.Cpu": hexAddr(m.address),
-    "AxisX.Name": hasX ? xAxis.label || "" : "",
+    "AxisX.Name": hasX ? labels.xLabel : "",
     "AxisX.IdName": "",
-    "AxisX.Unit": hasX ? xAxis.label || "" : "",
+    "AxisX.Unit": hasX ? labels.xUnit : "",
     "AxisX.Factor": hasX ? fmtFactor(xAxis.correction) : "1.000000",
     "AxisX.Offset": hasX ? fmtOffset(xAxis.offset) : "0",
     "AxisX.Radix": "10",
@@ -256,9 +262,9 @@ function buildWinolsMap(
     "AxisX.DataHeader": "0",
     "AxisX.DataAddr.Cpu": hasX ? hexAddr(xAxis.address) : "$0",
     "AxisX.DataOrg": axesOrg,
-    "AxisY.Name": hasY ? yAxis.label || "" : "",
+    "AxisY.Name": hasY ? labels.yLabel : "",
     "AxisY.IdName": "",
-    "AxisY.Unit": hasY ? yAxis.label || "" : "",
+    "AxisY.Unit": hasY ? labels.yUnit : "",
     "AxisY.Factor": hasY ? fmtFactor(yAxis.correction) : "1.000000",
     "AxisY.Offset": hasY ? fmtOffset(yAxis.offset) : "0",
     "AxisY.Radix": "10",
