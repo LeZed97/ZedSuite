@@ -10,7 +10,7 @@ Para pedir una función o informar de un error: abre una issue en [GitHub](https
 - Vista 2D al estilo WinOLS para matrices completas: una curva por fila, fila seleccionada resaltada.
 - Un switch de inversión del N75 en EDC15VM, para coches que pasan de un turbo de wastegate a uno VNT o al revés: el bloque que lo controla está localizado en la mayoría de los archivos del banco, el switch en sí aún no está hecho.
 - EDC15P de los primeros PD (1999-2002, 038906019A / 019AJ): la detección de mapas está hecha y la tabla de DTC se lee en los 019AJ; el checksum aún no está soportado, la tabla de DTC de los 019A usa otra disposición más, y el mapa MAP linearisation no se encuentra en los 019A.
-- Mejor detección EDC15VM: algunos archivos aún no están del todo cubiertos, el 2.5 V6 (dumps de 1 MB) en particular, y los mapas N146 y N75 de la generación 012K / 012AP. Las correcciones ya están para los números de software que enviaron los usuarios (SOI único y switch MAP/MAF del 012M en la 1.1.7).
+- Mejor detección EDC15VM: algunos archivos aún no están del todo cubiertos, el 2.5 V6 en particular, y los mapas N146 y N75 de la generación 012K / 012AP. Las correcciones ya están para los números de software que enviaron los usuarios (SOI único y switch MAP/MAF del 012M en la 1.1.7).
 - EDC15VM: comprobar en el coche que los mapas SVRL están realmente activos cuando el detector los encuentra.
 - EDC16U31: mejor detección, aún faltan algunos archivos EDC16U31 en el banco de pruebas para terminarla bien (la familia 12x12 en 0x1D7xxx sigue sin nombre).
 - EDC16U1: identificación de los archivos del Touareg V10, donde hoy solo se encuentra uno de los dos números de ECU (seis archivos en el banco).
@@ -28,6 +28,7 @@ Para pedir una función o informar de un error: abre una issue en [GitHub](https
 - Editar dos versiones del mismo proyecto lado a lado.
 - Más funciones en la ventana de Propiedades de los mapas.
 - Resaltar en las ventanas de mapas todos los valores distintos del original.
+- Recordar la orientación de los mapas (axis mirror): hoy la transposición de la vista se ajusta mapa por mapa y solo en el proyecto abierto. La idea es aplicar la elección a toda la familia de mapas de una vez y guardarla como ajuste global, para que todos los proyectos abran los mapas igual.
 - Una versión para Linux. La interfaz es el mismo código que en Windows y macOS, solo habría que hacer la parte del contenedor; dependerá de cuánta gente la pida.
 
 ## No previsto por ahora

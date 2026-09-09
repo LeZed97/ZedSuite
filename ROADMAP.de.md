@@ -10,7 +10,7 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 - 2D-Ansicht im WinOLS-Stil für vollständige Matrizen: eine Kurve pro Zeile, gewählte Zeile hervorgehoben.
 - Ein N75-Invertierungsschalter bei EDC15VM, für Fahrzeuge, die von einem Wastegate-Turbo auf VNT oder umgekehrt umgebaut wurden: der Block, der ihn steuert, ist auf den meisten Dateien des Prüfstands lokalisiert, der Schalter selbst ist noch nicht gebaut.
 - EDC15P der ersten PD-Generation (1999-2002, 038906019A / 019AJ): die Kennfelderkennung ist fertig und die DTC-Tabelle wird bei den 019AJ gelesen; die Checksumme wird noch nicht unterstützt, die DTC-Tabelle der 019A hat noch ein anderes Layout, und das Kennfeld MAP linearisation wird bei den 019A nicht gefunden.
-- Bessere EDC15VM-Erkennung: einige Dateien sind noch nicht vollständig abgedeckt, vor allem der 2.5 V6 (1-MB-Dumps), sowie die Kennfelder N146 und N75 der Generation 012K / 012AP. Die Korrekturen für die von Nutzern eingesandten Softwarenummern sind drin (einzelnes SOI und MAP/MAF-Schalter des 012M in 1.1.7).
+- Bessere EDC15VM-Erkennung: einige Dateien sind noch nicht vollständig abgedeckt, vor allem der 2.5 V6, sowie die Kennfelder N146 und N75 der Generation 012K / 012AP. Die Korrekturen für die von Nutzern eingesandten Softwarenummern sind drin (einzelnes SOI und MAP/MAF-Schalter des 012M in 1.1.7).
 - EDC15VM: am Fahrzeug prüfen, ob die SVRL-Kennfelder wirklich aktiv sind, wenn der Detektor sie findet.
 - EDC16U31: bessere Erkennung, es fehlen noch einige EDC16U31-Dateien auf dem Prüfstand, um sie sauber abzuschließen (die 12x12-Familie bei 0x1D7xxx hat noch keinen Namen).
 - EDC16U1: Identifikation der Touareg-V10-Dateien, bei denen heute nur eine der beiden Steuergerätenummern gefunden wird (sechs Dateien auf dem Prüfstand).
@@ -28,6 +28,7 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 - Zwei Versionen desselben Projekts nebeneinander bearbeiten.
 - Mehr Funktionen im Eigenschaften-Fenster der Kennfelder.
 - Alle vom Original abweichenden Werte in den Kennfeldfenstern hervorheben.
+- Die Kennfeldausrichtung merken (axis mirror): heute wird die Anzeigetransposition Kennfeld für Kennfeld und nur im geöffneten Projekt eingestellt. Geplant ist, die Wahl auf die ganze Kennfeldfamilie anzuwenden und als globale Einstellung zu speichern, damit alle Projekte die Kennfelder gleich öffnen.
 - Eine Linux-Version. Die Oberfläche ist derselbe Code wie unter Windows und macOS, nur die Hülle wäre zu machen; es hängt davon ab, wie viele danach fragen.
 
 ## Vorerst nicht geplant

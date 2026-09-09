@@ -441,6 +441,35 @@ function DashboardContent() {
     setAppZoom(dashboardZoom / 100);
   }, [dashboardZoom]);
 
+  // Plafond de zoom, comme dans l'éditeur : quand l'écran est trop petit
+  // pour tout afficher, le zoom RÉGLÉ redescend par pas de 5 jusqu'à ce que
+  // la page tienne en largeur (jamais sous le plancher). Il ne remonte pas
+  // tout seul quand la fenêtre est ré-agrandie, c'est le bouton + qui le
+  // remonte — même règle que l'éditeur.
+  //
+  // L'éditeur compare la largeur de la fenêtre à une constante, la largeur
+  // minimale de sa barre d'outils. Le dashboard n'en a pas : il se réagence,
+  // et ce qui déborde dépend du contenu (longueur des noms de projets,
+  // langue des boutons). On mesure donc le débordement réel plutôt que de
+  // poser un nombre qui serait faux ailleurs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const fit = () => {
+      const root = document.documentElement;
+      // 8 px de marge : en dessous c'est un arrondi de rendu, pas un
+      // débordement visible.
+      if (root.scrollWidth - root.clientWidth > 8) {
+        setDashboardZoom((z) => (z > APP_MIN_ZOOM_PERCENT ? clampZoom(z - 5) : z));
+      }
+    };
+    const raf = requestAnimationFrame(fit);
+    window.addEventListener("resize", fit);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", fit);
+    };
+  }, [dashboardZoom, files.length]);
+
   useEffect(() => {
     // Même taille minimale que l'éditeur (barre d'outils + liste des maps
     // au zoom le plus bas) pour que la fenêtre ne change pas de contrainte
@@ -882,7 +911,13 @@ function DashboardContent() {
 
         {/* Rangée titre / recherche / upload — fixe avec la barre fenêtre */}
         <div className="relative container mx-auto px-4 pt-3 pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Trois colonnes : titre à gauche, RECHERCHE AU CENTRE DE LA
+              FENÊTRE comme le wordmark, bouton d'import à droite. En
+              justify-between la recherche se plaçait entre les deux blocs,
+              donc jamais au milieu, et sa position bougeait avec la longueur
+              du titre et la langue du bouton. Sous 640 px les trois blocs
+              s'empilent. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-4">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-baseline gap-3">
                 <h3 className={`text-sm font-bold uppercase tracking-widest ${subText ?? (isLight ? 'text-slate-900' : 'text-slate-300')}`}>{t.dashboard.recentFiles}</h3>
@@ -897,8 +932,8 @@ function DashboardContent() {
               )}
             </div>
 
-            {/* Search Bar */}
-            <div className="relative w-full sm:w-80">
+            {/* Search Bar — colonne du milieu, centrée dans la fenêtre */}
+            <div className="relative w-full sm:w-80 sm:justify-self-center">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isLight ? 'text-slate-600' : 'text-slate-500'}`} />
               <input
                 type="text"
@@ -914,7 +949,7 @@ function DashboardContent() {
 
             <Button
               onClick={handleUploadClick}
-              className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 hover:from-red-500 hover:via-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/25 group"
+              className="sm:justify-self-end bg-gradient-to-r from-red-600 via-red-500 to-orange-500 hover:from-red-500 hover:via-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/25 group"
             >
               <Upload className="w-4 h-4 mr-2" />
               <span>{t.dashboard.upload}</span>

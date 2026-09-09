@@ -1314,13 +1314,23 @@ impl ECUIdentifier {
             return false;
         }
 
-        // Check for V4.1 signature at 0x50001 (EDC15P codeblock 1)
-        if data.len() > 0x50001 + pattern.len() {
-            if data[0x50001..0x50001 + pattern.len()] == pattern {
-                // Signature at 0x50001 → this is EDC15P, not EDC15VM
-                log::debug!("V4.1 signature at 0x50001 → EDC15P (not EDC15VM)");
-                return false;
-            }
+        // Signature V4.1 en 0x50001 ET en 0x60001 : les trois blocs de la
+        // disposition EDC15P standard, donc EDC15P.
+        //
+        // La signature en 0x50001 SEULE ne dit rien : des EDC15VM la portent
+        // aussi (038906012FN, 012GN…), ils n'étaient sauvés que par leur
+        // référence VAG lue plus haut. Un fichier sans référence dans le
+        // binaire tombait ici et repartait en EDC15P : l'Audi allroad 2.5 V6
+        // 0281010207 / 1037354429 sortait 18 maps au lieu de 56, sans une
+        // seule famille utile (discussion #16). Seuls les fichiers sans
+        // référence et sans chaîne de durations arrivent jusqu'ici, les
+        // EDC15P y étant déjà partis par les deux règles précédentes.
+        let sig_at = |offset: usize| -> bool {
+            data.len() > offset + pattern.len() && data[offset..offset + pattern.len()] == pattern
+        };
+        if sig_at(0x50001) && sig_at(0x60001) {
+            log::debug!("V4.1 signatures at 0x50001 and 0x60001 → EDC15P (not EDC15VM)");
+            return false;
         }
 
         // Check for V4.1 signature at 0x70001 (EDC15VM single codeblock)

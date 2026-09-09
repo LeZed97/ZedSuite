@@ -91,28 +91,7 @@ Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce q
 
 ### Contributeurs
 
-ZedSuite est meilleure parce que des gens ont pris le temps de signaler, d'envoyer des fichiers et d'écrire du code.
-
-**Code**
-
-- [@COSSART-FR](https://github.com/COSSART-FR) — estimation de puissance d'une version créée par import (1.1.8), et le détecteur Bosch EDC16CP31 Mercedes en cours.
-
-**Signalements, fichiers et idées**
-
-- [@henry66z](https://github.com/henry66z) — EDC15VM 012M : SOI unique gardée sur les fichiers modifiés, switch MAP/MAF, codes défaut, et les axes de la correction de boost par température et de la MAP linearisation.
-- [@kultss](https://github.com/kultss) — les maps masquées de la liste, et les courbes de puissance nommées avec les vrais numéros de codeblock.
-- [@georgiminchev04](https://github.com/georgiminchev04) — switch MAP/MAF sur les logiciels compacts (019CJ).
-- [@Marvx1j](https://github.com/Marvx1j) — launch control sur le 019HJ.
-- [@kapselegg](https://github.com/kapselegg) — la comparaison de versions, et plusieurs idées pour l'éditeur.
-- [@Yonifarolas](https://github.com/Yonifarolas) — les fichiers multimap et le codeblock qu'ils ajoutent.
-- [@LJ-PVD](https://github.com/LJ-PVD) — le plein écran.
-- [@reproteq](https://github.com/reproteq) et [@tboHammu](https://github.com/tboHammu) — la vue 2D des matrices complètes.
-- [@alexmieila09](https://github.com/alexmieila09) — a proposé d'écrire cette vue 2D.
-- [@legersvag](https://github.com/legersvag) — l'ajustement des durations et de l'avance pour des nez plus gros.
-- [@Hitsauskone](https://github.com/Hitsauskone) — Linux.
-- **mkjar**, **tomisuikkeli** et **HappyB** sur le fil ecuconnections — codes défaut des EDC15 compacts, maps VCDS et favoris, export CSV.
-
-Joindre un dump à un signalement, c'est ce qui rend une correction possible. Les fichiers servent uniquement à corriger le détecteur et ne sont jamais partagés.
+Toutes les personnes dont du code, un signalement ou un fichier a fait évoluer l'app, avec ce que ça a changé et la version où c'est arrivé : [CONTRIBUTORS.md](CONTRIBUTORS.md). Joindre un dump à un signalement, c'est ce qui rend une correction possible ; les fichiers servent uniquement à corriger le détecteur et ne sont jamais partagés.
 
 ## ⬇️ Téléchargement
 
