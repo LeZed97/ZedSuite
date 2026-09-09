@@ -91,28 +91,7 @@ Community contributions are welcome: **new ECU detectors** are the most valuable
 
 ### Contributors
 
-ZedSuite is better because people took the time to report, to send files and to write code.
-
-**Code**
-
-- [@COSSART-FR](https://github.com/COSSART-FR) — power estimate of a version created by importing a file (1.1.8), and the Bosch EDC16CP31 Mercedes detector in progress.
-
-**Reports, files and ideas**
-
-- [@henry66z](https://github.com/henry66z) — EDC15VM 012M: single SOI kept on tuned files, MAP/MAF switch, fault codes, and the axes of boost correction by temperature and MAP linearisation.
-- [@kultss](https://github.com/kultss) — the maps hidden from the list, and the power curves named with the real codeblock numbers.
-- [@georgiminchev04](https://github.com/georgiminchev04) — MAP/MAF switch on the compact software (019CJ).
-- [@Marvx1j](https://github.com/Marvx1j) — launch control on the 019HJ.
-- [@kapselegg](https://github.com/kapselegg) — comparing versions, and several editor ideas.
-- [@Yonifarolas](https://github.com/Yonifarolas) — multimap files and the codeblock they add.
-- [@LJ-PVD](https://github.com/LJ-PVD) — full screen.
-- [@reproteq](https://github.com/reproteq) and [@tboHammu](https://github.com/tboHammu) — the 2D view of full matrices.
-- [@alexmieila09](https://github.com/alexmieila09) — offered to write that 2D view.
-- [@legersvag](https://github.com/legersvag) — adjusting durations and injection timing for larger nozzles.
-- [@Hitsauskone](https://github.com/Hitsauskone) — Linux.
-- **mkjar**, **tomisuikkeli** and **HappyB** on the ecuconnections thread — compact EDC15 fault codes, VCDS maps and favourites, CSV export.
-
-Sending a dump with a report is what makes a detection fix possible. Files are only used to fix the detector and are never shared.
+Everyone whose code, report or file changed the app, with what it changed and the version it landed in: [CONTRIBUTORS.md](CONTRIBUTORS.md). Sending a dump with a report is what makes a detection fix possible; files are only used to fix the detector and are never shared.
 
 ## ⬇️ Download
 

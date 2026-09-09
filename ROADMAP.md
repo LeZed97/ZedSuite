@@ -10,7 +10,7 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - WinOLS-style 2D view for full matrices: one curve per row, selected row highlighted.
 - An N75 inversion switch on EDC15VM, for cars converted from a wastegate turbo to a VNT or the reverse: the block that controls it is located on most files of the bench, the switch itself is not built yet.
 - EDC15P early PD software (1999-2002, 038906019A / 019AJ): map detection is done and the DTC table is read on the 019AJ; the checksum is not supported yet, the DTC table of the 019A uses yet another layout, and the MAP linearisation map is not found on the 019A.
-- Better EDC15VM detection: a few files are still not fully covered, the 2.5 V6 (1 MB dumps) in particular, and the N146 and N75 maps of the 012K / 012AP generation. Fixes are in for the software numbers users sent (012M single SOI and MAP/MAF switch in 1.1.7).
+- Better EDC15VM detection: a few files are still not fully covered, the 2.5 V6 in particular, and the N146 and N75 maps of the 012K / 012AP generation. Fixes are in for the software numbers users sent (012M single SOI and MAP/MAF switch in 1.1.7).
 - EDC15VM: check on the car that the SVRL maps are really active when the detector finds them.
 - EDC16U31: better detection, a few EDC16U31 files are still missing from the test bench to finish it properly (the 12x12 family at 0x1D7xxx is still unnamed).
 - EDC16U1: identification of the Touareg V10 files, where only one of the two ECU numbers is found today (six files on the bench).
@@ -28,6 +28,7 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - Editing two versions of the same project side by side.
 - More functions in the map Properties window.
 - Highlighting every value that differs from stock in the map windows.
+- Remembering the map orientation (axis mirror): today the display transposition is set map by map, in one project only. The plan is to apply the choice to the whole map family at once and to save it as a global setting, so every project opens the maps the same way.
 - A Linux version. The interface is the same code as on Windows and macOS, only the shell side would need doing; it depends on how many people ask for it.
 
 ## Not planned for now

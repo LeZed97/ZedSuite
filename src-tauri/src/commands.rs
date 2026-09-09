@@ -98,7 +98,10 @@ pub fn identify_ecu(
 ///       surpression sur axe de rapport cyclique C1, limiteur par débit
 ///       d'air attendu seulement quand le fichier en porte la structure ;
 ///       EDC15VM : limiteur par débit d'air à 11 points d'axe (352 octets).
-pub const DETECTOR_VERSION: u32 = 46;
+///   47 — Switch MAP/MAF des EDC16 (U1/U31/U34) et identification : un
+///       EDC15VM sans référence VAG dans le binaire n'est plus pris
+///       pour un EDC15P (2.5 V6).
+pub const DETECTOR_VERSION: u32 = 47;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
