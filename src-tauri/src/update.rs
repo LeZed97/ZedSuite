@@ -59,6 +59,9 @@ pub enum UpdateTarget {
     WindowsX64,
     WindowsX86,
     MacOS,
+    /// No auto-installer for this build (Linux: AppImage/deb have no
+    /// in-app updater path, the user is sent to the releases page instead).
+    Unsupported,
 }
 
 impl UpdateTarget {
@@ -66,10 +69,14 @@ impl UpdateTarget {
     pub fn current() -> Self {
         if cfg!(target_os = "macos") {
             UpdateTarget::MacOS
-        } else if cfg!(target_arch = "x86") {
-            UpdateTarget::WindowsX86
+        } else if cfg!(target_os = "windows") {
+            if cfg!(target_arch = "x86") {
+                UpdateTarget::WindowsX86
+            } else {
+                UpdateTarget::WindowsX64
+            }
         } else {
-            UpdateTarget::WindowsX64
+            UpdateTarget::Unsupported
         }
     }
 
@@ -88,6 +95,7 @@ impl UpdateTarget {
             UpdateTarget::WindowsX64 => "x64",
             UpdateTarget::WindowsX86 => "x86",
             UpdateTarget::MacOS => "macos",
+            UpdateTarget::Unsupported => "unsupported",
         }
     }
 }
@@ -166,6 +174,9 @@ pub fn pick_asset(assets: &[serde_json::Value], target: UpdateTarget) -> Option<
                 }
             }
         }
+        // No installer to pick for this build; the frontend sends the user
+        // to the releases page instead.
+        UpdateTarget::Unsupported => {}
     }
     picked
 }
