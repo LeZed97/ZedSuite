@@ -62,6 +62,7 @@ pub enum ECUType {
     EDC16U,      // VAG generic (fallback)
     EDC16C,      // PSA
     EDC16CP,     // PSA newer
+    EDC16CP31,   // Mercedes-Benz OM642/OM646 common rail - MPC5xx
 
     // Bosch EDC17 family (Diesel)
     EDC17C,
@@ -134,6 +135,16 @@ impl ECUIdentifier {
         // Identify them explicitly so they can never pass for an EDC16.
         if let Some(id) = Self::identify_unsupported_bosch(data) {
             log::debug!("🚫 Unsupported Bosch family detected: {:?}", id.ecu_type);
+            return id;
+        }
+
+        // 1.5 Mercedes EDC16 gate. MUST run before the VAG variant logic:
+        // Mercedes CP31 shares the Bosch 0281 HW prefix and the 2MB dump size
+        // with the VAG EDC16, so detect_edc16_variant() would happily label a
+        // Mercedes file EDC16U31 and hand it to a detector calibrated on VAG
+        // address layouts.
+        if let Some(id) = Self::identify_mercedes_edc16(data) {
+            log::debug!("Identified as Mercedes EDC16: {:?}", id.ecu_type);
             return id;
         }
 
@@ -1199,6 +1210,142 @@ impl ECUIdentifier {
         Self::unknown_ecu(0.20)
     }
     
+    /// Positive identification of a Mercedes-Benz EDC16 (CP31 family).
+    ///
+    /// Evidence used, in decreasing strength:
+    ///   A. the literal family string "EDC16CP31" in the metadata area;
+    ///   B. a Daimler part number ("A" + 10 digits, e.g. A6421532179) in a
+    ///      file that also carries generic EDC16 characteristics;
+    ///   C. a Daimler part number plus a Bosch 0281 HW number.
+    ///
+    /// Deliberately conservative: a VAG part number anywhere in the file
+    /// vetoes the match, and evidence B/C alone yields a lower confidence.
+    /// Returning None here is safe (the VAG path runs next and will itself
+    /// refuse an unrecognised layout); returning a WRONG Some() is not.
+    ///
+    /// TODO(corpus): add a structural signature at a fixed offset once real
+    /// CP31 dumps are available, and raise the confidence accordingly. ASCII
+    /// evidence alone is weaker than what the VAG variants rely on.
+    fn identify_mercedes_edc16(data: &[u8]) -> Option<ECUIdentification> {
+        // Veto: a VAG reference means this is not a Mercedes file.
+        for vag in [&b"03G906"[..], b"038906", b"070906", b"03L906", b"045906"] {
+            if Self::contains_sequence(data, vag) {
+                return None;
+            }
+        }
+
+        let explicit = Self::contains_sequence(data, b"EDC16CP31")
+            || Self::contains_sequence(data, b"EDC16 CP31");
+        // Structural marker confirmed on a real dump: the Bosch 1037 SW
+        // number sits at the very start of the calibration area, 0x190010.
+        let structural = Self::has_cp31_sw_at_cal_start(data);
+        // Daimler engine descriptor, e.g.
+        // "CR4-642-42P7-209CM-165kW-PT2R05-LR-3907x064ME". "CR4-" plus a
+        // three digit engine group is specific enough on its own.
+        let engine_tag = Self::has_daimler_engine_tag(data);
+        let daimler_part = Self::find_daimler_part_number(data);
+        let has_edc16 = Self::has_edc16_characteristics(data);
+        let has_bosch_hw = Self::extract_bosch_hw_number_full(data).is_some();
+
+        let confidence = if explicit && (structural || engine_tag) {
+            0.95
+        } else if explicit {
+            0.90
+        } else if structural && engine_tag {
+            0.85
+        } else if daimler_part.is_some() && has_edc16 && has_bosch_hw {
+            0.72
+        } else if (daimler_part.is_some() || engine_tag) && has_edc16 {
+            0.65
+        } else {
+            return None;
+        };
+
+        Some(ECUIdentification {
+            manufacturer: ECUManufacturer::Bosch,
+            ecu_type: ECUType::EDC16CP31,
+            variant: Some("Mercedes-Benz OM642/OM646 (MPC5xx)".to_string()),
+            software_version: Self::extract_cp31_sw_number(data),
+            hardware_version: Self::extract_bosch_hw_number_full(data),
+            part_number: daimler_part,
+            confidence,
+        })
+    }
+
+    /// Offset of the Bosch 1037 software number inside a CP31 dump, counted
+    /// from the start of the calibration area. Confirmed on an OM642 dump:
+    /// calibration starts at 0x190000 and the SW string sits at 0x190010.
+    const CP31_SW_OFFSET: usize = 0x190010;
+
+    /// True when a 10 digit Bosch "1037" software number sits exactly at
+    /// CP31_SW_OFFSET. Positional, so it cannot be triggered by a stray
+    /// 1037 string elsewhere in the file.
+    fn has_cp31_sw_at_cal_start(data: &[u8]) -> bool {
+        Self::read_cp31_sw_field(data).is_some()
+    }
+
+    fn read_cp31_sw_field(data: &[u8]) -> Option<&[u8]> {
+        let end = Self::CP31_SW_OFFSET.checked_add(10)?;
+        if data.len() < end {
+            return None;
+        }
+        let field = &data[Self::CP31_SW_OFFSET..end];
+        if field.starts_with(b"1037") && field.iter().all(|c| c.is_ascii_digit()) {
+            Some(field)
+        } else {
+            None
+        }
+    }
+
+    fn extract_cp31_sw_number(data: &[u8]) -> Option<String> {
+        Self::read_cp31_sw_field(data)
+            .and_then(|f| String::from_utf8(f.to_vec()).ok())
+    }
+
+    /// Daimler engine descriptor string, e.g.
+    /// "CR4-642-42P7-209CM-165kW-PT2R05-LR-3907x064ME". Matches "CR" + one
+    /// digit + "-" + a three digit engine group.
+    fn has_daimler_engine_tag(data: &[u8]) -> bool {
+        const GROUPS: [&[u8; 3]; 5] = [b"642", b"646", b"628", b"611", b"629"];
+        data.windows(8).any(|w| {
+            w[0] == b'C'
+                && w[1] == b'R'
+                && w[2].is_ascii_digit()
+                && w[3] == b'-'
+                && GROUPS.iter().any(|g| &w[4..7] == &g[..])
+                && w[7] == b'-'
+        })
+    }
+
+    /// Find a Daimler part number: ASCII "A" followed by exactly 10 digits.
+    /// Engine/ECU groups seen on OM642/OM646 start A642/A646/A611/A628; the
+    /// group filter keeps random "A"+digits noise out.
+    fn find_daimler_part_number(data: &[u8]) -> Option<String> {
+        const GROUPS: [&[u8; 3]; 5] = [b"642", b"646", b"628", b"611", b"629"];
+        let scan_limit = std::cmp::min(Self::MAX_SCAN_BYTES, data.len());
+        let mut windows: Vec<&[u8]> = vec![&data[0..scan_limit]];
+        if data.len() == 2_097_152 {
+            windows.push(&data[0x180000..std::cmp::min(0x180000 + 100_000, data.len())]);
+        }
+
+        for window in windows {
+            for i in 0..window.len().saturating_sub(11) {
+                if window[i] != b'A' {
+                    continue;
+                }
+                let digits = &window[i + 1..i + 11];
+                if !digits.iter().all(|c| c.is_ascii_digit()) {
+                    continue;
+                }
+                if !GROUPS.iter().any(|g| &digits[0..3] == &g[..]) {
+                    continue;
+                }
+                return String::from_utf8(window[i..i + 11].to_vec()).ok();
+            }
+        }
+        None
+    }
+
     // Helper methods
     
     fn unknown_ecu(confidence: f32) -> ECUIdentification {
@@ -1764,4 +1911,75 @@ mod tests {
         assert!(sw.contains("038906019"), "SW should contain 038906019, got: {}", sw);
         assert!(sw.contains("NJ"), "SW should contain NJ, got: {}", sw);
     }
+
+    // ---- EDC16CP31 (Mercedes OM642/OM646) ----
+    //
+    // Fixtures reproduce the layout confirmed on a real OM642 dump
+    // (2MB, 0xFF below 0x190000, SW "1037393817" at 0x190010, family string
+    // and engine descriptor in the calibration area). No .bin is committed.
+
+    fn cp31_fixture() -> Vec<u8> {
+        let mut data = vec![0xFFu8; 2 * 1024 * 1024];
+        // Calibration area starts at 0x190000 and is not FF-filled.
+        for b in data[0x190000..].iter_mut() {
+            *b = 0x00;
+        }
+        data[0x190010..0x19001A].copy_from_slice(b"1037393817");
+        let family = b"99/1/EDC16CP31/001/B209/X/080000_000/";
+        data[0x1906F7..0x1906F7 + family.len()].copy_from_slice(family);
+        let engine = b"CR4-642-42P7-209CM-165kW-PT2R05-LR-3907x064ME";
+        data[0x1D751C..0x1D751C + engine.len()].copy_from_slice(engine);
+        data
+    }
+
+    #[test]
+    fn cp31_dump_is_identified_as_mercedes_edc16() {
+        let id = ECUIdentifier::identify(&cp31_fixture());
+        assert_eq!(id.manufacturer, ECUManufacturer::Bosch);
+        assert_eq!(id.ecu_type, ECUType::EDC16CP31);
+        assert_eq!(id.software_version, Some("1037393817".to_string()));
+        assert!(id.confidence >= 0.90, "confidence was {}", id.confidence);
+    }
+
+    /// The whole point of the Mercedes gate: without it a CP31 dump would
+    /// reach detect_edc16_variant() and be labelled a VAG EDC16U31.
+    #[test]
+    fn cp31_dump_is_never_labelled_vag() {
+        let id = ECUIdentifier::identify(&cp31_fixture());
+        assert_ne!(id.ecu_type, ECUType::EDC16U31);
+        assert_ne!(id.ecu_type, ECUType::EDC16U34);
+        assert_ne!(id.ecu_type, ECUType::EDC16U1);
+    }
+
+    /// Negative test required by CONTRIBUTING.md: a foreign 2MB file must
+    /// not be identified as CP31.
+    #[test]
+    fn foreign_2mb_file_is_not_cp31() {
+        let mut data = vec![0u8; 2 * 1024 * 1024];
+        for (i, b) in data.iter_mut().enumerate() {
+            *b = ((i * 7 + 13) % 251) as u8;
+        }
+        let id = ECUIdentifier::identify(&data);
+        assert_ne!(id.ecu_type, ECUType::EDC16CP31);
+    }
+
+    /// A VAG reference in the file vetoes the Mercedes match, even when the
+    /// CP31 family string is present (e.g. a mixed-up test file).
+    #[test]
+    fn vag_part_number_vetoes_the_mercedes_gate() {
+        let mut data = cp31_fixture();
+        data[0x191000..0x191006].copy_from_slice(b"03G906");
+        let id = ECUIdentifier::identify(&data);
+        assert_ne!(id.ecu_type, ECUType::EDC16CP31);
+    }
+
+    #[test]
+    fn sw_marker_is_positional_not_a_substring_search() {
+        let mut data = cp31_fixture();
+        // Move the SW number elsewhere: the positional marker must drop.
+        data[0x190010..0x19001A].copy_from_slice(b"0000000000");
+        data[0x195000..0x19500A].copy_from_slice(b"1037393817");
+        assert!(!ECUIdentifier::has_cp31_sw_at_cal_start(&data));
+    }
+
 }

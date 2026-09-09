@@ -93,6 +93,9 @@ export const ENGINE_PRESETS = [
   { id: "4cyl20", label: "2.0 TDI — 4 cyl.", cylinders: 4, displacement: 1.968 },
   { id: "5cyl25", label: "2.5 TDI — 5 cyl.", cylinders: 5, displacement: 2.461 },
   { id: "6cyl30", label: "3.0 TDI — 6 cyl.", cylinders: 6, displacement: 2.967 },
+  // Mercedes-Benz OM642 : V6 72°, 2987 cm³ (alésage 83 × course 92), le
+  // moteur des CDI 320/350 EDC16CP31. Cylindrée distincte du V6 TDI VAG.
+  { id: "6cyl30cdi", label: "3.0 CDI V6 — OM642", cylinders: 6, displacement: 2.987 },
 ] as const;
 
 // Types de nez Firad (PD 8v) — capacité d'injection PROPRE en mg/coup,
@@ -118,6 +121,47 @@ const HP_PER_KW = 1.35962;
 const R_AIR = 287; // J/(kg·K)
 const T_MANIFOLD = 330; // K after intercooler at full load
 const MIN_AFR = 17; // black-smoke bound: mg air per mg fuel (full-load builds)
+
+// Rapport air/carburant plancher à pleine charge, par famille.
+//
+// 17 est un plancher de FUMÉE NOIRE : il décrit ce qu'un moteur préparé
+// avale avant de charbonner, et il tombe juste sur les PD VAG retouchés du
+// corpus, qui gavent effectivement jusqu'à cette limite. Un common-rail
+// d'origine sous norme Euro 4 avec FAP tourne bien plus pauvre : sur le
+// fichier CP31 de référence, l'air disponible au régime de puissance maxi
+// est d'environ 1190 mg/coup pour ~55 mg de gazole, soit un AFR autour de
+// 21-22.
+//
+// Garder 17 sur CP31 faisait sortir 299 ch pour un moteur annoncé à 224 :
+// le modèle n'a PAS de limiteur de couple en Nm sur cette famille (CP31
+// limite en quantité), donc rien ne borne la demande et l'air devient le
+// seul façonneur de la courbe. C'est justement là que la valeur du plancher
+// décide de tout.
+//
+// ATTENTION — calage à une seule inconnue, sur un seul fichier, contre une
+// seule valeur publiée. 21 place la puissance maxi à 229 ch pour 224
+// annoncés (+2 %) et le couple maxi à 448 Nm. Les sources publiées ne
+// s'accordent pas sur le couple du CLK 320 CDI : Wikipédia donne 510 Nm
+// pour l'OM642 165 kW, deux bases de fiches techniques donnent 415 Nm pour
+// cette carrosserie. 448 tombe entre les deux, ce qui est cohérent mais
+// n'est PAS une validation. Un passage au banc reste la seule façon de
+// trancher ; sans lui, traiter les valeurs CP31 comme un ordre de grandeur.
+const CP31_MIN_AFR = 21;
+
+const familyAfr = (ecuType: string): number =>
+  ecuType.toUpperCase().includes("EDC16CP31") ? CP31_MIN_AFR : MIN_AFR;
+
+// The floor the user asked for wins over the family default: a build that
+// accepts visible smoke runs richer than 21:1, and the model has to be told.
+const afrFor = (ecuType: string, opts?: { minAfr?: number }): number =>
+  opts?.minAfr && opts.minAfr > 10 ? opts.minAfr : familyAfr(ecuType);
+
+// Boost the turbo actually delivers, when the user measured it. The target
+// map is a wish; on a stock OM642 the logs show it capped ~150 hPa below the
+// target above 3000 rpm, and the air model has to follow the real pressure.
+const capBoost = (boost: number, opts: { boostCapMbar?: number }): number =>
+  opts.boostCapMbar && opts.boostCapMbar > 500 ? Math.min(boost, opts.boostCapMbar) : boost;
+
 const NM_PER_KW = 9549.3; // T[Nm] = P[kW] × 9549.3 / rpm
 
 // Full-load thermal efficiency vs rpm (PD / common-rail), fitted so the
@@ -414,6 +458,8 @@ export interface PowerModelOptions {
   efficiency: number; // eta at rated rpm (DEFAULT_EFFICIENCY = 0.40)
   nozzleFactor: number; // injector nozzle flow multiplier (1 = stock)
   nozzleCeilingMg?: number; // clean-delivery ceiling of the fitted nozzles
+  minAfr?: number; // smoke floor override (mg air / mg fuel); family default when unset
+  boostCapMbar?: number; // measured absolute boost ceiling (mbar/hPa); target map when unset
 }
 
 interface Ctx {
@@ -564,6 +610,7 @@ function computeIqBasedCurve(
         boost = svbl;
       }
       if (boost == null) break;
+      boost = capBoost(boost, opts);
       const rho = (boost * 100) / (R_AIR * T_MANIFOLD); // mbar → Pa
       airMg = (opts.displacement / opts.cylinders) * 1e-3 * rho * veAt(rpm) * 1e6;
 
@@ -584,7 +631,7 @@ function computeIqBasedCurve(
         const c = Math.max(...mapCaps);
         if (c < next) { next = c; nextLimit = "smoke"; }
       }
-      const airCap = airMg / MIN_AFR;
+      const airCap = airMg / afrFor(ecuType, opts);
       if (airCap < next) { next = airCap; nextLimit = "air"; }
       const converged = next >= iq - 0.01;
       iq = next;
@@ -628,7 +675,7 @@ function computeIqBasedCurve(
           fuel = delivered;
           if (fuel > iq) limit = "injector";
         }
-        const airCap = airMg / MIN_AFR;
+        const airCap = airMg / afrFor(ecuType, opts);
         if (fuel > airCap) { fuel = airCap; limit = "air"; }
       }
     }
@@ -721,6 +768,39 @@ function computeEdc16FuelCurve(
   // MAXENCE T5 2.5 (130 hp) both land exactly with 0.93.
   const EDC16_REQ_TRIM = 0.93;
 
+  // CP31 (Mercedes CR4) full-load quantity ceilings, in mg/stroke against
+  // (engine speed, boost pressure): FlMng_qSmk_MAP and FlMng_qLimBstPres_MAP.
+  //
+  // The doc comment above says EDC16 smoke maps are unusable because their
+  // rows are stored mirrored against the detected axis. That is a property of
+  // the VAG EDC16 detectors, NOT of the family: the CP31 detector reads the
+  // self-describing Kf header and emits rows in file order
+  // (`y_axis_inverted: false`), checked against the manufacturer description.
+  // So on CP31 they can be looked up directly — and they must be, because
+  // CP31 does its torque limiting in QUANTITY, not in Nm. Without them the
+  // model takes the unlimited 500 Nm driver wish at every rpm and overshoots
+  // the rated power by a third.
+  //
+  // Only the ceilings indexed by ABSOLUTE boost qualify. FlMng_qLimBstPres
+  // ("Quantity Limiter by boost pressure") is indexed by FlMng_pDiff_mp, a
+  // pressure DIFFERENCE, so feeding it the absolute boost reads it in the
+  // wrong place and collapses the curve — it is deliberately excluded here.
+  const isCp31 = ecuType.toUpperCase().includes("EDC16CP31");
+  const qtyLimits = isCp31
+    ? ctx.maps
+        .filter((m) => {
+          const n = (m.name || "").toLowerCase();
+          return (
+            n.includes("smoke limiter") &&
+            (m.unit || "").toLowerCase().includes("mm^3")
+          );
+        })
+        .map(oriented)
+        .filter((m): m is OrientedMap => !!m)
+        // The ceiling axis must actually span absolute boost pressure.
+        .filter((m) => Math.max(...m.other) > 1500 && Math.min(...m.other) > 400)
+    : [];
+
   const boostTargets = ctx.maps
     .filter((m) => (m.name || "").toLowerCase().includes("boost target"))
     .map(oriented)
@@ -790,12 +870,22 @@ function computeEdc16FuelCurve(
         boost = svbl;
       }
       if (boost == null) break;
+      boost = capBoost(boost, opts);
       const rho = (boost * 100) / (R_AIR * T_MANIFOLD);
       airMg = (opts.displacement / opts.cylinders) * 1e-3 * rho * veAt(rpm) * 1e6;
-      const airCap = airMg / MIN_AFR;
+      const airCap = airMg / afrFor(ecuType, opts);
       if (airCap >= iq) break;
       iq = airCap;
       limit = "air";
+    }
+
+    // CP31: both quantity ceilings must hold, so the tighter one wins.
+    if (qtyLimits.length && boost != null) {
+      const cap = Math.min(...qtyLimits.map((m) => lookup(m, rpm, boost as number)));
+      if (cap > 5 && cap < iq) {
+        iq = cap;
+        limit = "smoke";
+      }
     }
 
     if (rpm >= 3000 && prevIq != null && iq < prevIq - 0.5) pastPeak = true;
@@ -830,7 +920,7 @@ function computeEdc16FuelCurve(
           fuel = delivered;
           if (fuel > iq) limit = "injector";
         }
-        const airCap = airMg / MIN_AFR;
+        const airCap = airMg / afrFor(ecuType, opts);
         if (fuel > airCap) { fuel = airCap; limit = "air"; }
       }
     }
@@ -912,11 +1002,11 @@ function computeTorqueBasedCurve(
     }
     let boost: number | null = null;
     if (boostTargets.length) {
-      boost = Math.max(...boostTargets.map((m) => perRpmMax(m, rpm)));
+      boost = capBoost(Math.max(...boostTargets.map((m) => perRpmMax(m, rpm))), opts);
       const rho = (boost * 100) / (R_AIR * T_MANIFOLD);
       const airMg = (opts.displacement / opts.cylinders) * 1e-3 * rho * veAt(rpm) * 1e6;
       const eta = etaStdAt(rpm) * (opts.efficiency / DEFAULT_EFFICIENCY);
-      const airKw = ((airMg / MIN_AFR) * 1e-6 * opts.cylinders * rpm) / 120 * DIESEL_LHV * eta / 1000;
+      const airKw = ((airMg / afrFor(ecuType, opts)) * 1e-6 * opts.cylinders * rpm) / 120 * DIESEL_LHV * eta / 1000;
       const airNm = (airKw * NM_PER_KW) / rpm;
       if (airNm < nm) { nm = airNm; limit = "air"; }
     }
@@ -1028,6 +1118,9 @@ export function computePowerCurves(
 /** Guess the engine preset from the project's metadata. */
 export function guessEnginePreset(engineType?: string, ecuType?: string): string {
   const s = `${engineType || ""} ${ecuType || ""}`.toLowerCase();
+  // CP31 d'abord : le test « edc16 » plus bas renverrait le 2.0 TDI, et un
+  // V6 de 3 litres estimé sur 4 cylindres de 1968 cm³ sort n'importe quoi.
+  if (s.includes("edc16cp31") || s.includes("om642")) return "6cyl30cdi";
   if (s.includes("1.4") || s.includes("1,4")) return "3cyl14";
   if (s.includes("2.0") || s.includes("2,0") || s.includes("edc16")) return "4cyl20";
   if (s.includes("2.5") || s.includes("2,5")) return "5cyl25";

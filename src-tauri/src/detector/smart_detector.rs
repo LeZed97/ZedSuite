@@ -1,6 +1,6 @@
 use crate::models::DetectedMap;
 use crate::detector::ecu_identifier::{ECUIdentifier, ECUIdentification, ECUType};
-use crate::detector::ecu::bosch::{EDC15PDetector, EDC15VMDetector, EDC16U1Detector, EDC16U31Detector, EDC16U34Detector};
+use crate::detector::ecu::bosch::{EDC15PDetector, EDC15VMDetector, EDC16U1Detector, EDC16U31Detector, EDC16U34Detector, EDC16CP31Detector};
 use crate::detector::ecu::bosch::edc16u34::EDC16Variant;
 use crate::detector::ecu::bosch::edc16u31::EDC16Variant as EDC16U31Variant;
 
@@ -72,6 +72,14 @@ impl SmartDetector {
                 log::debug!("📋 Using EDC16U34 specialized detector");
                 self.detect_edc16u34(data, EDC16Variant::EDC16U34, tuned_mode)
             }
+            // EDC16CP31 (Mercedes OM642/OM646) - self-describing Kf block
+            // walk, calibrated on one software build. Returns an empty list
+            // if no template is calibrated; it never falls back to the VAG
+            // detectors.
+            ECUType::EDC16CP31 => {
+                log::debug!("Using EDC16CP31 detector");
+                self.detect_edc16cp31(data, tuned_mode)
+            }
             // Other EDC16 variants - no detection for now (return empty)
             ECUType::EDC16U | ECUType::EDC16C | ECUType::EDC16CP => {
                 log::debug!("⚠️ No specialized detector for {:?} yet, returning empty", ecu_id.ecu_type);
@@ -106,6 +114,18 @@ impl SmartDetector {
         let maps = detector.detect(data);
         log::debug!("   EDC16U31 detector found {} maps (tuned_mode: {})", maps.len(), tuned_mode);
 
+        maps
+    }
+
+    /// EDC16CP31 detection (Mercedes OM642/OM646)
+    fn detect_edc16cp31(&self, data: &[u8], tuned_mode: bool) -> Vec<DetectedMap> {
+        let detector = if tuned_mode {
+            EDC16CP31Detector::new_tuned()
+        } else {
+            EDC16CP31Detector::new()
+        };
+        let maps = detector.detect(data);
+        log::debug!("   EDC16CP31 detector found {} maps (tuned_mode: {})", maps.len(), tuned_mode);
         maps
     }
 

@@ -97,6 +97,11 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
   );
   const [efficiency, setEfficiency] = useState<number>(DEFAULT_EFFICIENCY);
   const [nozzle, setNozzle] = useState<string>("stock");
+  // Smoke floor (AFR) and measured boost ceiling: the model reads the boost
+  // TARGET map, but a turbo that never reaches it makes the estimate follow
+  // a pressure that does not exist. Both stay off unless the user sets them.
+  const [minAfr, setMinAfr] = useState<string>("family");
+  const [boostCap, setBoostCap] = useState<string>("");
   const [results, setResults] = useState<SourceCurveResult[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   // Largeur naturelle de la barre des pics : remontée au cadre flottant
@@ -241,6 +246,8 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
             efficiency,
             nozzleFactor: noz.factor,
             nozzleCeilingMg: noz.ceilingMg,
+            minAfr: minAfr === "family" ? undefined : Number(minAfr),
+            boostCapMbar: Number(boostCap) > 500 ? Number(boostCap) : undefined,
           },
           edits
         );
@@ -265,7 +272,7 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versionId, preset, efficiency, nozzle, versions, file, live?.versionId, live?.refreshKey, refreshTick]);
+  }, [versionId, preset, efficiency, nozzle, minAfr, boostCap, versions, file, live?.versionId, live?.refreshKey, refreshTick]);
 
   const shown = useMemo(
     () => results.filter((r) => selected.includes(r.source.id)),
@@ -580,6 +587,36 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
               />
             </div>
           )}
+          <div className="flex items-center gap-2 pw-ctrl">
+            <span className="text-sm text-slate-400">{t.dashboard.powerAfr}:</span>
+            <StyledSelect
+              appearance="auto"
+              value={minAfr}
+              onChange={setMinAfr}
+              minWidth={170}
+              options={[
+                { value: "family", label: t.dashboard.powerAfrFamily },
+                { value: "19", label: t.dashboard.powerAfrModerate },
+                { value: "17", label: t.dashboard.powerAfrBlack },
+              ]}
+            />
+          </div>
+          <div className="flex items-center gap-2 pw-ctrl">
+            <span className="text-sm text-slate-400">{t.dashboard.powerBoostCap}:</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1000}
+              max={4000}
+              step={10}
+              value={boostCap}
+              onChange={(e) => setBoostCap(e.target.value)}
+              placeholder={t.dashboard.powerBoostCapHint}
+              title={t.dashboard.powerBoostCapTitle}
+              className="w-24 rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1 text-sm text-slate-200 placeholder:text-slate-600 focus:border-slate-500 focus:outline-none"
+            />
+            <span className="text-xs text-slate-500">hPa</span>
+          </div>
           {embedded && (
             <>
               <div className="pw-refresh">{refreshButton}</div>

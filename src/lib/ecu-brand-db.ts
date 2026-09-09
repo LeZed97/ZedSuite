@@ -1,4 +1,4 @@
-// ECU reference -> vehicle brand database (VAG only).
+// ECU reference -> vehicle brand database (VAG + une entrée Mercedes CP31).
 //
 // ecu-brand-db.json maps normalized ECU references to the vehicle they were
 // fitted in: Bosch order numbers ("0281011823") and VAG part numbers
@@ -16,7 +16,8 @@
 import db from "./ecu-brand-db.json";
 
 export interface EcuBrandInfo {
-  /** Vehicle brand: Audi | Seat | Skoda | Volkswagen */
+  /** Vehicle brand: Audi | Mercedes-Benz | Seat | Skoda | Volkswagen —
+   *  doit rester aligné sur la liste déroulante de project-creator.tsx. */
   b: string;
   /** Vehicle model (e.g. "Golf", "Ibiza") when known */
   m?: string;

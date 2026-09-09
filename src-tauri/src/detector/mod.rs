@@ -29,6 +29,7 @@ impl MapDetector {
             "EDC16U31" => Some(ECUType::EDC16U31),
             "EDC16U34" => Some(ECUType::EDC16U34),
             "EDC16U1" => Some(ECUType::EDC16U1),
+            "EDC16CP31" => Some(ECUType::EDC16CP31),
             "EDC15P" => Some(ECUType::EDC15P),
             "EDC15VM" => Some(ECUType::EDC15VM),
             "EDC15V" => Some(ECUType::EDC15V),
@@ -50,7 +51,10 @@ impl MapDetector {
         let forced = ecu_type.and_then(Self::parse_ecu_type);
         let forced_is_edc16 = matches!(
             forced,
-            Some(ECUType::EDC16U1) | Some(ECUType::EDC16U31) | Some(ECUType::EDC16U34)
+            Some(ECUType::EDC16U1)
+                | Some(ECUType::EDC16U31)
+                | Some(ECUType::EDC16U34)
+                | Some(ECUType::EDC16CP31)
         );
 
         // Use smart detector (identifies ECU type first, then uses appropriate patterns)
@@ -74,6 +78,7 @@ impl MapDetector {
                 | ECUType::EDC16U
                 | ECUType::EDC16C
                 | ECUType::EDC16CP
+                | ECUType::EDC16CP31
         ) || forced_is_edc16;
 
         // Famille pour la normalisation des axes : le type forcé par l'appelant

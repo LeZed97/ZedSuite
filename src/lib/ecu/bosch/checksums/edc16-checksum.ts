@@ -1,9 +1,13 @@
 /**
- * EDC16 Checksum Calculator (Bosch EDC16U1 / EDC16U31 / EDC16U34)
+ * EDC16 Checksum Calculator
+ * (Bosch EDC16U1 / EDC16U31 / EDC16U34 / EDC16CP31)
  *
  * Implémentation native, reversée depuis l'analyse d'une librairie de
  * référence et validée octet par octet contre 6 paires de fichiers
- * (U1 1 Mo, U31 et U34 2 Mo) : 6/6 reproduits exactement.
+ * (U1 1 Mo, U31 et U34 2 Mo) : 6/6 reproduits exactement. Étendue ensuite
+ * au Mercedes EDC16CP31 (OM642, SW 1037393817), qui a montré que
+ * l'alignement de FIN de région supposé jusque-là était une propriété du
+ * corpus VAG, pas du format — voir REGION_END_ALIGNMENT.
  *
  * ── Format ────────────────────────────────────────────────────────────
  * Chaque région protégée est annoncée par une signature de 8 octets
@@ -36,7 +40,7 @@ const MAGIC = [0xfa, 0xde, 0xca, 0xfe, 0xca, 0xfe, 0xaf, 0xfe];
 const MAGIC_OFFSET_IN_REGION = 0x3c;
 
 /**
- * Alignement du début de région. La signature apparaît aussi à l'intérieur
+ * Alignement du DÉBUT de région. La signature apparaît aussi à l'intérieur
  * des données de certains fichiers ; sans cette contrainte on fabriquerait
  * des régions fantômes (bornes absurdes mais cohérentes entre elles) et la
  * "correction" écrirait n'importe où. Toutes les vraies régions observées
@@ -44,6 +48,33 @@ const MAGIC_OFFSET_IN_REGION = 0x3c;
  * recherche utilisé par le calculateur d'origine.
  */
 const REGION_ALIGNMENT = 0x100;
+
+/**
+ * Alignement de la FIN de région.
+ *
+ * La fin était contrainte sur 0x100 elle aussi, ce qui était vrai des six
+ * paires VAG du corpus d'origine mais n'est PAS une propriété du format.
+ * Sur Mercedes EDC16CP31 (OM642, SW 1037393817) la région déclarée est
+ * 0x190000..0x1FCFFB : début aligné sur 0x100, mais `end + 1` = 0x1FCFFC,
+ * qui n'est aligné que sur 4. La région était donc rejetée, `correctEDC16-
+ * Checksum` retournait `null`, et l'éditeur affichait « Checksum non
+ * supporté » sur un fichier dont le checksum est parfaitement lisible —
+ * la somme de la région vaut exactement 0xD01FE500, mot de checksum inclus.
+ *
+ * La fin n'a besoin que d'être alignée sur un dword : le checksum est le
+ * dernier dword de la région. La rigueur perdue est compensée par
+ * MIN_REGION_LENGTH ci-dessous ; le vrai garde-fou reste l'alignement du
+ * début, qui contraint la position de la signature elle-même.
+ */
+const REGION_END_ALIGNMENT = 4;
+
+/**
+ * Longueur minimale d'une région protégée. Une occurrence fortuite de la
+ * signature produirait des bornes quelconques ; exiger une région d'au
+ * moins 4 Ko élimine les fenêtres minuscules sans exclure aucune région
+ * réelle (la plus petite observée fait plusieurs centaines de kilo-octets).
+ */
+const MIN_REGION_LENGTH = 0x1000;
 
 /** Somme cible : invariant vérifié par le calculateur. */
 const TARGET_SUM = 0xd01fe500;
@@ -106,9 +137,14 @@ export function findEdc16Regions(fileData: ArrayLike<number>): Edc16Region[] {
 
     if (!(start >= 0 && start < end && end < size)) continue;
     if (start % REGION_ALIGNMENT !== 0) continue;
-    if ((end + 1) % REGION_ALIGNMENT !== 0) continue;
+    if ((end + 1) % REGION_END_ALIGNMENT !== 0) continue;
     const length = end + 1 - start;
     if (length % 4 !== 0) continue;
+    if (length < MIN_REGION_LENGTH) continue;
+    // La signature doit vivre DANS sa propre région : sans ça, deux dwords
+    // quelconques précédant une occurrence fortuite suffisent à fabriquer
+    // une fenêtre cohérente ailleurs dans le fichier.
+    if (i < start || i >= end) continue;
 
     regions.push({ start, end, checksumOffset: end + 1 - 4 });
   }

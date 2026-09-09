@@ -79,6 +79,28 @@ pub fn identify_ecu(
 ///   7 — EDC15VM : « Inverse driver wish » retirée (absente de l'EDC15P) et
 ///       « EGR 01 » renommée « EGR » ; EDC15P : dossier « Engine torque
 ///       request » renommé « Engine fuel request »
+///   39 — EDC16CP31 : famille calibrée (11 familles de maps, lecture des
+///       blocs Kf auto-descriptifs). Le détecteur produit des maps là où il
+///       n'en produisait aucune : les projets CP31 doivent être re-scannés.
+///   40 — EDC16CP31 : localisation par clé d'axes exacte, indépendante de
+///       l'adresse. Sur le corpus les maps trouvées sont les mêmes, mais
+///       leur confiance change et un logiciel non catalogué peut désormais
+///       en produire : les projets CP31 doivent être re-scannés.
+///   41 — EDC16CP31 : « Smoke Limiter by boost pressure » séparée en deux
+///       familles distinctes (« Smoke Limiter » = FlMng_qSmk, protection
+///       fumée ; « Thermal Quantity Limiter » = FlMng_qLimT3BPS, protection
+///       thermique). Les noms de maps changent, et un fichier déjà modifié
+///       ne perd plus ses cartes remontées : les projets CP31 doivent être
+///       re-scannés.
+///   42 — EDC16CP31 : lecture des courbes Kl_Xs16_Ws16. Deux familles
+///       ajoutées (FlMng_qLimN, la limite de quantité par régime, et
+///       Rail_pMaxSetSubst). Le détecteur remonte des éléments qu'il ne
+///       produisait pas : les projets CP31 doivent être re-scannés.
+///   43 — Fusion avec l'amont 1.1.7 : EDC15P « VCDS Diagnostic Display
+///       offsets » renommée « Display scaling », EDC15VM « MAP/MAF switch »
+///       ajouté. Numéros 39–42 partagés entre les deux lignées, donc tous
+///       les projets EDC15 et CP31 doivent être re-scannés.
+///   (amont, numéros 41–47 attribués indépendamment sur master) :
 ///   41 — EDC15P : le switch MAP/MAF est trouvé sur la disposition compacte
 ///       (019AJ, 019AN, 019BK, 019CJ), identifiant 01 02 et queue 00 01 01 01.
 ///   42 — Libellés/facteurs d'axes normalisés (MAP linearisation en mV, boost
@@ -101,7 +123,12 @@ pub fn identify_ecu(
 ///   47 — Switch MAP/MAF des EDC16 (U1/U31/U34) et identification : un
 ///       EDC15VM sans référence VAG dans le binaire n'est plus pris
 ///       pour un EDC15P (2.5 V6).
-pub const DETECTOR_VERSION: u32 = 47;
+///   48 — Fusion avec l'amont 1.2.0 (amont 41–47 : MAP/MAF EDC15P compact,
+///       axes normalisés, EDC15P 1.4 TDI 3 cyl., MAP/MAF EDC16 U1/U31/U34,
+///       identification EDC15VM 2.5 V6). Numéros 41–47 en doublon entre les
+///       deux lignées, donc tous les projets EDC15, EDC16 et CP31 doivent
+///       être re-scannés.
+pub const DETECTOR_VERSION: u32 = 48;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -158,6 +185,53 @@ pub fn detect_maps(request: DetectMapsArgs) -> Result<DetectMapsResponse, String
     Ok(response)
 }
 
+/// Completeness report for the Bosch EDC16CP31 (Mercedes OM642/OM646).
+///
+/// The corpus holds ONE software build (OM642 165 kW, SW 1037393817), on
+/// which the detector returns 25 maps. Turning its per-family counts into
+/// expectations would be over-reading them: another legitimate build has
+/// other counts, and the report would cry "modified file" on a healthy one.
+/// With a corpus of one the only defensible invariant is PRESENCE - a stock
+/// CP31 carries at least one map of each of the eleven calibrated families.
+///
+/// Tighten the counts once a second software build joins the corpus.
+fn build_expected_report_edc16cp31(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapStatus>> {
+    // (label, minimum expected, counted name prefix) - the prefixes are the
+    // `name` values set by MAP_TEMPLATES in the CP31 detector.
+    let rules: &[(&str, usize, &str)] = &[
+        ("Rail Pressure Target", 1, "Rail Pressure Target"),
+        ("Rail Pressure Limiter", 1, "Rail Pressure Limiter"),
+        ("Boost Target", 1, "Boost Target"),
+        ("Boost Limiter", 1, "Boost Limiter"),
+        ("VNT Duty Cycle", 1, "VNT Duty Cycle"),
+        ("Smoke Limiter", 1, "Smoke Limiter"),
+        ("Thermal Quantity Limiter", 1, "Thermal Quantity Limiter"),
+        ("Driver Wish", 1, "Driver Wish"),
+        ("Quantity Limiter", 1, "Quantity Limiter by boost pressure"),
+        ("Torque to IQ Conversion", 1, "Torque to IQ Conversion"),
+        ("Start of injection", 1, "Start of injection"),
+        ("EGR air mass target", 1, "EGR air mass target"),
+        ("Quantity Limiter by RPM", 1, "Quantity Limiter by RPM"),
+        ("Rail Pressure Substitute Limit", 1, "Rail Pressure Substitute Limit"),
+    ];
+
+    Some(
+        rules
+            .iter()
+            .map(|(label, expected, prefix)| ExpectedMapStatus {
+                label: label.to_string(),
+                expected: *expected,
+                found: maps
+                    .iter()
+                    .filter(|m| {
+                        m.name.as_deref().map(|n| n.starts_with(prefix)).unwrap_or(false)
+                    })
+                    .count(),
+            })
+            .collect(),
+    )
+}
+
 /// Rapport de complétude EDC16 : familles de maps qui existent TOUJOURS dans
 /// un fichier de cette famille (invariants métier). Un compte insuffisant
 /// signale un fichier probablement déjà fortement modifié — l'app conseille
@@ -174,6 +248,13 @@ fn build_expected_report(
     }
     if ecu.contains("EDC15VM") {
         return build_expected_report_edc15vm(maps);
+    }
+    // EDC16CP31 (Mercedes): the EDC16 rules below are VAG ones (Duration
+    // 00-05, Gearbox Torque Limiter, SVRL, Smoke Limiter by MAF/MAP/Lambda).
+    // None of those families exists under that name on a Mercedes CR4, so
+    // applying them scored a perfectly healthy file at 3 %.
+    if ecu.contains("EDC16CP31") {
+        return build_expected_report_edc16cp31(maps);
     }
     if !ecu.contains("EDC16") {
         return None;
@@ -717,4 +798,90 @@ pub fn list_ecus() -> Result<serde_json::Value, String> {
         "total": total,
         "version": env!("CARGO_PKG_VERSION"),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{DataType, MapDimensions};
+
+    fn map_named(name: &str) -> DetectedMap {
+        let mut m = DetectedMap::new(
+            0x190000,
+            512,
+            MapDimensions::TwoDimensional { rows: 16, cols: 16 },
+            DataType::UInt16,
+        );
+        m.name = Some(name.to_string());
+        m
+    }
+
+    /// The eleven CP31 families the detector emits must all be recognised by
+    /// the report. A prefix typo here would silently score a healthy file
+    /// below 100 % - which is exactly the bug this report had when CP31 fell
+    /// through to the VAG rules.
+    #[test]
+    fn cp31_report_matches_every_detector_family() {
+        use crate::detector::ecu::bosch::edc16cp31::{CURVE_TEMPLATES, MAP_TEMPLATES};
+        // Driven by the detector's own tables rather than a copy of them:
+        // a hard-coded list here is exactly what lets the report and the
+        // detector drift apart when a family is added, split or renamed.
+        let names: Vec<&str> = MAP_TEMPLATES
+            .iter()
+            .filter(|t| t.calibrated)
+            .map(|t| t.name)
+            .chain(
+                CURVE_TEMPLATES
+                    .iter()
+                    .filter(|t| t.calibrated)
+                    .map(|t| t.name),
+            )
+            .collect();
+        let maps: Vec<DetectedMap> = names.iter().map(|n| map_named(n)).collect();
+        let report = build_expected_report(Some("EDC16CP31"), &maps).expect("CP31 report");
+
+        assert_eq!(report.len(), names.len(), "one entry per calibrated family");
+        for row in &report {
+            assert_eq!(row.expected, 1, "{}: corpus of one supports presence only", row.label);
+            assert!(row.found >= 1, "{} not matched by its prefix", row.label);
+        }
+    }
+
+    /// Every name in the report must come from a real detector family - maps
+    /// or curves: the tables are edited in different files and drift silently.
+    #[test]
+    fn cp31_report_prefixes_exist_in_the_detector() {
+        use crate::detector::ecu::bosch::edc16cp31::{CURVE_TEMPLATES, MAP_TEMPLATES};
+        let maps: Vec<DetectedMap> = MAP_TEMPLATES
+            .iter()
+            .map(|t| map_named(t.name))
+            .chain(CURVE_TEMPLATES.iter().map(|t| map_named(t.name)))
+            .collect();
+        let report = build_expected_report(Some("EDC16CP31"), &maps).expect("CP31 report");
+        for row in &report {
+            assert!(row.found >= 1, "{} matches no detector family name", row.label);
+        }
+    }
+
+    /// CP31 must NOT fall through to the VAG rule set - that scored a healthy
+    /// Mercedes dump at 3 % against families it does not have.
+    #[test]
+    fn cp31_does_not_use_the_vag_rules() {
+        let maps = vec![map_named("Boost Target")];
+        let report = build_expected_report(Some("EDC16CP31"), &maps).expect("CP31 report");
+        for vag_only in ["Duration 00", "Gearbox Torque Limiter", "SVRL - RPM Limiter"] {
+            assert!(
+                !report.iter().any(|r| r.label == vag_only),
+                "VAG family {vag_only} leaked into the CP31 report"
+            );
+        }
+    }
+
+    /// And the VAG families must keep their own rules.
+    #[test]
+    fn vag_edc16_still_uses_the_vag_rules() {
+        let maps = vec![map_named("Boost target map")];
+        let report = build_expected_report(Some("EDC16U34"), &maps).expect("EDC16 report");
+        assert!(report.iter().any(|r| r.label == "Duration 00"));
+    }
 }

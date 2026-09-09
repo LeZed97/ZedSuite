@@ -504,6 +504,8 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
                   options={[
                     { value: "", label: t.upload?.select || "Select..." },
                     { value: "Audi", label: "Audi" },
+                    // OM642/OM646 EDC16CP31 (CLK/E/ML/Sprinter CDI…)
+                    { value: "Mercedes-Benz", label: "Mercedes-Benz" },
                     { value: "Seat", label: "Seat" },
                     { value: "Skoda", label: "Skoda" },
                     { value: "Volkswagen", label: "Volkswagen" },
