@@ -148,8 +148,19 @@ const MIN_AFR = 17; // black-smoke bound: mg air per mg fuel (full-load builds)
 // trancher ; sans lui, traiter les valeurs CP31 comme un ordre de grandeur.
 const CP31_MIN_AFR = 21;
 
-const afrFor = (ecuType: string): number =>
+const familyAfr = (ecuType: string): number =>
   ecuType.toUpperCase().includes("EDC16CP31") ? CP31_MIN_AFR : MIN_AFR;
+
+// The floor the user asked for wins over the family default: a build that
+// accepts visible smoke runs richer than 21:1, and the model has to be told.
+const afrFor = (ecuType: string, opts?: { minAfr?: number }): number =>
+  opts?.minAfr && opts.minAfr > 10 ? opts.minAfr : familyAfr(ecuType);
+
+// Boost the turbo actually delivers, when the user measured it. The target
+// map is a wish; on a stock OM642 the logs show it capped ~150 hPa below the
+// target above 3000 rpm, and the air model has to follow the real pressure.
+const capBoost = (boost: number, opts: { boostCapMbar?: number }): number =>
+  opts.boostCapMbar && opts.boostCapMbar > 500 ? Math.min(boost, opts.boostCapMbar) : boost;
 
 const NM_PER_KW = 9549.3; // T[Nm] = P[kW] × 9549.3 / rpm
 
@@ -446,6 +457,8 @@ export interface PowerModelOptions {
   efficiency: number; // eta at rated rpm (DEFAULT_EFFICIENCY = 0.40)
   nozzleFactor: number; // injector nozzle flow multiplier (1 = stock)
   nozzleCeilingMg?: number; // clean-delivery ceiling of the fitted nozzles
+  minAfr?: number; // smoke floor override (mg air / mg fuel); family default when unset
+  boostCapMbar?: number; // measured absolute boost ceiling (mbar/hPa); target map when unset
 }
 
 interface Ctx {
@@ -596,6 +609,7 @@ function computeIqBasedCurve(
         boost = svbl;
       }
       if (boost == null) break;
+      boost = capBoost(boost, opts);
       const rho = (boost * 100) / (R_AIR * T_MANIFOLD); // mbar → Pa
       airMg = (opts.displacement / opts.cylinders) * 1e-3 * rho * veAt(rpm) * 1e6;
 
@@ -616,7 +630,7 @@ function computeIqBasedCurve(
         const c = Math.max(...mapCaps);
         if (c < next) { next = c; nextLimit = "smoke"; }
       }
-      const airCap = airMg / afrFor(ecuType);
+      const airCap = airMg / afrFor(ecuType, opts);
       if (airCap < next) { next = airCap; nextLimit = "air"; }
       const converged = next >= iq - 0.01;
       iq = next;
@@ -660,7 +674,7 @@ function computeIqBasedCurve(
           fuel = delivered;
           if (fuel > iq) limit = "injector";
         }
-        const airCap = airMg / afrFor(ecuType);
+        const airCap = airMg / afrFor(ecuType, opts);
         if (fuel > airCap) { fuel = airCap; limit = "air"; }
       }
     }
@@ -855,9 +869,10 @@ function computeEdc16FuelCurve(
         boost = svbl;
       }
       if (boost == null) break;
+      boost = capBoost(boost, opts);
       const rho = (boost * 100) / (R_AIR * T_MANIFOLD);
       airMg = (opts.displacement / opts.cylinders) * 1e-3 * rho * veAt(rpm) * 1e6;
-      const airCap = airMg / afrFor(ecuType);
+      const airCap = airMg / afrFor(ecuType, opts);
       if (airCap >= iq) break;
       iq = airCap;
       limit = "air";
@@ -904,7 +919,7 @@ function computeEdc16FuelCurve(
           fuel = delivered;
           if (fuel > iq) limit = "injector";
         }
-        const airCap = airMg / afrFor(ecuType);
+        const airCap = airMg / afrFor(ecuType, opts);
         if (fuel > airCap) { fuel = airCap; limit = "air"; }
       }
     }
@@ -986,11 +1001,11 @@ function computeTorqueBasedCurve(
     }
     let boost: number | null = null;
     if (boostTargets.length) {
-      boost = Math.max(...boostTargets.map((m) => perRpmMax(m, rpm)));
+      boost = capBoost(Math.max(...boostTargets.map((m) => perRpmMax(m, rpm))), opts);
       const rho = (boost * 100) / (R_AIR * T_MANIFOLD);
       const airMg = (opts.displacement / opts.cylinders) * 1e-3 * rho * veAt(rpm) * 1e6;
       const eta = etaStdAt(rpm) * (opts.efficiency / DEFAULT_EFFICIENCY);
-      const airKw = ((airMg / afrFor(ecuType)) * 1e-6 * opts.cylinders * rpm) / 120 * DIESEL_LHV * eta / 1000;
+      const airKw = ((airMg / afrFor(ecuType, opts)) * 1e-6 * opts.cylinders * rpm) / 120 * DIESEL_LHV * eta / 1000;
       const airNm = (airKw * NM_PER_KW) / rpm;
       if (airNm < nm) { nm = airNm; limit = "air"; }
     }
