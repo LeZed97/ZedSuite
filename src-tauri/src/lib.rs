@@ -17,18 +17,21 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // Taille d'ouverture adaptée à l'écran : ~90 % du moniteur
-            // (plafonnée pour les grands écrans), centrée. La taille fixe de
-            // tauri.conf.json était trop basse sur les portables 15" à
-            // l'échelle 125 %. L'utilisateur reste libre de redimensionner.
+            // Taille d'ouverture adaptée à l'écran : 95 % de la ZONE DE
+            // TRAVAIL du moniteur, c'est-à-dire l'écran moins la barre des
+            // tâches, plafonnée pour les grands écrans et centrée. La taille
+            // fixe de tauri.conf.json était trop basse sur les portables 15"
+            // à l'échelle 125 % ; le calcul précédent partait de l'écran
+            // entier avec une marge de 14 % posée au jugé et un plancher de
+            // 700 points, si bien qu'en 1024x768 la fenêtre passait sous la
+            // barre des tâches. L'utilisateur reste libre de redimensionner.
             use tauri::{LogicalSize, Manager};
             if let Some(window) = app.get_webview_window("main") {
                 if let Ok(Some(monitor)) = window.current_monitor() {
                     let scale = monitor.scale_factor();
-                    let screen = monitor.size().to_logical::<f64>(scale);
-                    let width = (screen.width * 0.90).min(1680.0).max(900.0);
-                    // 0.86 : garde une marge pour la barre des tâches
-                    let height = (screen.height * 0.86).min(1120.0).max(700.0);
+                    let work = monitor.work_area().size.to_logical::<f64>(scale);
+                    let width = (work.width * 0.95).min(1680.0).max(680.0);
+                    let height = (work.height * 0.95).min(1120.0).max(600.0);
                     let _ = window.set_size(LogicalSize::new(width, height));
                     let _ = window.center();
                 }

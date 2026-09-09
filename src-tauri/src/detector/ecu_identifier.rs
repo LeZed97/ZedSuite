@@ -1403,6 +1403,39 @@ impl ECUIdentifier {
     ///   - EDC15VM: exactly 1 signature at 0x70001 (single codeblock at 0x70000)
     ///   - EDC15P:  2-3 signatures, always including one at 0x50001 (codeblocks at 0x50000+)
     /// Rule: if V4.1 exists at 0x50001 → EDC15P; if only at 0x70001 → EDC15VM.
+    /// Nombre de structures « duration d'injection » : axe IQ (id famille C4
+    /// ou C5, 6 à 20 points croissants) immédiatement suivi d'un axe régime
+    /// (id famille EA ou EC, 8 à 20 points croissants finissant entre 2000
+    /// et 6000). Les 1.4 TDI de 1998 (TSW V2.10) utilisent C4/EA.
+    fn count_injector_duration_structures(data: &[u8]) -> usize {
+        let rd = |o: usize| u16::from_le_bytes([data[o], data[o + 1]]);
+        let mut count = 0;
+        let mut off = 0usize;
+        while off + 8 <= data.len() {
+            let iq_id = rd(off);
+            let iq_len = rd(off + 2) as usize;
+            if matches!(iq_id >> 8, 0xC4 | 0xC5) && (6..=20).contains(&iq_len) && off + 4 + 2 * iq_len + 4 <= data.len() {
+                let iq: Vec<u16> = (0..iq_len).map(|i| rd(off + 4 + 2 * i)).collect();
+                let r_off = off + 4 + 2 * iq_len;
+                let r_len = rd(r_off + 2) as usize;
+                if iq.windows(2).all(|w| w[0] < w[1])
+                    && matches!(rd(r_off) >> 8, 0xEA | 0xEC)
+                    && (8..=20).contains(&r_len)
+                    && r_off + 4 + 2 * r_len <= data.len()
+                {
+                    let rpm: Vec<u16> = (0..r_len).map(|i| rd(r_off + 4 + 2 * i)).collect();
+                    if rpm.windows(2).all(|w| w[0] < w[1]) && (2000..=6000).contains(&rpm[r_len - 1]) {
+                        count += 1;
+                        off = r_off + 4 + 2 * r_len;
+                        continue;
+                    }
+                }
+            }
+            off += 2;
+        }
+        count
+    }
+
     fn has_edc15vm_signature(data: &[u8]) -> bool {
         let pattern: [u8; 11] = [0x67, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x56, 0x34, 0x2E, 0x31];
 
@@ -1420,13 +1453,31 @@ impl ECUIdentifier {
             return false;
         }
 
-        // Check for V4.1 signature at 0x50001 (EDC15P codeblock 1)
-        if data.len() > 0x50001 + pattern.len() {
-            if data[0x50001..0x50001 + pattern.len()] == pattern {
-                // Signature at 0x50001 → this is EDC15P, not EDC15VM
-                log::debug!("V4.1 signature at 0x50001 → EDC15P (not EDC15VM)");
-                return false;
-            }
+        // Sans référence VAG (lecture sans chaîne, ex. 1.4 TDI de 1998) :
+        // un EDC15P porte des durations d'injection (axe IQ famille C5 suivi
+        // d'un axe régime famille EC), une pompe VP37 (EDC15VM) n'en a pas.
+        if Self::count_injector_duration_structures(data) >= 3 {
+            log::debug!("injector duration structures found → EDC15P");
+            return false;
+        }
+
+        // Signature V4.1 en 0x50001 ET en 0x60001 : les trois blocs de la
+        // disposition EDC15P standard, donc EDC15P.
+        //
+        // La signature en 0x50001 SEULE ne dit rien : des EDC15VM la portent
+        // aussi (038906012FN, 012GN…), ils n'étaient sauvés que par leur
+        // référence VAG lue plus haut. Un fichier sans référence dans le
+        // binaire tombait ici et repartait en EDC15P : l'Audi allroad 2.5 V6
+        // 0281010207 / 1037354429 sortait 18 maps au lieu de 56, sans une
+        // seule famille utile (discussion #16). Seuls les fichiers sans
+        // référence et sans chaîne de durations arrivent jusqu'ici, les
+        // EDC15P y étant déjà partis par les deux règles précédentes.
+        let sig_at = |offset: usize| -> bool {
+            data.len() > offset + pattern.len() && data[offset..offset + pattern.len()] == pattern
+        };
+        if sig_at(0x50001) && sig_at(0x60001) {
+            log::debug!("V4.1 signatures at 0x50001 and 0x60001 → EDC15P (not EDC15VM)");
+            return false;
         }
 
         // Check for V4.1 signature at 0x70001 (EDC15VM single codeblock)

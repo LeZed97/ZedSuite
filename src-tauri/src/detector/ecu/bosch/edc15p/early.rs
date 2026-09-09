@@ -521,57 +521,85 @@ pub fn detect_egr_hysteresis(data: &[u8], layout: &Edc15pLayout, maps: &mut Vec<
         return;
     }
 
-    // Candidats : courbes génériques 1×20 sur l'axe régime, données signées plausibles
-    let mut candidates: Vec<(usize, u32, usize)> = Vec::new(); // (bloc, adresse, index)
-    for (idx, map) in maps.iter().enumerate() {
-        if !is_generic(map) || map.size != 40 {
-            continue;
+    // Les deux courbes d'un codeblock : axe régime de 20 points (1.9 TDI) ou
+    // 19 points (1.4 TDI 3 cylindres, 045906019xx), montantes, dernière valeur
+    // 2500..6500, données -100..12000, la seconde structure 80 ou 84 octets
+    // après la première. Balayage direct des octets : les cartes génériques
+    // n'existent pas toujours pour ces tailles.
+    let mut found: Vec<(usize, u32, usize)> = Vec::new(); // (bloc, adresse données, points)
+    for (bi, block) in layout.blocks.iter().enumerate() {
+        let start = block.start as usize;
+        let end = (block.end as usize).min(data.len());
+        let mut off = start;
+        while off + 4 <= end {
+            let id = u16::from_le_bytes([data[off], data[off + 1]]);
+            let len = u16::from_le_bytes([data[off + 2], data[off + 3]]) as usize;
+            if (id == rpm_id || matches!(id >> 8, 0xEA | 0xEC)) && (19..=20).contains(&len) {
+                if let Some(axis) = read_axis_at(data, (off + 4) as u32) {
+                    let map_addr = off + 4 + 2 * len;
+                    if axis.increasing()
+                        && axis.first() <= 100
+                        && (2500..=6500).contains(&axis.last())
+                        && map_addr + 2 * len <= end
+                    {
+                        let vals = read_values_i16(data, map_addr as u32, len);
+                        if vals.iter().all(|&v| (-100..=12000).contains(&v)) {
+                            found.push((bi, map_addr as u32, len));
+                        }
+                    }
+                }
+            }
+            off += 2;
         }
-        let dims_ok = matches!(
-            map.dimensions,
-            MapDimensions::TwoDimensional { rows: 1, cols: 20 } | MapDimensions::TwoDimensional { rows: 20, cols: 1 }
-        );
-        if !dims_ok {
-            continue;
-        }
-        let Some(block) = layout.block_index(map.address) else { continue };
-        let Some(xa) = map.x_axis_address else { continue };
-        let Some(axis) = read_axis_at(data, xa) else { continue };
-        if axis.id != rpm_id || axis.len() != 20 || !axis.increasing() || !(2500..=6500).contains(&axis.last()) {
-            continue;
-        }
-        let vals = read_values_i16(data, map.address, 20);
-        if !vals.iter().all(|&v| (-100..=12000).contains(&v)) {
-            continue;
-        }
-        candidates.push((block, map.address, idx));
     }
-    candidates.sort_by_key(|c| (c.0, c.1));
+    found.sort_by_key(|c| (c.0, c.1));
 
     let mut done_blocks = std::collections::HashSet::new();
-    let mut renames: Vec<(usize, String)> = Vec::new();
-    for w in candidates.windows(2) {
-        let (b1, a1, i1) = w[0];
-        let (b2, a2, i2) = w[1];
-        if b1 != b2 || done_blocks.contains(&b1) || a2 != a1 + 84 {
+    let mut pairs: Vec<((u32, usize), (u32, usize))> = Vec::new();
+    for w in found.windows(2) {
+        let (b1, a1, n1) = w[0];
+        let (b2, a2, n2) = w[1];
+        let span = 4 + 4 * n1; // axe + données de la première structure
+        if b1 != b2 || done_blocks.contains(&b1) || n1 != n2 || !(span..=span + 4).contains(&((a2 - a1) as usize)) {
             continue;
         }
-        renames.push((i1, "EGR hysteresis 1".to_string()));
-        renames.push((i2, "EGR hysteresis 2".to_string()));
+        pairs.push(((a1, n1), (a2, n2)));
         done_blocks.insert(b1);
     }
-    for (idx, name) in renames {
-        let map = &mut maps[idx];
-        log::debug!("EDC15P: {} at 0x{:X}", name, map.address);
-        set_common(map, &name, "4-Misc", 0.85);
-        map.data_type = DataType::Int16;
-        map.description = Some("EGR IQ threshold (mg/st) | Axis: Engine speed (rpm)".to_string());
-        map.unit = Some("mg/st".to_string());
-        map.correction_factor = Some(0.01);
-        map.offset = Some(0.0);
-        map.x_axis_correction = Some(1.0);
-        map.x_axis_offset = Some(0.0);
-        map.x_label = Some("rpm".to_string());
-        map.dimensions = MapDimensions::TwoDimensional { rows: 1, cols: 20 };
+
+    for ((a1, n1), (a2, n2)) in pairs {
+        for (which, addr, n) in [(1usize, a1, n1), (2usize, a2, n2)] {
+            let name = format!("EGR hysteresis {}", which);
+            let existing = maps.iter().position(|m| m.address == addr);
+            let map = match existing {
+                Some(i) => &mut maps[i],
+                None => {
+                    let mut m = DetectedMap::new(
+                        addr,
+                        2 * n,
+                        MapDimensions::TwoDimensional { rows: 1, cols: n },
+                        DataType::Int16,
+                    );
+                    m.x_axis_address = Some(addr - 2 * n as u32);
+                    maps.push(m);
+                    let last = maps.len() - 1;
+                    &mut maps[last]
+                }
+            };
+            log::debug!("EDC15P: {} at 0x{:X} ({} points)", name, addr, n);
+            set_common(map, &name, "4-Misc", 0.85);
+            map.data_type = DataType::Int16;
+            map.description = Some("EGR IQ threshold (mg/st) | Axis: Engine speed (rpm)".to_string());
+            map.unit = Some("mg/st".to_string());
+            map.correction_factor = Some(0.01);
+            map.offset = Some(0.0);
+            map.x_axis_address = Some(addr - 2 * n as u32);
+            map.y_axis_address = None;
+            map.x_axis_correction = Some(1.0);
+            map.x_axis_offset = Some(0.0);
+            map.x_label = Some("rpm".to_string());
+            map.size = 2 * n;
+            map.dimensions = MapDimensions::TwoDimensional { rows: 1, cols: n };
+        }
     }
 }

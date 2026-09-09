@@ -30,7 +30,7 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 
 - **Automatic map detection** — embedded Rust engine, per-family detectors
 - **Detection completeness check** — a confidence badge shows whether every map expected for the ECU family was found, with the missing ones detailed in one click
-- **Map editor** — table, 2D graph and 3D surface views, keyboard navigation and copy/paste between maps, absolute, additive or percent edits, propagation to similar maps, WinOLS-style shortcuts
+- **Map editor** — table, 2D graph and 3D surface views, keyboard navigation and copy/paste between maps, absolute, additive or percent edits, propagation to similar maps, WinOLS-style shortcuts. The 2D graph is for single-line maps (curves, linearisations, single values); full matrices open in 3D, where a spike or a flat spot shows up at a glance, and in the table for exact values
 - **Hexdump editor** — virtualized, minimap, modification highlighting vs original
 - **Versioning** — "Ori" + named versions per project, compare view
 - **Lean storage** — original binary + a modification file per version, rebuilt automatically at export
@@ -44,6 +44,12 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 - **3 themes** — dark, light and OLED, for every kind of screen
 - **Any screen size** — resizable map panel and browser-style zoom in the editor, from laptops to ultrawides
 - **Five languages** — English, French, Spanish, Italian and German, for the app and the installer; adding another is easy (a single translations file), and map names are deliberately untranslated — they stay in English
+
+### Maps you will not find in the list
+
+Two tables that other tools list are deliberately left out on EDC15P: inverse driver wish and MAF linearisation. They convert one quantity into another, they are not tuning maps, and leaving them out keeps the list short and readable. On EDC15VM, a set of small timing-correction tables is hidden as well: they were showing up as a second injection timing map and misled people, and the reference tool does not list them either. If you need any of them, say so in an issue: a few requests and they come back.
+
+If a map you expect is really missing, the completeness badge tells you — it lists what the ECU family should carry and what was not found.
 
 ## 🔧 Working with modified files
 
@@ -76,12 +82,16 @@ The web stack brings more than portability. No browser is bundled, so the Window
 
 ## 🤝 Contributing
 
-Community contributions are welcome: **new ECU detectors** are the most valuable ones. See [CONTRIBUTING.md](CONTRIBUTING.md) for a walkthrough of the detector architecture. Found a bug or an undetected map? Open an issue with the ECU type and, if possible, the file's software number.
+Community contributions are welcome: **new ECU detectors** are the most valuable ones. See [CONTRIBUTING.md](CONTRIBUTING.md) for the detector architecture, how the existing families were built and the bar a new family has to meet before it ships (corpus, bench, invariants, zero false positives). Found a bug or an undetected map? Open an issue with the ECU type and the file's software number, and attach the dump if you can: that is what gets it fixed, most detection fixes shipped so far came from a file a user sent. Files are only used to fix the detector and are never shared.
 
 ## 🙏 Thanks
 
 - **Dilemma**, who released [VAGEDCSuite](https://github.com/Blackfrosch/VAGEDCSuite) about 14 years ago. That software is how I practiced and learned this craft: automatic map recognition and a dead-simple interface, at a time when nothing else offered that. It is an enormous piece of work for a tool born in the 2000s! (The man must be an alien) A large part of ZedSuite's EDC15 detection logic is directly inherited from the work done in EDCSuite.
 - **Skalda**, who [kept VAGEDCSuite alive](https://github.com/skaldamramra/VAGEDCSuite) by updating the map detection and adding a lot of EDC15 maps. My own private build of EDCSuite started from his version, and it is what I used daily until I finally had the time to build ZedSuite.
+
+### Contributors
+
+Everyone whose code, report or file changed the app, with what it changed and the version it landed in: [CONTRIBUTORS.md](CONTRIBUTORS.md). Sending a dump with a report is what makes a detection fix possible; files are only used to fix the detector and are never shared.
 
 ## ⬇️ Download
 
@@ -95,6 +105,8 @@ Everything is in the **Assets** section of the [latest release](https://github.c
 curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
 ```
 
+**Linux** — no build yet. The interface is the same code as on Windows and macOS, only the shell side would need doing. It is on the roadmap as a user request: the more people ask for it, the sooner it happens.
+
 ## 🗺️ Roadmap
 
 What is being worked on, what is planned and what users asked for: [ROADMAP.md](ROADMAP.md) (also in [French](ROADMAP.fr.md), [Spanish](ROADMAP.es.md), [Italian](ROADMAP.it.md) and [German](ROADMAP.de.md)). The same page opens inside the app, in the app language, from the dashboard (roadmap button next to the help button).
@@ -107,7 +119,7 @@ What is being worked on, what is planned and what users asked for: [ROADMAP.md](
 - 👥 Facebook — [zedperf](https://www.facebook.com/zedperf.1/)
 - 🔗 Everything in one place: [linktr.ee/zedperf](https://linktr.ee/zedperf)
 
-## Buy me a coffee ☕
+## ☕ Buy me a coffee
 
 ZedSuite is free and always will be. If it saved you time or a WinOLS licence, you can fuel the next reverse-engineering sessions:
 

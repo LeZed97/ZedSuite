@@ -5113,6 +5113,13 @@ impl EDC16U34Detector {
         // Duration 00/01, appliquée à tout le bloc
         super::duration_orientation::mark_duration_block_orientation(data, &mut maps);
 
+        // Switch MAP/MAF : un octet par bloc de calibration, motif commun aux
+        // trois familles EDC16 (issue #24)
+        {
+            let mut seen: std::collections::HashSet<u32> = maps.iter().map(|m| m.address).collect();
+            super::map_maf_switch::detect_map_maf_switch(data, &mut maps, &mut seen);
+        }
+
         maps
     }
 

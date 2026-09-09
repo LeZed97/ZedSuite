@@ -158,6 +158,7 @@ impl EDC15PDetector {
         classified = self.distinguish_iq_limiter_maps(data, classified);
         
         // Filter duplicate maps by type (one per flashbank)
+        classified = self.drop_false_egr_maps(data, classified);
         classified = self.filter_egr_maps(classified);
         
         // Filter nearby maps of same size - keep highest address (real map is after axis data)
@@ -1266,7 +1267,7 @@ impl EDC15PDetector {
                         map.name = Some("SVRL - RPM Limiter".to_string());
                         map.subcategory = Some("Maximum RPM limiter".to_string());
                         map.category = Some("Maximum RPM limiter".to_string());
-                        map.description = Some(format!("Maximum engine RPM limit: {} rpm", value));
+                        map.description = Some("Maximum engine speed (rpm)".to_string());
                         map.unit = Some("rpm".to_string());
                         map.confidence = 0.98;
                         map.correction_factor = Some(1.0);
@@ -1289,19 +1290,25 @@ impl EDC15PDetector {
     /// Pattern: SVBL is BEFORE the sequence 7ADF 0028
     /// Case 1: [SVBL] [DF 7A 28 00] - SVBL at offset -2 (e.g. v17g4.bin)
     /// Case 2: [SVBL] [00 C3] [DF 7A 28 00] - SVBL at offset -4 (e.g. v38test.Bin)
+    /// Case 3 (1.4 TDI 3 cylindres, 045906019BF/BG/BQ/BR/CA) : le marqueur
+    /// DF 7A 28 00 n'existe pas ; la SVBL suit l'en-tête fixe
+    /// [D2 00 FC 03 00 00 00 00 04 00][3 octets variables][C3 00 00] et
+    /// précède [00 C3]. Le même en-tête précède la SVBL des 4 cylindres à
+    /// disposition standard (019GQ/GD/GS/HH/KJ), ce qui a servi de contrôle.
     fn find_svbl_sequence(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
+        // (adresse SVBL, adresse du repère qui l'a désignée)
+        let mut candidates: Vec<(usize, usize)> = Vec::new();
+
         // Pattern: 7ADF 0028 in little endian = [DF 7A 28 00]
         let marker_pattern: [u8; 4] = [0xDF, 0x7A, 0x28, 0x00];
-        
         let mut offset = 4; // Start at 4 to allow reading 4 bytes before
         while offset < data.len().saturating_sub(4) {
-            // Search for the marker pattern
             if let Some(found_offset) = self.find_exact_sequence(data, offset, &marker_pattern) {
                 // Check if there's C300 (00 C3) before the marker
                 // If [00 C3] is at offset -2, then SVBL is at offset -4
                 // Otherwise SVBL is at offset -2
-                let svbl_offset = if found_offset >= 4 
-                    && data[found_offset - 2] == 0x00 
+                let svbl_offset = if found_offset >= 4
+                    && data[found_offset - 2] == 0x00
                     && data[found_offset - 1] == 0xC3 {
                     // Pattern: [SVBL] [00 C3] [DF 7A 28 00]
                     found_offset - 4
@@ -1312,44 +1319,61 @@ impl EDC15PDetector {
                     offset = found_offset + 1;
                     continue;
                 };
-                
-                let svbl_address = svbl_offset as u32;
-                
-                if !detected_addresses.contains(&svbl_address) {
-                    let value = u16::from_le_bytes([data[svbl_address as usize], data[svbl_address as usize + 1]]);
-                    
-                    // Validate: SVBL values are typically 0 (disabled) or 1000-7000 mbar
-                    if value == 0 || (value >= 1000 && value <= 7000) {
-                        let mut map = DetectedMap::new(
-                            svbl_address,
-                            2,
-                            MapDimensions::TwoDimensional { rows: 1, cols: 1 },
-                            DataType::UInt16,
-                        );
-                        
-                        let status = if value == 0 { " (disabled)" } else { "" };
-                        map.name = Some("SVBL (Single value boost limiter)".to_string());
-                        map.subcategory = Some("Turbo boost pressure".to_string());
-                        map.category = Some("Turbo boost pressure".to_string());
-                        map.description = Some(format!("Maximum boost pressure limit: {} mbar{}", value, status));
-                        map.unit = Some("mbar".to_string());
-                        map.confidence = 0.98;
-                        map.correction_factor = Some(1.0);
-                        
-                        log::debug!("🎯 Found SVBL at 0x{:X} = {} mbar{} (marker at 0x{:X})", svbl_address, value, status, found_offset);
-                        
-                        detected_addresses.insert(svbl_address);
-                        maps.push(map);
-                    }
-                }
-                
+                candidates.push((svbl_offset, found_offset));
                 offset = found_offset + 1;
             } else {
                 break;
             }
         }
+
+        // En-tête fixe : [D2 00 FC 03 00 00 00 00 04 00][3 octets][C3 00 00][SVBL][00 C3]
+        let header: [u8; 10] = [0xD2, 0x00, 0xFC, 0x03, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00];
+        let mut offset = 0;
+        while let Some(found_offset) = self.find_exact_sequence(data, offset, &header) {
+            let svbl_offset = found_offset + 16;
+            if svbl_offset + 4 <= data.len()
+                && data[found_offset + 13..found_offset + 16] == [0xC3, 0x00, 0x00]
+                && data[svbl_offset + 2] == 0x00
+                && data[svbl_offset + 3] == 0xC3
+            {
+                candidates.push((svbl_offset, found_offset));
+            }
+            offset = found_offset + 1;
+        }
+
+        for (svbl_offset, marker_offset) in candidates {
+            let svbl_address = svbl_offset as u32;
+            if detected_addresses.contains(&svbl_address) {
+                continue;
+            }
+            let value = u16::from_le_bytes([data[svbl_offset], data[svbl_offset + 1]]);
+
+            // Validate: SVBL values are typically 0 (disabled) or 1000-7000 mbar
+            if value == 0 || (1000..=7000).contains(&value) {
+                let mut map = DetectedMap::new(
+                    svbl_address,
+                    2,
+                    MapDimensions::TwoDimensional { rows: 1, cols: 1 },
+                    DataType::UInt16,
+                );
+
+                let status = if value == 0 { " (disabled)" } else { "" };
+                map.name = Some("SVBL (Single value boost limiter)".to_string());
+                map.subcategory = Some("Turbo boost pressure".to_string());
+                map.category = Some("Turbo boost pressure".to_string());
+                map.description = Some("Maximum boost pressure (mbar); 0 = no limit".to_string());
+                map.unit = Some("mbar".to_string());
+                map.confidence = 0.98;
+                map.correction_factor = Some(1.0);
+
+                log::debug!("🎯 Found SVBL at 0x{:X} = {} mbar{} (marker at 0x{:X})", svbl_address, value, status, marker_offset);
+
+                detected_addresses.insert(svbl_address);
+                maps.push(map);
+            }
+        }
     }
-    
+
     /// Find exact byte sequence in data (no mask)
     fn find_exact_sequence(&self, data: &[u8], start_offset: usize, pattern: &[u8]) -> Option<usize> {
         if start_offset + pattern.len() > data.len() {
@@ -1408,7 +1432,7 @@ impl EDC15PDetector {
                         map.name = Some("Left foot brake switch".to_string());
                         map.category = Some("Other".to_string());
                         map.subcategory = Some("Switches".to_string());
-                        map.description = Some(format!("Left foot brake: {} (1=ON, 0=OFF)", state));
+                        map.description = Some("Left foot brake behaviour: 0 = OFF, 1 = ON".to_string());
                         map.confidence = 0.95;
                         map.codeblock_id = Some(layout.blocks[cb_idx].id);
                         
@@ -1425,19 +1449,44 @@ impl EDC15PDetector {
         }
     }
 
-    /// Find MAP/MAF Switch by byte sequence
-    /// C# pattern: { 0x41, 0x02, 0xFF, 0xFF, 0x00, 0x01, 0x01, 0x00 } with mask { 1, 1, 0, 0, 1, 1, 1, 1 }
-    /// Limit to one per codeblock to avoid duplicates
+    /// Find MAP/MAF Switch by byte sequence.
+    ///
+    /// The switch word sits in a small table that reads, on every EDC15P
+    /// software of the bench, `00 01 01 00 01 | id id | vv vv | 00 01 01 tt`:
+    ///   - `id` = `41 02` on the classic layout (019GQ, 019KJ, 019HH…),
+    ///     `01 02` on the compact layout (019AJ, 019AN, 019CJ, same as the
+    ///     EDC15VM 012K);
+    ///   - `tt` = `00` on the classic layout, `01` on the compact one.
+    /// The five bytes before the identifier are part of the match so the
+    /// looser tail cannot pick up a random `00 01 01` elsewhere.
+    /// Limit to one per codeblock to avoid duplicates.
     fn find_map_maf_switch(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
-        let pattern: [u8; 8] = [0x41, 0x02, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00];
-        let mask: [u8; 8] = [1, 1, 0, 0, 1, 1, 1, 1];
-        
+        const CONTEXT: [u8; 5] = [0x00, 0x01, 0x01, 0x00, 0x01];
+
         let layout = self.layout();
         let mut found_per_codeblock: Vec<bool> = vec![false; layout.blocks.len()];
-        
+
+        let find_next = |from: usize| -> Option<usize> {
+            let mut t = from.max(CONTEXT.len());
+            while t + 8 <= data.len() {
+                if (data[t] == 0x41 || data[t] == 0x01)
+                    && data[t + 1] == 0x02
+                    && data[t + 4] == 0x00
+                    && data[t + 5] == 0x01
+                    && data[t + 6] == 0x01
+                    && (data[t + 7] == 0x00 || data[t + 7] == 0x01)
+                    && data[t - CONTEXT.len()..t] == CONTEXT
+                {
+                    return Some(t);
+                }
+                t += 1;
+            }
+            None
+        };
+
         let mut offset = 0;
         while offset < data.len().saturating_sub(8) {
-            if let Some(found_offset) = self.find_sequence_with_mask(data, offset, &pattern, &mask) {
+            if let Some(found_offset) = find_next(offset) {
                 let switch_address = (found_offset + 2) as u32;
                 
                 let codeblock_idx = layout.block_index(switch_address);
@@ -1462,7 +1511,7 @@ impl EDC15PDetector {
                         map.name = Some("MAP/MAF switch".to_string());
                         map.subcategory = Some("Smoke limitation".to_string());
                         map.category = Some("Smoke limitation".to_string());
-                        map.description = Some(format!("Sensor mode: {} (0=MAF, 257=MAP)", mode));
+                        map.description = Some("Sensor used by the smoke limitation: 0 = MAF, 257 = MAP".to_string());
                         map.confidence = 0.95;
                         map.codeblock_id = Some(layout.blocks[cb_idx].id);
                         
@@ -1812,10 +1861,14 @@ impl EDC15PDetector {
             let potential_x_id = u16::from_le_bytes([data[x_axis_start], data[x_axis_start + 1]]);
             let x_id_high = (potential_x_id >> 8) as u8;
 
-            if x_id_high != 0xDA { continue; }
-
+            // L'axe de température porte normalement un identifiant DA ; sur
+            // les 1.4 TDI (045906019BQ/BR/CA) il en porte un autre. Sans
+            // identifiant DA, on exige un axe de 10 valeurs qui sont toutes
+            // des températures (validées plus bas à 100 % au lieu de 70 %).
             let x_len = u16::from_le_bytes([data[x_axis_start + 2], data[x_axis_start + 3]]) as usize;
             if !(8..=12).contains(&x_len) { continue; }
+            let strict_temp = x_id_high != 0xDA;
+            if strict_temp && x_len != 10 { continue; }
 
             // X axis data follows: x_len values * 2 bytes
             let map_start = x_axis_start + 4 + (x_len * 2);
@@ -1865,7 +1918,8 @@ impl EDC15PDetector {
             
             // If most values are valid, this is likely Boost correction by
             // temperature (seuils proportionnels aux dims variables)
-            if valid_temp >= x_len * 7 / 10 && valid_boost >= y_len * 3 / 4 {
+            let temp_ok = if strict_temp { valid_temp == x_len } else { valid_temp >= x_len * 7 / 10 };
+            if temp_ok && valid_boost >= y_len * 3 / 4 {
                 log::debug!("🎯 Found Boost correction by temperature at 0x{:X} (Y axis at 0x{:X}, X axis at 0x{:X})", 
                     map_start, t, x_axis_start);
                 
@@ -2103,7 +2157,15 @@ impl EDC15PDetector {
             let map_start = second_start + 4 + (second_len * 2);
             let map_size = first_len * second_len * 2;
             if map_start + map_size > data.len() { continue; }
-            if detected_addresses.contains(&(map_start as u32)) { continue; }
+            // Adresse déjà revendiquée par le balayage générique (1.4 TDI :
+            // pédale à 9-10 points sur régime à 12, tailles inconnues des
+            // motifs) : la carte existante est renommée plutôt qu'ignorée.
+            let already_claimed = detected_addresses.contains(&(map_start as u32));
+            if already_claimed
+                && maps.iter().any(|m| m.address == map_start as u32 && m.name.as_deref() == Some("Driver wish"))
+            {
+                continue;
+            }
 
             // Validate map data: values should be in Driver wish range
             let mut valid_values = 0;
@@ -2157,8 +2219,16 @@ impl EDC15PDetector {
                 rows_reversed: None,
             };
 
-            detected_addresses.insert(map_start as u32);
-            maps.push(driver_wish);
+            if already_claimed {
+                if let Some(existing) = maps.iter_mut().find(|m| m.address == map_start as u32) {
+                    *existing = driver_wish;
+                } else {
+                    maps.push(driver_wish);
+                }
+            } else {
+                detected_addresses.insert(map_start as u32);
+                maps.push(driver_wish);
+            }
             found_count += 1;
         }
 
@@ -3283,6 +3353,50 @@ impl EDC15PDetector {
     }
     
     /// Filter EGR maps to keep only one per codeblock (legacy - now uses filter_duplicate_maps_by_type)
+    /// EGR : le motif [régime EC ×16][C0 ×11-13] désigne aussi une carte de
+    /// limitation dont l'axe C0 commence à 1990 et dont les valeurs sont à
+    /// 19900 (0x556F4 sur les 4 cylindres, 0x55A0E sur les 1.4 TDI). La
+    /// déduplication ne gardait que l'adresse la plus basse : juste sur les
+    /// 4 cylindres (vraie EGR à 0x4C116), faux sur les 1.4 TDI où la vraie
+    /// EGR (EDCSuite « EGR 06/07 », 16×11 ou 16×12 à 0x56166/0x56168) vient
+    /// après. On écarte ici toute EGR dont l'axe C0 n'est pas une quantité
+    /// injectée : croissant, premier point ≤ 5 mg/st, dernier 15..80 mg/st.
+    fn drop_false_egr_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
+        maps.into_iter()
+            .filter(|map| {
+                let name = map.name.as_deref().unwrap_or("");
+                let is_egr = name == "EGR" || name.starts_with("EGR 0");
+                if is_egr && !Self::egr_iq_axis_ok(data, map) {
+                    log::debug!("🗑️ EGR at 0x{:X} dropped: its C0 axis is not an IQ axis", map.address);
+                    return false;
+                }
+                true
+            })
+            .collect()
+    }
+
+    /// L'axe C0 d'une candidate EGR (quel que soit son rang x/y) est-il une
+    /// quantité injectée ? Croissant, premier point ≤ 5 mg/st, dernier
+    /// 15..80 mg/st (bruts ×0,01). Sans axe C0 lisible, on ne tranche pas.
+    fn egr_iq_axis_ok(data: &[u8], map: &DetectedMap) -> bool {
+        let rd = |o: usize| u16::from_le_bytes([data[o], data[o + 1]]);
+        for addr in [map.x_axis_address, map.y_axis_address].into_iter().flatten() {
+            let a = addr as usize;
+            if a < 4 || a + 2 > data.len() || data[a - 3] != 0xC0 {
+                continue;
+            }
+            let len = rd(a - 2) as usize;
+            if !(4..=32).contains(&len) || a + 2 * len > data.len() {
+                return false;
+            }
+            let vals: Vec<u16> = (0..len).map(|i| rd(a + 2 * i)).collect();
+            return vals.windows(2).all(|w| w[0] < w[1])
+                && vals[0] <= 500
+                && (1500..=8000).contains(&vals[len - 1]);
+        }
+        true
+    }
+
     fn filter_egr_maps(&self, maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
         // Now handled by filter_duplicate_maps_by_type
         self.filter_duplicate_maps_by_type(maps)
@@ -3701,177 +3815,266 @@ impl EDC15PDetector {
     /// - 480 bytes (16x15) = Injector duration 01-04 (by address order)
     /// - 570 bytes (19x15) = Injector duration 01-04 (by address order) - alternate size
     /// - 198 bytes (11x9) = Injector duration 05
+    /// Numérotation des durations d'injection (00-05) par codeblock.
+    ///
+    /// Une duration est une structure `[axe IQ (famille C5)][axe régime][données]`
+    /// dont la taille vaut exactement IQ × régime × 2. Leurs tailles changent
+    /// avec le moteur : 200 / 480×4 / 198 sur les 1.9 TDI (10×10, 15×16,
+    /// 9×11), 160 / 390 / 360 / 570×2 / 180 ou 200 / 570×4 / 260 sur les
+    /// 1.4 TDI 3 cylindres (045906019BF/BG/BQ/BR/CA). Les structures sont
+    /// lues directement dans les octets de chaque codeblock ; quand un bloc
+    /// en porte exactement six sur le même identifiant d'axe IQ, elles sont
+    /// numérotées 00 à 05 par adresse croissante, les cartes manquantes sont
+    /// créées et les doublons d'adresse écartés. Sinon l'ancienne règle par
+    /// taille s'applique aux cartes déjà nommées (200 → 00 puis 05,
+    /// 480/570 → 01-04, 180/198/220 → 05).
     fn fix_injector_duration_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
-        // Identifiant de l'axe régime du fichier, pour orienter toutes les
-        // durées comme la référence 019GD : lignes = IQ, colonnes = régime
         let rpm_id = early::rpm_axis_id(data, &maps);
-        // 180 (10x9) : Injector duration 05 des premiers PD (019A, 019AJ)
-        let valid_sizes = [200, 480, 570, 198, 220, 180];
-        let mut result: Vec<DetectedMap> = Vec::new();
-        
-        // Collect ALL Injector duration maps by codeblock with addresses sorted
-        // Support 3 codeblocks (internal IDs 1, 2, 3 = EDCSuite CB2, CB3, CB5)
-        let n_blocks = self.layout().blocks.len().max(3);
-        let mut cb_addrs: Vec<Vec<(u32, usize)>> = vec![Vec::new(); n_blocks];
-        
-        // First pass: collect all injector duration map addresses
-        for map in &maps {
-            if let Some(ref name) = map.name {
-                if name.contains("Injector duration") && !name.contains("Selector") {
-                    if !valid_sizes.contains(&map.size) { continue; }
-                    
-                    let flashbank = self.get_flashbank_from_address(map.address);
-                    if let Some(fb) = flashbank {
-                        if fb >= 1 && (fb as usize) <= n_blocks {
-                            cb_addrs[(fb - 1) as usize].push((map.address, map.size));
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Sort by address within each codeblock
-        for addrs in &mut cb_addrs {
-            addrs.sort_by_key(|&(addr, _)| addr);
-        }
-        
-        // Create address->number mapping
-        // Pattern: 00 (200B first), 01-04 (480B), 05 (200B/198B last)
-        let create_numbering = |addrs: &[(u32, usize)]| -> std::collections::HashMap<u32, String> {
-            let mut mapping = std::collections::HashMap::new();
-            if addrs.is_empty() { return mapping; }
-            
-            let mut dur_mid_count = 0; // For 480 or 570 byte maps (duration 01-04)
-            let first_200_assigned = std::cell::Cell::new(false);
+        let legacy_sizes = [200, 480, 570, 198, 220, 180];
+        let layout = self.layout();
+        let n_blocks = layout.blocks.len().max(3);
+        let rd = |o: usize| -> u16 { u16::from_le_bytes([data[o], data[o + 1]]) };
 
-            for (addr, size) in addrs {
-                let num = match *size {
-                    200 => {
-                        if !first_200_assigned.get() {
-                            first_200_assigned.set(true);
-                            "00".to_string()
-                        } else {
-                            "05".to_string() // Second 200B map is Duration 05
-                        }
-                    },
-                    480 | 570 => {
-                        dur_mid_count += 1;
-                        format!("{:02}", dur_mid_count) // 01, 02, 03, 04
-                    },
-                    180 | 198 | 220 => "05".to_string(),
-                    _ => continue,
-                };
-                mapping.insert(*addr, num);
-            }
-            mapping
-        };
-        
-        let cb_numbering: Vec<_> = cb_addrs.iter().map(|a| create_numbering(a)).collect();
-        
-        log::debug!("🔧 Injector durations per block: {:?}", cb_addrs.iter().map(|a| a.len()).collect::<Vec<_>>());
-        
-        // Second pass: process all maps
-        for mut map in maps {
-            if let Some(ref name) = map.name {
-                if name.contains("Injector duration") && !name.contains("Selector") {
-                    // Skip invalid sizes
-                    if !valid_sizes.contains(&map.size) {
-                        log::debug!("🗑️ Skipping invalid Injector duration at 0x{:X} (size {})", map.address, map.size);
+        // Structure de duration lue dans les octets : (adresse données, taille,
+        // adresse axe IQ, longueur IQ, adresse axe régime, longueur régime, id IQ)
+        #[derive(Clone, Copy)]
+        struct Dur {
+            addr: u32,
+            size: usize,
+            iq_addr: u32,
+            iq_len: usize,
+            rpm_addr: u32,
+            rpm_len: usize,
+            iq_id: u16,
+        }
+        let mut chains: Vec<Vec<Dur>> = vec![Vec::new(); n_blocks];
+        if let Some(rpm_id) = rpm_id {
+            for (bi, block) in layout.blocks.iter().enumerate() {
+                if bi >= n_blocks {
+                    break;
+                }
+                let bstart = block.start as usize;
+                let bend = (block.end as usize).min(data.len());
+                let mut off = bstart;
+                while off + 8 <= bend {
+                    let iq_id = rd(off);
+                    let iq_len = rd(off + 2) as usize;
+                    if !matches!(iq_id >> 8, 0xC4 | 0xC5) || !(6..=20).contains(&iq_len) || off + 4 + 2 * iq_len + 4 > bend {
+                        off += 2;
                         continue;
                     }
-                    
-                    let flashbank = self.get_flashbank_from_address(map.address);
-                    let numbering = flashbank.and_then(|fb| {
-                        if fb >= 1 && (fb as usize) <= n_blocks { Some(&cb_numbering[(fb - 1) as usize]) } else { None }
+                    let iq: Vec<u16> = (0..iq_len).map(|i| rd(off + 4 + 2 * i)).collect();
+                    // Dernier point IQ jusqu'à 100 mg : les fichiers modifiés étendent l'axe (75 mg sur un 1.4 stage 2)
+                    let iq_ok = iq.windows(2).all(|w| w[0] < w[1]) && iq[0] <= 2000 && (1500..=10000).contains(&iq[iq_len - 1]);
+                    let r_off = off + 4 + 2 * iq_len;
+                    let r_len = rd(r_off + 2) as usize;
+                    let r_id = rd(r_off);
+                    if !iq_ok || (r_id != rpm_id && !matches!(r_id >> 8, 0xEA | 0xEC)) || !(8..=20).contains(&r_len) || r_off + 4 + 2 * r_len > bend {
+                        off += 2;
+                        continue;
+                    }
+                    let rpm: Vec<u16> = (0..r_len).map(|i| rd(r_off + 4 + 2 * i)).collect();
+                    let rpm_ok = rpm.windows(2).all(|w| w[0] < w[1]) && (2000..=6000).contains(&rpm[r_len - 1]);
+                    let d_off = r_off + 4 + 2 * r_len;
+                    let size = iq_len * r_len * 2;
+                    if !rpm_ok || d_off + size > bend || !(100..=700).contains(&size) {
+                        off += 2;
+                        continue;
+                    }
+                    chains[bi].push(Dur {
+                        addr: d_off as u32,
+                        size,
+                        iq_addr: (off + 4) as u32,
+                        iq_len,
+                        rpm_addr: (r_off + 4) as u32,
+                        rpm_len: r_len,
+                        iq_id,
                     });
-                    
-                    if let Some(numbering) = numbering {
-                        if let Some(num) = numbering.get(&map.address) {
-                            log::debug!("  🔧 0x{:X} ({}B) -> Injector duration {}", map.address, map.size, num);
-                            map.name = Some(format!("Injector duration {}", num));
-                            
-                            // Injector duration axes based on EDCSuite:
-                            // X axis = IQ (mg/stroke) - raw values ×100, factor 0.01
-                            // Y axis = RPM - raw values are direct RPM, factor 1.0
-                            map.x_axis_correction = Some(0.01); // IQ factor
-                            map.y_axis_correction = Some(1.0); // RPM factor
+                    off = d_off + size;
+                }
+            }
+        }
+        log::debug!(
+            "🔧 Duration scan: rpm_id={:?} blocks={:?} found={:?}",
+            rpm_id,
+            layout.blocks.iter().map(|b| format!("0x{:X}-0x{:X}", b.start, b.end)).collect::<Vec<_>>(),
+            chains.iter().map(|c| c.iter().map(|d| format!("0x{:X}/{}/{:04X}", d.addr, d.size, d.iq_id)).collect::<Vec<_>>()).collect::<Vec<_>>()
+        );
+        // Par bloc : ne garder que l'identifiant IQ majoritaire, chaîne = 6
+        let mut numbering: Vec<std::collections::HashMap<u32, (String, Dur)>> = vec![Default::default(); n_blocks];
+        for (bi, list) in chains.iter().enumerate() {
+            if list.is_empty() {
+                continue;
+            }
+            let mut counts: std::collections::HashMap<u16, usize> = Default::default();
+            for d in list {
+                *counts.entry(d.iq_id).or_insert(0) += 1;
+            }
+            let (&dominant, &n) = counts.iter().max_by_key(|(_, n)| **n).unwrap();
+            if n != 6 {
+                continue;
+            }
+            let mut chain: Vec<Dur> = list.iter().filter(|d| d.iq_id == dominant).copied().collect();
+            chain.sort_by_key(|d| d.addr);
+            for (i, d) in chain.iter().enumerate() {
+                numbering[bi].insert(d.addr, (format!("{:02}", i), *d));
+            }
+            log::debug!("🔧 Injector duration chain in block {}: {:?}", bi + 1, chain.iter().map(|d| format!("0x{:X}/{}", d.addr, d.size)).collect::<Vec<_>>());
+        }
 
-                            // Duration 01-05 have signed values (negative timing advance)
-                            if num != "00" {
-                                map.data_type = DataType::Int16;
-                            }
-                            // Variantes classées par taille sans pattern (198/220 de
-                            // l'AXR 6L) : description et unité restées génériques
-                            // (« Detected map | X: 0xC5C0 (len=10)… ») → mêmes textes
-                            // que les durées issues des patterns
-                            let generic_desc = map
-                                .description
-                                .as_deref()
-                                .map_or(true, |d| d.starts_with("Detected map"));
-                            if generic_desc {
-                                map.description = Some("Duration | X: Engine speed (rpm) | Y: IQ (mg/st)".to_string());
-                            }
-                            if map.unit.is_none() {
-                                map.unit = Some("Duration".to_string());
-                            }
+        let is_named_duration = |map: &DetectedMap| {
+            map.name.as_deref().map_or(false, |n| n.contains("Injector duration") && !n.contains("Selector"))
+        };
+        let block_of = |addr: u32| -> Option<usize> {
+            self.get_flashbank_from_address(addr).and_then(|fb| {
+                if fb >= 1 && (fb as usize) <= n_blocks { Some((fb - 1) as usize) } else { None }
+            })
+        };
 
-                            // Orientation uniforme (référence 019GD, affichage
-                            // vérifié) : lignes = IQ, colonnes = régime, X = IQ
-                            // (01-05) ou régime (00). Les softs où l'axe IQ vient
-                            // en premier avec 19 régimes (019AJ) sortaient
-                            // transposés de la règle 570 → cellules brouillées.
-                            if let Some(rpm_id) = rpm_id {
-                                let read = |addr: Option<u32>| -> Option<(u32, u16, usize)> {
-                                    let a = addr?;
-                                    let o = a as usize;
-                                    if o < 4 || o + 2 > data.len() {
-                                        return None;
-                                    }
-                                    let id = u16::from_le_bytes([data[o - 4], data[o - 3]]);
-                                    let len = u16::from_le_bytes([data[o - 2], data[o - 1]]) as usize;
-                                    if len == 0 || len > 32 {
-                                        return None;
-                                    }
-                                    Some((a, id, len))
-                                };
-                                if let (Some(xa), Some(ya)) = (read(map.x_axis_address), read(map.y_axis_address)) {
-                                    let (rpm, iq) = if xa.1 == rpm_id && ya.1 != rpm_id {
-                                        (Some(xa), Some(ya))
-                                    } else if ya.1 == rpm_id && xa.1 != rpm_id {
-                                        (Some(ya), Some(xa))
-                                    } else {
-                                        (None, None)
-                                    };
-                                    if let (Some(rpm), Some(iq)) = (rpm, iq) {
-                                        if iq.2 * rpm.2 * 2 == map.size {
-                                            map.dimensions = MapDimensions::TwoDimensional { rows: iq.2, cols: rpm.2 };
-                                            if num == "00" {
-                                                map.x_axis_address = Some(rpm.0);
-                                                map.y_axis_address = Some(iq.0);
-                                            } else {
-                                                map.x_axis_address = Some(iq.0);
-                                                map.y_axis_address = Some(rpm.0);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            log::debug!("    ✅ Axes: X(IQ)=0x{:X}, Y(RPM)=0x{:X}", 
-                                map.x_axis_address.unwrap_or(0), map.y_axis_address.unwrap_or(0));
+        // Règle historique par taille pour les blocs sans chaîne complète
+        let mut legacy: Vec<std::collections::HashMap<u32, String>> = vec![Default::default(); n_blocks];
+        {
+            let mut cb_addrs: Vec<Vec<(u32, usize)>> = vec![Vec::new(); n_blocks];
+            for map in &maps {
+                if is_named_duration(map) && legacy_sizes.contains(&map.size) {
+                    if let Some(bi) = block_of(map.address) {
+                        if numbering[bi].is_empty() && !cb_addrs[bi].iter().any(|(a, _)| *a == map.address) {
+                            cb_addrs[bi].push((map.address, map.size));
                         }
                     }
                 }
             }
-            result.push(map);
+            for (bi, addrs) in cb_addrs.iter_mut().enumerate() {
+                addrs.sort_by_key(|&(a, _)| a);
+                let mut dur_mid_count = 0;
+                let mut first_200_assigned = false;
+                for (addr, size) in addrs.iter() {
+                    let num = match *size {
+                        200 => {
+                            if !first_200_assigned {
+                                first_200_assigned = true;
+                                "00".to_string()
+                            } else {
+                                "05".to_string()
+                            }
+                        }
+                        480 | 570 => {
+                            dur_mid_count += 1;
+                            format!("{:02}", dur_mid_count)
+                        }
+                        180 | 198 | 220 => "05".to_string(),
+                        _ => continue,
+                    };
+                    legacy[bi].insert(*addr, num);
+                }
+            }
         }
-        
+
+        let finish = |map: &mut DetectedMap, num: &str, structure: Option<Dur>| {
+            map.name = Some(format!("Injector duration {}", num));
+            map.category = Some("Detected maps".to_string());
+            map.subcategory = Some("1-Fuel".to_string());
+            // Les corrections suivent les adresses d'axes : 00 porte le régime
+            // en X et l'IQ en Y, 01-05 l'inverse (l'afficheur transpose 01-05 ;
+            // plus de permutation « corrections seules » côté afficheur, et
+            // l'export mappack lit les mêmes valeurs).
+            if num == "00" {
+                map.x_axis_correction = Some(1.0); // RPM factor
+                map.y_axis_correction = Some(0.01); // IQ factor
+            } else {
+                map.x_axis_correction = Some(0.01); // IQ factor
+                map.y_axis_correction = Some(1.0); // RPM factor
+            }
+            map.x_axis_offset = Some(0.0);
+            map.y_axis_offset = Some(0.0);
+            if map.correction_factor.is_none() {
+                map.correction_factor = Some(0.023437);
+            }
+            if num != "00" {
+                map.data_type = DataType::Int16;
+            }
+            let generic_desc = map
+                .description
+                .as_deref()
+                .map_or(true, |d| d.starts_with("Detected map") || d.is_empty());
+            if generic_desc {
+                map.description = Some("Duration | X: Engine speed (rpm) | Y: IQ (mg/st)".to_string());
+            }
+            if map.unit.is_none() {
+                map.unit = Some("Duration".to_string());
+            }
+            if let Some(d) = structure {
+                map.size = d.size;
+                map.dimensions = MapDimensions::TwoDimensional { rows: d.iq_len, cols: d.rpm_len };
+                if num == "00" {
+                    map.x_axis_address = Some(d.rpm_addr);
+                    map.y_axis_address = Some(d.iq_addr);
+                } else {
+                    map.x_axis_address = Some(d.iq_addr);
+                    map.y_axis_address = Some(d.rpm_addr);
+                }
+            }
+        };
+
+        let mut result: Vec<DetectedMap> = Vec::new();
+        let mut placed: HashSet<u32> = HashSet::new();
+        for mut map in maps {
+            let bi = block_of(map.address);
+            let chain_hit = bi.and_then(|b| numbering[b].get(&map.address).cloned());
+            if let Some((num, d)) = chain_hit {
+                if !placed.insert(map.address) {
+                    log::debug!("🗑️ Duplicate Injector duration at 0x{:X} dropped", map.address);
+                    continue;
+                }
+                finish(&mut map, &num, Some(d));
+                result.push(map);
+                continue;
+            }
+            if !is_named_duration(&map) {
+                result.push(map);
+                continue;
+            }
+            let legacy_hit = bi.and_then(|b| legacy[b].get(&map.address).cloned());
+            match legacy_hit {
+                Some(num) => {
+                    if !placed.insert(map.address) {
+                        continue;
+                    }
+                    finish(&mut map, &num, None);
+                    result.push(map);
+                }
+                None => {
+                    log::debug!("🗑️ Skipping invalid Injector duration at 0x{:X} (size {})", map.address, map.size);
+                }
+            }
+        }
+        // Membres de chaîne sans carte existante : créés
+        for (bi, block_numbering) in numbering.iter().enumerate() {
+            let mut entries: Vec<(&u32, &(String, Dur))> = block_numbering.iter().collect();
+            entries.sort_by_key(|(a, _)| **a);
+            for (addr, (num, d)) in entries {
+                if placed.contains(addr) {
+                    continue;
+                }
+                let mut map = DetectedMap::new(
+                    *addr,
+                    d.size,
+                    MapDimensions::TwoDimensional { rows: d.iq_len, cols: d.rpm_len },
+                    DataType::UInt16,
+                );
+                map.confidence = 0.9;
+                if let Some(block) = layout.blocks.get(bi) {
+                    map.codeblock_id = Some(block.id);
+                }
+                finish(&mut map, num, Some(*d));
+                log::debug!("  ➕ Injector duration {} created at 0x{:X} ({}B)", num, addr, d.size);
+                placed.insert(*addr);
+                result.push(map);
+            }
+        }
         result
     }
 
-    /// Classify maps using NameKnownMaps logic from zededc15pfile.cs
-    /// This function assigns names, categories, and subcategories to detected maps
-    /// IMPORTANT: This function should classify ALL maps, including generic ones (with "3D Map Size:")
     fn name_known_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
         let mut classified = Vec::new();
         // Hors disposition standard, les maps génériques sont conservées pour
@@ -4173,7 +4376,9 @@ impl EDC15PDetector {
                            ((y_axis_id_high == 0xEC) && (x_axis_id_high == 0xC0 || x_axis_id_high == 0xE9)) {
                     // EGR setpoint (13x16) - allow swapped axis order and RPM ID variant 0xE9
                     let has_expected_dims = (x_len == 13 && y_len == 16) || (x_len == 16 && y_len == 13);
-                    if has_expected_dims {
+                    // Une carte de limitation partage ce motif (axe C0 à partir de
+                    // 1990, valeurs 19900) : elle ne doit pas réserver le codeblock
+                    if has_expected_dims && Self::egr_iq_axis_ok(data, &map) {
                         if let Some(map_codeblock) = layout.block_index(map.address) {
                             if !egr_codeblocks.contains(&map_codeblock) {
                                 // Swap axes so that X = IQ (mg/st), Y = RPM
@@ -4213,15 +4418,25 @@ impl EDC15PDetector {
                 let is_driver_wish = (x_axis_id_high == 0xEC && y_axis_id_high == 0xC0) ||
                                      (x_axis_id_high == 0xC0 && y_axis_id_high == 0xEC);
                 if is_driver_wish {
-                    let (larger_len, smaller_len) = if x_len >= y_len {
+                    // Lignes = points de regime, colonnes = points de pedale,
+                    // lus sur les identifiants et non sur le plus grand des deux.
+                    let (larger_len, smaller_len) = if x_axis_id_high == 0xEC {
                         (x_len, y_len)
                     } else {
                         (y_len, x_len)
                     };
-                    let orig_x = map.x_axis_address;
-                    let orig_y = map.y_axis_address;
-                    map.x_axis_address = orig_y;
-                    map.y_axis_address = orig_x;
+                    // Les axes sont attribues par IDENTIFIANT : X = pedale
+                    // (famille C0), Y = regime (famille EC), quel que soit
+                    // l'ordre du fichier et quelle que soit la passe qui a cree
+                    // la carte. L'echange etait inconditionnel : sur le
+                    // 038906019FJ, ou la carte arrive deja dans le bon sens, il
+                    // remettait le regime en X, et l'app affichait une charge
+                    // montant a 25 % avec un regime non monotone (issue #20).
+                    if x_axis_id_high == 0xEC {
+                        let orig_x = map.x_axis_address;
+                        map.x_axis_address = map.y_axis_address;
+                        map.y_axis_address = orig_x;
+                    }
 
                     map.category = Some("Detected maps".to_string());
                     map.subcategory = Some("4-Misc".to_string());
@@ -4238,6 +4453,47 @@ impl EDC15PDetector {
                     map.y_axis_correction = Some(1.0);
                     map.dimensions = MapDimensions::TwoDimensional { rows: larger_len, cols: smaller_len };
                     classified_this = true;
+                }
+            }
+            // Length 352 / 384 (16x11 / 16x12) - EGR des 1.4 TDI 3 cylindres
+            // (045906019BF/BG/BQ/BR/CA, EDCSuite « EGR 06/07 ») : même
+            // structure [régime EC ×16][IQ C0 ×11-12] que l'EGR 16×13 des
+            // 4 cylindres, présentée de la même façon (X = IQ, Y = régime,
+            // dimensions du fichier, l'afficheur transpose).
+            else if (map.size == 352 || map.size == 384)
+                // Ordre du fichier imposé (régime ×16 puis IQ ×11-12) : l'inverse
+                // driver wish [régime EC ×12][IQ C0 ×16] partage sinon le motif
+                && x_len == 16 && (y_len == 11 || y_len == 12)
+                && x_axis_id_high == 0xEC && y_axis_id_high == 0xC0
+                && Self::egr_iq_axis_ok(data, &map)
+            {
+                if let Some(map_codeblock) = layout.block_index(map.address) {
+                    if !egr_codeblocks.contains(&map_codeblock) {
+                        // Swap axes so that X = IQ (mg/st), Y = RPM
+                        std::mem::swap(&mut map.x_axis_address, &mut map.y_axis_address);
+
+                        map.category = Some("Detected maps".to_string());
+                        map.subcategory = Some("4-Misc".to_string());
+                        map.name = Some("EGR".to_string());
+                        map.unit = Some("mg/st".to_string());
+
+                        map.correction_factor = Some(0.1);
+                        map.offset = Some(0.0);
+                        map.x_axis_correction = Some(0.01); // IQ
+                        map.x_axis_offset = Some(0.0);
+                        map.y_axis_correction = Some(1.0); // RPM
+                        map.y_axis_offset = Some(0.0);
+
+                        let x_addr = map.x_axis_address.unwrap_or(0);
+                        let y_addr = map.y_axis_address.unwrap_or(0);
+                        map.description = Some(format!(
+                            "EGR setpoint (mg/st) | X: IQ (mg/st) | Y: Engine speed (rpm) | Axis IDs: X=0x{:04X} Y=0x{:04X}",
+                            x_addr, y_addr
+                        ));
+                        egr_codeblocks.insert(map_codeblock);
+                        log::debug!("🎯 Classified EGR ({}x{}) at 0x{:X} in codeblock {}", x_len, y_len, map.address, map_codeblock);
+                        classified_this = true;
+                    }
                 }
             }
             // Length 180 (10x9) - Start IQ, Boost limit, Injector duration
@@ -4279,6 +4535,26 @@ impl EDC15PDetector {
                         map.category = Some("Detected maps".to_string());
                         map.subcategory = Some("2-Limiters".to_string());
                         map.name = Some("Boost limit map".to_string());
+                        classified_this = true;
+                    } else if x_axis_id_high == 0xC0 && (y_axis_id_high == 0xEC || y_axis_id_high == 0xEA) {
+                        // 1.4 TDI 3 cylindres (045906019BF/BG/BQ/BR/CA) : la
+                        // structure est [pression atmo C0 ×9][régime EC ×10]
+                        // [180 octets], absente des 4 cylindres. Présentée comme
+                        // sur ceux-ci : X = régime (10 colonnes), Y = pression
+                        // atmosphérique (9 lignes) ; référence EDCSuite 10×9.
+                        map.category = Some("Detected maps".to_string());
+                        map.subcategory = Some("2-Limiters".to_string());
+                        map.name = Some("Boost limit map".to_string());
+                        std::mem::swap(&mut map.x_axis_address, &mut map.y_axis_address);
+                        map.dimensions = MapDimensions::TwoDimensional { rows: 9, cols: 10 };
+                        map.x_axis_correction = Some(1.0);
+                        map.y_axis_correction = Some(1.0);
+                        map.x_axis_offset = Some(0.0);
+                        map.y_axis_offset = Some(0.0);
+                        map.correction_factor = Some(1.0);
+                        map.unit = Some("Max boost".to_string());
+                        map.description = Some("Max boost | X: Engine speed (rpm) | Y: Atm pressure (mbar)".to_string());
+                        map.confidence = 0.9;
                         classified_this = true;
                     } else if (x_axis_id_high == 0xC5 && y_axis_id_high == 0xEC) ||
                               (x_axis_id_high == 0xC4 && y_axis_id_high == 0xEA) {
@@ -4360,6 +4636,29 @@ impl EDC15PDetector {
                     map.name = Some("Boost limit map".to_string());
                     map.correction_factor = Some(1.0);
                     classified_this = true;
+                } else if (x_axis_id_high == 0xEC || x_axis_id_high == 0xEA)
+                    && y_axis_id_high == 0xC1
+                {
+                    // Limit of overboost protection, disposition du 038906019FJ :
+                    // [regime EC x10][rapport cyclique VNT C1 x10]. Les autres
+                    // logiciels portent ce rapport cyclique sur la famille C2 et
+                    // le placent en premier, d'ou l'absence de cette carte ici
+                    // (issue #20). Presentee comme sur eux : X = rapport
+                    // cyclique (%), Y = regime.
+                    let orig_x = map.x_axis_address;
+                    map.x_axis_address = map.y_axis_address;
+                    map.y_axis_address = orig_x;
+                    map.category = Some("Detected maps".to_string());
+                    map.subcategory = Some("2-Limiters".to_string());
+                    map.name = Some("Limit of overboost protection".to_string());
+                    map.correction_factor = Some(1.0);
+                    map.x_axis_correction = Some(0.01);
+                    map.x_axis_offset = Some(0.0);
+                    map.y_axis_correction = Some(1.0);
+                    map.y_axis_offset = Some(0.0);
+                    map.x_label = Some("VNT duty cycle (%)".to_string());
+                    map.y_label = Some("Engine speed (rpm)".to_string());
+                    classified_this = true;
                 } else if x_axis_id_high == 0xEC && y_axis_id_high == 0xC0 {
                     // Limit of overboost protection
                     map.category = Some("Detected maps".to_string());
@@ -4377,16 +4676,26 @@ impl EDC15PDetector {
                 let is_driver_wish = (x_axis_id_high == 0xEC && y_axis_id_high == 0xC0) ||
                                      (x_axis_id_high == 0xC0 && y_axis_id_high == 0xEC);
                 if is_driver_wish {
-                    let (larger_len, smaller_len) = if x_len >= y_len {
+                    // Lignes = points de regime, colonnes = points de pedale,
+                    // lus sur les identifiants et non sur le plus grand des deux.
+                    let (larger_len, smaller_len) = if x_axis_id_high == 0xEC {
                         (x_len, y_len)
                     } else {
                         (y_len, x_len)
                     };
                     // Swap axis addresses: put RPM on X (cols/top) and TPS% on Y (rows/left)
-                    let orig_x = map.x_axis_address;
-                    let orig_y = map.y_axis_address;
-                    map.x_axis_address = orig_y;
-                    map.y_axis_address = orig_x;
+                    // Les axes sont attribues par IDENTIFIANT : X = pedale
+                    // (famille C0), Y = regime (famille EC), quel que soit
+                    // l'ordre du fichier et quelle que soit la passe qui a cree
+                    // la carte. L'echange etait inconditionnel : sur le
+                    // 038906019FJ, ou la carte arrive deja dans le bon sens, il
+                    // remettait le regime en X, et l'app affichait une charge
+                    // montant a 25 % avec un regime non monotone (issue #20).
+                    if x_axis_id_high == 0xEC {
+                        let orig_x = map.x_axis_address;
+                        map.x_axis_address = map.y_axis_address;
+                        map.y_axis_address = orig_x;
+                    }
 
                     map.category = Some("Detected maps".to_string());
                     map.subcategory = Some("4-Misc".to_string());

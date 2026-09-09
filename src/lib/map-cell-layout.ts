@@ -40,6 +40,61 @@ export interface MapCellLayout {
   cellIndex: (row: number, col: number) => number;
 }
 
+export interface MapAxisLabelInput {
+  x_label?: string | null;
+  y_label?: string | null;
+  description?: string | null;
+}
+
+export interface MapAxisLabels {
+  /** Libellé complet, tel que l'app l'affiche (« Engine speed (rpm) ») */
+  xLabel: string;
+  yLabel: string;
+  /** Unité seule, reprise dans le coin de la map et dans le mappack (« rpm ») */
+  xUnit: string;
+  yUnit: string;
+}
+
+/**
+ * Libellés et unités des axes AFFICHÉS, source unique du MapViewer (coin de
+ * la map, info-bulles 2D) et de l'export mappack (AxisX/Y.Name et .Unit).
+ * Priorité aux champs x_label / y_label du détecteur (une chaîne vide est un
+ * choix valable : pas de libellé), sinon la description « X: Grandeur (unité)
+ * | Y: … ». Sans rien, rien : un « Load » ou un « mbar » par défaut serait une
+ * fausse information.
+ */
+export function resolveAxisLabels(map: MapAxisLabelInput): MapAxisLabels {
+  const extractUnit = (label: string): string => {
+    const match = label.match(/\(([^)]+)\)/);
+    return match ? match[1].trim() : label;
+  };
+  let xLabel = "";
+  let yLabel = "";
+  let xUnit = "";
+  let yUnit = "";
+  if (map.x_label !== undefined && map.x_label !== null) {
+    xLabel = map.x_label;
+    xUnit = extractUnit(map.x_label);
+  }
+  if (map.y_label !== undefined && map.y_label !== null) {
+    yLabel = map.y_label;
+    yUnit = extractUnit(map.y_label);
+  }
+  if (map.description && (!map.x_label || !map.y_label)) {
+    const xMatch = map.description.match(/X:\s*([^(|]+)\s*\(([^)]+)\)/);
+    const yMatch = map.description.match(/Y:\s*([^(|]+)\s*\(([^)]+)\)/);
+    if (!map.x_label && xMatch && xMatch.length >= 3) {
+      xLabel = xMatch[1].trim();
+      xUnit = xMatch[2].trim();
+    }
+    if (!map.y_label && yMatch && yMatch.length >= 3) {
+      yLabel = yMatch[1].trim();
+      yUnit = yMatch[2].trim();
+    }
+  }
+  return { xLabel, yLabel, xUnit, yUnit };
+}
+
 function apiDims(map: MapLayoutInput): { apiRows: number; apiCols: number } {
   if (map.dimensions?.TwoDimensional) {
     return {

@@ -189,9 +189,10 @@ impl EDC15PMapPattern {
             "Turbo boost pressure control", "N75", -0.01, 100.0, 0.01, 0.0, 1.0, 0.0,
             "IQ", "Engine speed", "Duty cycle %", "mg/st", "rpm");
         // 352 bytes (16x11) - Other variants
-        add_pattern!("N75 duty cycle", 352, 16, 11, 0xEC, 0xEA,
-            "Turbo boost pressure control", "N75", -0.01, 100.0, 0.01, 0.0, 1.0, 0.0,
-            "IQ", "Engine speed", "Duty cycle %", "mg/st", "rpm");
+        // Le fichier porte [régime EC ×16][IQ EA ×11][16 lignes de 11] : un
+        // seul motif, X = IQ (11) / Y = régime (16), apparié en ordre inversé.
+        // Le motif « 16, 11, EC, EA » qui existait aussi donnait 16 colonnes
+        // de régime avec le facteur et le libellé de l'IQ (1.4 TDI 045906019xx).
         add_pattern!("N75 duty cycle", 352, 11, 16, 0xEA, 0xEC,
             "Turbo boost pressure control", "N75", -0.01, 100.0, 0.01, 0.0, 1.0, 0.0,
             "IQ", "Engine speed", "Duty cycle %", "mg/st", "rpm");

@@ -3,18 +3,27 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FileRecord } from "@/lib/types";
+import { PROJECT_NAME_MAX_LENGTH } from "@/lib/types";
 import * as store from "@/lib/local/store";
 import { Button } from "@/components/ui/button";
 import { StyledSelect } from "@/components/styled-select";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useToast } from "@/hooks/use-toast";
 import { ProjectCreator } from "@/components/project-creator";
-import { MacTitlebarSpacer, WindowControls } from "@/components/window-controls";
+import { WindowControls } from "@/components/window-controls";
 import { isMacOS } from "@/lib/platform";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
+import { ZoomControl } from "@/components/zoom-control";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
-import { setAppZoom, setAppMinWidth, editorFloorLogicalWidth } from "@/lib/webview-zoom";
+import {
+  setAppZoom,
+  setAppMinWidth,
+  editorFloorLogicalWidth,
+  storedDashboardZoomPercent,
+  APP_MIN_ZOOM_PERCENT,
+  APP_MAX_ZOOM_PERCENT,
+} from "@/lib/webview-zoom";
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings } from "@/contexts/settings-context";
 import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
@@ -219,7 +228,8 @@ function ProjectInfoEditModal({
                 <input
                   type="text"
                   value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
+                  maxLength={PROJECT_NAME_MAX_LENGTH}
+                  onChange={(e) => setProjectName(e.target.value.slice(0, PROJECT_NAME_MAX_LENGTH))}
                   className={inputCls}
                   placeholder={t.projectInfo.projectNamePlaceholder}
                   spellCheck={false}
@@ -415,8 +425,52 @@ function DashboardContent() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Zoom du dashboard : 90 % à l'origine, réglable depuis la barre de titre
+  // et mémorisé d'une session à l'autre, mêmes règles que l'éditeur (pas de
+  // 5 %, valeur libre à la saisie, 50 à 100 %).
+  const [dashboardZoom, setDashboardZoom] = useState<number>(() => storedDashboardZoomPercent());
+  const clampZoom = (value: number) =>
+    Math.min(APP_MAX_ZOOM_PERCENT, Math.max(APP_MIN_ZOOM_PERCENT, Math.round(value)));
+  const changeZoom = (delta: number) => setDashboardZoom((z) => clampZoom(z + delta));
   useEffect(() => {
-    setAppZoom(0.9);
+    try {
+      localStorage.setItem("zedsuite-dashboard-zoom", String(dashboardZoom));
+    } catch {
+      // stockage indisponible : le zoom vaut pour la session
+    }
+    setAppZoom(dashboardZoom / 100);
+  }, [dashboardZoom]);
+
+  // Plafond de zoom, comme dans l'éditeur : quand l'écran est trop petit
+  // pour tout afficher, le zoom RÉGLÉ redescend par pas de 5 jusqu'à ce que
+  // la page tienne en largeur (jamais sous le plancher). Il ne remonte pas
+  // tout seul quand la fenêtre est ré-agrandie, c'est le bouton + qui le
+  // remonte — même règle que l'éditeur.
+  //
+  // L'éditeur compare la largeur de la fenêtre à une constante, la largeur
+  // minimale de sa barre d'outils. Le dashboard n'en a pas : il se réagence,
+  // et ce qui déborde dépend du contenu (longueur des noms de projets,
+  // langue des boutons). On mesure donc le débordement réel plutôt que de
+  // poser un nombre qui serait faux ailleurs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const fit = () => {
+      const root = document.documentElement;
+      // 8 px de marge : en dessous c'est un arrondi de rendu, pas un
+      // débordement visible.
+      if (root.scrollWidth - root.clientWidth > 8) {
+        setDashboardZoom((z) => (z > APP_MIN_ZOOM_PERCENT ? clampZoom(z - 5) : z));
+      }
+    };
+    const raf = requestAnimationFrame(fit);
+    window.addEventListener("resize", fit);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", fit);
+    };
+  }, [dashboardZoom, files.length]);
+
+  useEffect(() => {
     // Même taille minimale que l'éditeur (barre d'outils + liste des maps
     // au zoom le plus bas) pour que la fenêtre ne change pas de contrainte
     // d'une page à l'autre.
@@ -794,8 +848,13 @@ function DashboardContent() {
       <header data-tauri-drag-region className="relative z-[60]" style={{ animation: 'slideInFromTop 0.6s ease-out' }}>
         <div data-tauri-drag-region className="pl-4 pr-2 pt-1 pb-1">
           <div data-tauri-drag-region className="flex items-start justify-between">
-            <div data-tauri-drag-region className="flex items-center gap-3 pt-2 pl-2 min-w-0 overflow-hidden">
-              <MacTitlebarSpacer />
+            {/* Wordmark centré dans la fenêtre sur toutes les plateformes
+                (demande du 09/09 : même interface partout). Sur macOS cela le
+                tient aussi à l'écart des feux de la fenêtre. */}
+            <div
+              data-tauri-drag-region
+              className="absolute left-1/2 top-3 -translate-x-1/2 select-none pointer-events-none"
+            >
               {/* Même wordmark que l'éditeur : « Zed » en dégradé + BETA */}
               <div data-tauri-drag-region className="relative inline-block select-none">
                 <h1 data-tauri-drag-region className="text-xl font-bold">
@@ -809,7 +868,15 @@ function DashboardContent() {
                 flex-shrink-0 : réduire/agrandir/fermer restent toujours
                 visibles quand la fenêtre rétrécit (c'est le wordmark à gauche
                 qui se comprime). */}
-            <div className="flex items-center pt-1 flex-shrink-0">
+            <div className="flex items-center pt-1 flex-shrink-0 ml-auto">
+              {/* Zoom de l'écran : la pastille de la barre d'outils de
+                  l'éditeur, à l'identique */}
+              <ZoomControl
+                percent={dashboardZoom}
+                onStep={changeZoom}
+                onSet={(v) => setDashboardZoom(clampZoom(v))}
+                className="mr-1.5"
+              />
               <button
                 onClick={() => setShowAbout(true)}
                 className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}
@@ -844,7 +911,13 @@ function DashboardContent() {
 
         {/* Rangée titre / recherche / upload — fixe avec la barre fenêtre */}
         <div className="relative container mx-auto px-4 pt-3 pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Trois colonnes : titre à gauche, RECHERCHE AU CENTRE DE LA
+              FENÊTRE comme le wordmark, bouton d'import à droite. En
+              justify-between la recherche se plaçait entre les deux blocs,
+              donc jamais au milieu, et sa position bougeait avec la longueur
+              du titre et la langue du bouton. Sous 640 px les trois blocs
+              s'empilent. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-4">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-baseline gap-3">
                 <h3 className={`text-sm font-bold uppercase tracking-widest ${subText ?? (isLight ? 'text-slate-900' : 'text-slate-300')}`}>{t.dashboard.recentFiles}</h3>
@@ -859,8 +932,8 @@ function DashboardContent() {
               )}
             </div>
 
-            {/* Search Bar */}
-            <div className="relative w-full sm:w-80">
+            {/* Search Bar — colonne du milieu, centrée dans la fenêtre */}
+            <div className="relative w-full sm:w-80 sm:justify-self-center">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isLight ? 'text-slate-600' : 'text-slate-500'}`} />
               <input
                 type="text"
@@ -876,7 +949,7 @@ function DashboardContent() {
 
             <Button
               onClick={handleUploadClick}
-              className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 hover:from-red-500 hover:via-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/25 group"
+              className="sm:justify-self-end bg-gradient-to-r from-red-600 via-red-500 to-orange-500 hover:from-red-500 hover:via-red-400 hover:to-orange-400 text-white shadow-lg shadow-red-500/25 group"
             >
               <Upload className="w-4 h-4 mr-2" />
               <span>{t.dashboard.upload}</span>
@@ -919,7 +992,7 @@ function DashboardContent() {
                       className={`group flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${isLight ? 'bg-white/60 border border-black/[0.08] hover:bg-white/90 hover:border-black/[0.16] shadow-sm' : onCustomDark ? 'bg-[#0d1017]/45 border border-white/[0.12] hover:bg-[#0d1017]/60 hover:border-white/[0.2]' : 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]'}`}
                       onClick={() => handleOpenProject(file)}
                     >
-                      <div className="flex items-center gap-4 flex-1">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
                         <div className={`w-12 h-12 rounded-xl ${iconStyles.background} flex items-center justify-center border ${iconStyles.border}`}>
                           {iconStyles.stageNumber ? (
                             <span className="text-xl font-bold" style={{ fontStyle: 'italic' }}>
@@ -973,7 +1046,9 @@ function DashboardContent() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      {/* Bloc de droite jamais compressé ni replié : c'est le nom
+                          du projet (tronqué) qui absorbe le manque de place */}
+                      <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
                         <div className={`px-2.5 py-0.5 rounded-full border ${isLight ? 'border-black/[0.10] bg-black/[0.05]' : 'border-white/[0.08] bg-white/[0.05]'}`}>
                           <span className={`text-xs tabular-nums ${subText ?? (isLight ? 'text-slate-500' : 'text-slate-400')}`}>
                             {t.dashboard.versions} : <span className={subText ?? (isLight ? 'text-slate-900' : 'text-slate-200')}>{versionCounts[file.id] || 1}</span>

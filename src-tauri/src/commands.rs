@@ -100,7 +100,35 @@ pub fn identify_ecu(
 ///       offsets » renommée « Display scaling », EDC15VM « MAP/MAF switch »
 ///       ajouté. Numéros 39–42 partagés entre les deux lignées, donc tous
 ///       les projets EDC15 et CP31 doivent être re-scannés.
-pub const DETECTOR_VERSION: u32 = 43;
+///   (amont, numéros 41–47 attribués indépendamment sur master) :
+///   41 — EDC15P : le switch MAP/MAF est trouvé sur la disposition compacte
+///       (019AJ, 019AN, 019BK, 019CJ), identifiant 01 02 et queue 00 01 01 01.
+///   42 — Libellés/facteurs d'axes normalisés (MAP linearisation en mV, boost
+///       correction by temperature et N75 sur VM, torque/SOI limiter EDC16,
+///       débit d'air des limiteurs de fumée, unités VM).
+///   43 — EDC15P 1.4 TDI 3 cylindres (045906019xx) : durations à tailles
+///       variables numérotées par chaîne, driver wish à 9-10 points de
+///       pédale, hystérésis EGR à 19 points, correction de boost par
+///       température sans identifiant DA sur l'axe de température.
+///   44 — EDC15P 1.4 TDI : SVBL par en-tête fixe, boost limit map 10×9,
+///       vraie EGR 16×11/16×12 (la carte de limitation qui partage le motif
+///       EGR n'est plus retenue, sur aucune disposition).
+///   45 — EDC15P : « Injector duration 00 » avec les corrections d'axes dans
+///       l'ordre de ses adresses (régime ×1 en X, IQ ×0,01 en Y) ; N75 16×11
+///       des 1.4 TDI lu 11 colonnes IQ × 16 lignes régime.
+///   46 — EDC15P : axes du driver wish attribués par identifiant, limite de
+///       surpression sur axe de rapport cyclique C1, limiteur par débit
+///       d'air attendu seulement quand le fichier en porte la structure ;
+///       EDC15VM : limiteur par débit d'air à 11 points d'axe (352 octets).
+///   47 — Switch MAP/MAF des EDC16 (U1/U31/U34) et identification : un
+///       EDC15VM sans référence VAG dans le binaire n'est plus pris
+///       pour un EDC15P (2.5 V6).
+///   48 — Fusion avec l'amont 1.2.0 (amont 41–47 : MAP/MAF EDC15P compact,
+///       axes normalisés, EDC15P 1.4 TDI 3 cyl., MAP/MAF EDC16 U1/U31/U34,
+///       identification EDC15VM 2.5 V6). Numéros 41–47 en doublon entre les
+///       deux lignées, donc tous les projets EDC15, EDC16 et CP31 doivent
+///       être re-scannés.
+pub const DETECTOR_VERSION: u32 = 48;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -136,7 +164,7 @@ pub fn detect_maps(request: DetectMapsArgs) -> Result<DetectMapsResponse, String
     let maps: Vec<DetectedMap> =
         detector.detect_maps_with_options(&data, request.ecu_type.as_deref(), request.tuned_mode);
 
-    let expected_maps = build_expected_report(request.ecu_type.as_deref(), &maps);
+    let expected_maps = build_expected_report(request.ecu_type.as_deref(), &maps, &data);
 
     let response = DetectMapsResponse {
         success: true,
@@ -212,10 +240,11 @@ fn build_expected_report_edc16cp31(maps: &[DetectedMap]) -> Option<Vec<ExpectedM
 fn build_expected_report(
     ecu_type: Option<&str>,
     maps: &[DetectedMap],
+    data: &[u8],
 ) -> Option<Vec<ExpectedMapStatus>> {
     let ecu = ecu_type.unwrap_or("").to_uppercase();
     if ecu.contains("EDC15P") {
-        return build_expected_report_edc15p(maps);
+        return build_expected_report_edc15p(maps, data);
     }
     if ecu.contains("EDC15VM") {
         return build_expected_report_edc15vm(maps);
@@ -383,7 +412,38 @@ fn build_expected_report(
 /// vérifiées au banc sur 28 fichiers / 71 codeblocks, tous à 100 %) —
 /// chaque règle est agrégée sur l'ensemble des codeblocks détectés
 /// (attendu = n_codeblocks × minimum par codeblock).
-fn build_expected_report_edc15p(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapStatus>> {
+/// Le fichier porte-t-il une structure de limiteur par debit d'air, soit
+/// [regime EC/EA x16][debit d'air DA x13] suivie de ses 416 octets ?
+///
+/// Tous les logiciels n'ont pas cette carte : le 038906019FJ n'a que le
+/// limiteur de fumee, sur l'axe de regime F9, et sa reference WinOLS ne liste
+/// pas d'IQ by MAF limiter non plus. L'attendre partout affichait un manque
+/// qui n'en etait pas un (issue #20). On ne l'attend donc que lorsque la
+/// structure est la, ce qui laisse la regle utile : elle signale toujours une
+/// structure presente que le detecteur n'a pas su nommer.
+fn has_iq_by_maf_structure(data: &[u8]) -> bool {
+    let rd = |o: usize| u16::from_le_bytes([data[o], data[o + 1]]);
+    let need = 4 + 32 + 4 + 26 + 416;
+    let mut t = 0usize;
+    while t + need <= data.len() {
+        let rpm_id_high = (rd(t) >> 8) as u8;
+        if (rpm_id_high == 0xEC || rpm_id_high == 0xEA) && rd(t + 2) == 16 {
+            let second = t + 4 + 32;
+            // L'axe de debit d'air part au-dessus de 250 mg/st (bruts x0,1),
+            // ce qui l'ecarte d'un axe de pression de suralimentation.
+            if (rd(second) >> 8) as u8 == 0xDA && rd(second + 2) == 13 && rd(second + 4) >= 2500 {
+                return true;
+            }
+        }
+        t += 2;
+    }
+    false
+}
+
+fn build_expected_report_edc15p(
+    maps: &[DetectedMap],
+    data: &[u8],
+) -> Option<Vec<ExpectedMapStatus>> {
     use std::collections::HashSet;
     let codeblocks: HashSet<u32> = maps.iter().filter_map(|m| m.codeblock_id).collect();
     let n_cb = codeblocks.len().max(1);
@@ -462,6 +522,17 @@ fn build_expected_report_edc15p(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapS
             .collect()
     } else {
         rules
+    };
+
+    // Familles absentes de certains logiciels : on ne les attend que si le
+    // binaire en porte la structure (voir has_iq_by_maf_structure).
+    let rules: Vec<(&str, usize, u8, &str)> = if has_iq_by_maf_structure(data) {
+        rules
+    } else {
+        rules
+            .into_iter()
+            .filter(|(label, _, _, _)| *label != "IQ by MAF limiter")
+            .collect()
     };
 
     let report: Vec<ExpectedMapStatus> = rules
