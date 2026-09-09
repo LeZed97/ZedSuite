@@ -89,6 +89,31 @@ Les contributions sont bienvenues : les **nouveaux détecteurs d'ECU** sont ce q
 - **Dilemma**, qui a publié [VAGEDCSuite](https://github.com/Blackfrosch/VAGEDCSuite) il y a environ 14 ans. C'est avec ce logiciel que j'ai pu pratiquer et apprendre facilement : la reconnaissance automatique des maps, la simplicité de l'outil… un travail énorme pour un logiciel né dans les années 2000 ! (Ce mec doit être un alien) Une grande partie de la logique de détection des EDC15 de ZedSuite est d'ailleurs directement héritée du travail fait dans EDCSuite.
 - **Skalda**, qui a [fait vivre VAGEDCSuite](https://github.com/skaldamramra/VAGEDCSuite) en mettant à jour la détection et en ajoutant beaucoup de maps EDC15. Ma propre version d'EDCSuite est partie de la sienne, et c'est elle que j'ai utilisée au quotidien en attendant d'avoir le temps de faire ZedSuite.
 
+### Contributeurs
+
+ZedSuite est meilleure parce que des gens ont pris le temps de signaler, d'envoyer des fichiers et d'écrire du code.
+
+**Code**
+
+- [@COSSART-FR](https://github.com/COSSART-FR) — estimation de puissance d'une version créée par import (1.1.8), et le détecteur Bosch EDC16CP31 Mercedes en cours.
+
+**Signalements, fichiers et idées**
+
+- [@henry66z](https://github.com/henry66z) — EDC15VM 012M : SOI unique gardée sur les fichiers modifiés, switch MAP/MAF, codes défaut, et les axes de la correction de boost par température et de la MAP linearisation.
+- [@kultss](https://github.com/kultss) — les maps masquées de la liste, et les courbes de puissance nommées avec les vrais numéros de codeblock.
+- [@georgiminchev04](https://github.com/georgiminchev04) — switch MAP/MAF sur les logiciels compacts (019CJ).
+- [@Marvx1j](https://github.com/Marvx1j) — launch control sur le 019HJ.
+- [@kapselegg](https://github.com/kapselegg) — la comparaison de versions, et plusieurs idées pour l'éditeur.
+- [@Yonifarolas](https://github.com/Yonifarolas) — les fichiers multimap et le codeblock qu'ils ajoutent.
+- [@LJ-PVD](https://github.com/LJ-PVD) — le plein écran.
+- [@reproteq](https://github.com/reproteq) et [@tboHammu](https://github.com/tboHammu) — la vue 2D des matrices complètes.
+- [@alexmieila09](https://github.com/alexmieila09) — a proposé d'écrire cette vue 2D.
+- [@legersvag](https://github.com/legersvag) — l'ajustement des durations et de l'avance pour des nez plus gros.
+- [@Hitsauskone](https://github.com/Hitsauskone) — Linux.
+- **mkjar**, **tomisuikkeli** et **HappyB** sur le fil ecuconnections — codes défaut des EDC15 compacts, maps VCDS et favoris, export CSV.
+
+Joindre un dump à un signalement, c'est ce qui rend une correction possible. Les fichiers servent uniquement à corriger le détecteur et ne sont jamais partagés.
+
 ## ⬇️ Téléchargement
 
 Tout est dans la section **Assets** de la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest). Une fois installée, l'application se met à jour toute seule, sur les deux systèmes.

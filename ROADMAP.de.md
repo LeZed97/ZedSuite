@@ -7,10 +7,8 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 ## Geplant
 
 - Vergleich der Kennfelder zweier Versionen eines Projekts im Compare-Fenster, das heute den binären Vergleich macht: dasselbe Kennfeld beider Versionen nebeneinander, Unterschiede hervorgehoben.
-- Rückgängig mit Strg+Z im Editor.
 - 2D-Ansicht im WinOLS-Stil für vollständige Matrizen: eine Kurve pro Zeile, gewählte Zeile hervorgehoben.
 - Ein N75-Invertierungsschalter bei EDC15VM, für Fahrzeuge, die von einem Wastegate-Turbo auf VNT oder umgekehrt umgebaut wurden: der Block, der ihn steuert, ist auf den meisten Dateien des Prüfstands lokalisiert, der Schalter selbst ist noch nicht gebaut.
-- DTCs der kompakten EDC15-Software (038906012K, 012L, 012AA, 012AP, 012CP, 019AJ, 019AN): Lesen und Umschalten pro Fehlerpfad funktionieren seit 1.1.7, das Umschalten ist aber noch nicht am Fahrzeug bestätigt. Rückmeldungen willkommen.
 - EDC15P der ersten PD-Generation (1999-2002, 038906019A / 019AJ): die Kennfelderkennung ist fertig und die DTC-Tabelle wird bei den 019AJ gelesen; die Checksumme wird noch nicht unterstützt, die DTC-Tabelle der 019A hat noch ein anderes Layout, und das Kennfeld MAP linearisation wird bei den 019A nicht gefunden.
 - Bessere EDC15VM-Erkennung: einige Dateien sind noch nicht vollständig abgedeckt, vor allem der 2.5 V6 (1-MB-Dumps), sowie die Kennfelder N146 und N75 der Generation 012K / 012AP. Die Korrekturen für die von Nutzern eingesandten Softwarenummern sind drin (einzelnes SOI und MAP/MAF-Schalter des 012M in 1.1.7).
 - EDC15VM: am Fahrzeug prüfen, ob die SVRL-Kennfelder wirklich aktiv sind, wenn der Detektor sie findet.
@@ -20,16 +18,17 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 
 ## Von Nutzern gewünscht, in Prüfung
 
+- Rückgängig mit Strg+Z im Editor.
 - CSV-Import und -Export (das JSON-Mappack für WinOLS gibt es schon) und DAMOS-Import.
 - Favoriten-Kennfelder, für schnellen Zugriff auf die am häufigsten bearbeiteten.
 - Eine andere Referenzversion als Ori für „Originalwert“ und den Vergleich.
-- Inverse driver wish und MAF linearisation in der Kennfeldliste (heute bewusst ausgeblendet: es sind Umrechnungstabellen, keine Tuning-Kennfelder).
+- Inverse driver wish und MAF linearisation in der Kennfeldliste.
 - Kennfelder direkt in der 3D-Ansicht bearbeiten.
+- Die Leistungsschätzung an andere Düsen als Firad anpassen, etwa Recambo oder DSSR.
 - Zwei Versionen desselben Projekts nebeneinander bearbeiten.
 - Mehr Funktionen im Eigenschaften-Fenster der Kennfelder.
-- Alle vom Original abweichenden Werte in den Kennfeldfenstern hervorheben: heute sind nur die von Ihnen bearbeiteten Zellen rot.
+- Alle vom Original abweichenden Werte in den Kennfeldfenstern hervorheben.
 - Eine Linux-Version. Die Oberfläche ist derselbe Code wie unter Windows und macOS, nur die Hülle wäre zu machen; es hängt davon ab, wie viele danach fragen.
-- Einspritzdauern und SOI-Kennfelder in einem Schritt an größere Düsen anpassen (Firad, Recambo …).
 
 ## Vorerst nicht geplant
 

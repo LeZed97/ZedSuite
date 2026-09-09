@@ -13,9 +13,17 @@ import { ProjectCreator } from "@/components/project-creator";
 import { WindowControls } from "@/components/window-controls";
 import { isMacOS } from "@/lib/platform";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
+import { ZoomControl } from "@/components/zoom-control";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
-import { setAppZoom, setAppMinWidth, editorFloorLogicalWidth } from "@/lib/webview-zoom";
+import {
+  setAppZoom,
+  setAppMinWidth,
+  editorFloorLogicalWidth,
+  storedDashboardZoomPercent,
+  APP_MIN_ZOOM_PERCENT,
+  APP_MAX_ZOOM_PERCENT,
+} from "@/lib/webview-zoom";
 import { useI18n } from "@/contexts/i18n-context";
 import { useSettings } from "@/contexts/settings-context";
 import { DashboardBackground, useDashboardWallpaper } from "@/components/dashboard-background";
@@ -417,8 +425,23 @@ function DashboardContent() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Zoom du dashboard : 90 % à l'origine, réglable depuis la barre de titre
+  // et mémorisé d'une session à l'autre, mêmes règles que l'éditeur (pas de
+  // 5 %, valeur libre à la saisie, 50 à 100 %).
+  const [dashboardZoom, setDashboardZoom] = useState<number>(() => storedDashboardZoomPercent());
+  const clampZoom = (value: number) =>
+    Math.min(APP_MAX_ZOOM_PERCENT, Math.max(APP_MIN_ZOOM_PERCENT, Math.round(value)));
+  const changeZoom = (delta: number) => setDashboardZoom((z) => clampZoom(z + delta));
   useEffect(() => {
-    setAppZoom(0.9);
+    try {
+      localStorage.setItem("zedsuite-dashboard-zoom", String(dashboardZoom));
+    } catch {
+      // stockage indisponible : le zoom vaut pour la session
+    }
+    setAppZoom(dashboardZoom / 100);
+  }, [dashboardZoom]);
+
+  useEffect(() => {
     // Même taille minimale que l'éditeur (barre d'outils + liste des maps
     // au zoom le plus bas) pour que la fenêtre ne change pas de contrainte
     // d'une page à l'autre.
@@ -796,13 +819,12 @@ function DashboardContent() {
       <header data-tauri-drag-region className="relative z-[60]" style={{ animation: 'slideInFromTop 0.6s ease-out' }}>
         <div data-tauri-drag-region className="pl-4 pr-2 pt-1 pb-1">
           <div data-tauri-drag-region className="flex items-start justify-between">
-            {/* macOS : les feux occupent le coin gauche, le wordmark est
-                centré dans la fenêtre. Windows : wordmark à gauche. */}
+            {/* Wordmark centré dans la fenêtre sur toutes les plateformes
+                (demande du 09/09 : même interface partout). Sur macOS cela le
+                tient aussi à l'écart des feux de la fenêtre. */}
             <div
               data-tauri-drag-region
-              className={isMacOS()
-                ? "absolute left-1/2 top-3 -translate-x-1/2 select-none pointer-events-none"
-                : "flex items-center gap-3 pt-2 pl-2 min-w-0 overflow-hidden"}
+              className="absolute left-1/2 top-3 -translate-x-1/2 select-none pointer-events-none"
             >
               {/* Même wordmark que l'éditeur : « Zed » en dégradé + BETA */}
               <div data-tauri-drag-region className="relative inline-block select-none">
@@ -818,6 +840,14 @@ function DashboardContent() {
                 visibles quand la fenêtre rétrécit (c'est le wordmark à gauche
                 qui se comprime). */}
             <div className="flex items-center pt-1 flex-shrink-0 ml-auto">
+              {/* Zoom de l'écran : la pastille de la barre d'outils de
+                  l'éditeur, à l'identique */}
+              <ZoomControl
+                percent={dashboardZoom}
+                onStep={changeZoom}
+                onSet={(v) => setDashboardZoom(clampZoom(v))}
+                className="mr-1.5"
+              />
               <button
                 onClick={() => setShowAbout(true)}
                 className={`h-8 w-10 flex items-center justify-center rounded-md transition-colors ${isLight ? (onCustomLight ? 'text-slate-900 hover:text-black hover:bg-black/10' : 'text-slate-500 hover:text-black hover:bg-black/10') : darkIcon}`}

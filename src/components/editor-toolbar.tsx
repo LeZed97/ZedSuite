@@ -8,13 +8,12 @@ import {
   Zap,
   ChevronDown,
   Check,
-  Plus,
-  Minus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/contexts/theme-context";
 import { useI18n } from "@/contexts/i18n-context";
-import { MacTitlebarSpacer, WindowControls } from "@/components/window-controls";
+import { WindowControls } from "@/components/window-controls";
+import { ZoomControl } from "@/components/zoom-control";
 import { isMacOS } from "@/lib/platform";
 
 // Opération de la pastille de modification : ajouter une valeur, remplacer
@@ -85,13 +84,7 @@ export function EditorToolbar({
 
   // State for modify controls - use controlled value if provided
   // Saisie directe du zoom (clic sur la valeur) — bornée par l'éditeur
-  const [zoomEditing, setZoomEditing] = useState(false);
-  const [zoomDraft, setZoomDraft] = useState("");
-  const commitZoomDraft = () => {
-    setZoomEditing(false);
-    const v = parseInt(zoomDraft, 10);
-    if (Number.isFinite(v)) onZoomSet?.(v);
-  };
+
   const [internalModifyOperation, setInternalModifyOperation] = useState<ModifyOperation>('add');
   const modifyOperation = controlledModifyOperation ?? internalModifyOperation;
   const setModifyOperation = (op: ModifyOperation) => {
@@ -222,7 +215,10 @@ export function EditorToolbar({
         borderBottom: `1px solid ${getBorderColor()}`
       }}
     >
-        <MacTitlebarSpacer />
+        {/* Pas d'espaceur pour les feux macOS ici : la barre d'outils commence
+            à droite de la liste des maps, large de 335 px au minimum, alors que
+            les feux s'arrêtent vers 68 px. Les 74 px réservés ne servaient à
+            rien et décalaient toutes les pastilles vers la droite sur Mac. */}
         {/* Groupe unifié : 8b / 16b / Hex / Dec */}
         <div className="flex items-center rounded-lg px-0.5 sm:px-1 flex-shrink-0" style={{ background: getButtonBg(), border: `1px solid ${getBorderColor()}` }}>
           <Button
@@ -430,63 +426,13 @@ export function EditorToolbar({
           jusqu'a 12px comme les autres quand la fenetre retrecit. */}
       <div data-tauri-drag-region className="flex-1 min-w-[12px]" />
 
-        {/* Zoom de l'éditeur : pastille [-] valeur [+] comme les autres
-            groupes de la topbar */}
-        <div
-          className="flex items-center rounded-lg px-1 mr-0.5 sm:mr-1 flex-shrink-0"
-          style={{ background: getButtonBg(), border: `1px solid ${getBorderColor()}` }}
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-7 w-7 p-0 ${getButtonHoverClass()}`}
-            onClick={onZoomOut}
-            title="Zoom −"
-            style={{ color: getTextColor() }}
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </Button>
-          {zoomEditing ? (
-            <input
-              autoFocus
-              type="text"
-              inputMode="numeric"
-              value={zoomDraft}
-              onChange={(e) => setZoomDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
-              onBlur={commitZoomDraft}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitZoomDraft();
-                else if (e.key === "Escape") setZoomEditing(false);
-                e.stopPropagation();
-              }}
-              className="text-xs tabular-nums w-9 text-center bg-transparent outline-none rounded border"
-              style={{ color: getTextColor(), borderColor: getBorderColor() }}
-            />
-          ) : (
-            <button
-              type="button"
-              className="text-xs tabular-nums w-9 text-center select-none rounded hover:opacity-80"
-              style={{ color: getTextColor() }}
-              title="60 – 100 %"
-              onClick={() => {
-                setZoomDraft(String(zoomPercent));
-                setZoomEditing(true);
-              }}
-            >
-              {zoomPercent}%
-            </button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-7 w-7 p-0 ${getButtonHoverClass()}`}
-            onClick={onZoomIn}
-            title="Zoom +"
-            style={{ color: getTextColor() }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
-        </div>
+        {/* Zoom de l'éditeur : pastille partagée avec le dashboard */}
+        <ZoomControl
+          percent={zoomPercent}
+          onStep={(delta) => (delta < 0 ? onZoomOut?.() : onZoomIn?.())}
+          onSet={(v) => onZoomSet?.(v)}
+          className="mr-0.5 sm:mr-1"
+        />
         <Button
           variant="ghost"
           size="sm"

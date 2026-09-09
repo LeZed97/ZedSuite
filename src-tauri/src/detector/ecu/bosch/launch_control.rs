@@ -3,8 +3,9 @@
 //! La cartographie de launch control (25×14, 700 octets) est présente dans le
 //! binaire d'origine mais NEUTRALISÉE : son axe Y porte un descripteur
 //! corrompu. La solution « Launch Control » de ZedSuite réécrit cet axe avec
-//! des paliers de vitesse véhicule (0, 20, 40 … 260 km/h), ce qui active la
-//! carte.
+//! des paliers de vitesse véhicule bruts (0, 20, 40 … 260), ce qui active la
+//! carte. Le facteur d'axe vaut 0,15625 km/h par bit : à l'écran l'axe va
+//! donc de 0 à 40,6 km/h, comme EDCSuite l'affiche sur ces fichiers.
 //!
 //! Structure à partir de l'adresse de signature (« sig ») :
 //!   sig+0  : 2 octets quelconques (joker dans la signature d'origine)
@@ -22,7 +23,8 @@ use std::collections::HashSet;
 
 use crate::models::{DataType, DetectedMap, MapDimensions};
 
-/// Paliers de vitesse écrits par la solution (km/h).
+/// Paliers de vitesse écrits par la solution, en valeurs brutes
+/// (× 0,15625 = 0 à 40,6 km/h à l'affichage).
 const SPEED_STEPS: [u16; 14] = [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260];
 
 /// Décalages de la structure, relatifs à l'adresse de signature.

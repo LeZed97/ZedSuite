@@ -4418,15 +4418,25 @@ impl EDC15PDetector {
                 let is_driver_wish = (x_axis_id_high == 0xEC && y_axis_id_high == 0xC0) ||
                                      (x_axis_id_high == 0xC0 && y_axis_id_high == 0xEC);
                 if is_driver_wish {
-                    let (larger_len, smaller_len) = if x_len >= y_len {
+                    // Lignes = points de regime, colonnes = points de pedale,
+                    // lus sur les identifiants et non sur le plus grand des deux.
+                    let (larger_len, smaller_len) = if x_axis_id_high == 0xEC {
                         (x_len, y_len)
                     } else {
                         (y_len, x_len)
                     };
-                    let orig_x = map.x_axis_address;
-                    let orig_y = map.y_axis_address;
-                    map.x_axis_address = orig_y;
-                    map.y_axis_address = orig_x;
+                    // Les axes sont attribues par IDENTIFIANT : X = pedale
+                    // (famille C0), Y = regime (famille EC), quel que soit
+                    // l'ordre du fichier et quelle que soit la passe qui a cree
+                    // la carte. L'echange etait inconditionnel : sur le
+                    // 038906019FJ, ou la carte arrive deja dans le bon sens, il
+                    // remettait le regime en X, et l'app affichait une charge
+                    // montant a 25 % avec un regime non monotone (issue #20).
+                    if x_axis_id_high == 0xEC {
+                        let orig_x = map.x_axis_address;
+                        map.x_axis_address = map.y_axis_address;
+                        map.y_axis_address = orig_x;
+                    }
 
                     map.category = Some("Detected maps".to_string());
                     map.subcategory = Some("4-Misc".to_string());
@@ -4626,6 +4636,29 @@ impl EDC15PDetector {
                     map.name = Some("Boost limit map".to_string());
                     map.correction_factor = Some(1.0);
                     classified_this = true;
+                } else if (x_axis_id_high == 0xEC || x_axis_id_high == 0xEA)
+                    && y_axis_id_high == 0xC1
+                {
+                    // Limit of overboost protection, disposition du 038906019FJ :
+                    // [regime EC x10][rapport cyclique VNT C1 x10]. Les autres
+                    // logiciels portent ce rapport cyclique sur la famille C2 et
+                    // le placent en premier, d'ou l'absence de cette carte ici
+                    // (issue #20). Presentee comme sur eux : X = rapport
+                    // cyclique (%), Y = regime.
+                    let orig_x = map.x_axis_address;
+                    map.x_axis_address = map.y_axis_address;
+                    map.y_axis_address = orig_x;
+                    map.category = Some("Detected maps".to_string());
+                    map.subcategory = Some("2-Limiters".to_string());
+                    map.name = Some("Limit of overboost protection".to_string());
+                    map.correction_factor = Some(1.0);
+                    map.x_axis_correction = Some(0.01);
+                    map.x_axis_offset = Some(0.0);
+                    map.y_axis_correction = Some(1.0);
+                    map.y_axis_offset = Some(0.0);
+                    map.x_label = Some("VNT duty cycle (%)".to_string());
+                    map.y_label = Some("Engine speed (rpm)".to_string());
+                    classified_this = true;
                 } else if x_axis_id_high == 0xEC && y_axis_id_high == 0xC0 {
                     // Limit of overboost protection
                     map.category = Some("Detected maps".to_string());
@@ -4643,16 +4676,26 @@ impl EDC15PDetector {
                 let is_driver_wish = (x_axis_id_high == 0xEC && y_axis_id_high == 0xC0) ||
                                      (x_axis_id_high == 0xC0 && y_axis_id_high == 0xEC);
                 if is_driver_wish {
-                    let (larger_len, smaller_len) = if x_len >= y_len {
+                    // Lignes = points de regime, colonnes = points de pedale,
+                    // lus sur les identifiants et non sur le plus grand des deux.
+                    let (larger_len, smaller_len) = if x_axis_id_high == 0xEC {
                         (x_len, y_len)
                     } else {
                         (y_len, x_len)
                     };
                     // Swap axis addresses: put RPM on X (cols/top) and TPS% on Y (rows/left)
-                    let orig_x = map.x_axis_address;
-                    let orig_y = map.y_axis_address;
-                    map.x_axis_address = orig_y;
-                    map.y_axis_address = orig_x;
+                    // Les axes sont attribues par IDENTIFIANT : X = pedale
+                    // (famille C0), Y = regime (famille EC), quel que soit
+                    // l'ordre du fichier et quelle que soit la passe qui a cree
+                    // la carte. L'echange etait inconditionnel : sur le
+                    // 038906019FJ, ou la carte arrive deja dans le bon sens, il
+                    // remettait le regime en X, et l'app affichait une charge
+                    // montant a 25 % avec un regime non monotone (issue #20).
+                    if x_axis_id_high == 0xEC {
+                        let orig_x = map.x_axis_address;
+                        map.x_axis_address = map.y_axis_address;
+                        map.y_axis_address = orig_x;
+                    }
 
                     map.category = Some("Detected maps".to_string());
                     map.subcategory = Some("4-Misc".to_string());

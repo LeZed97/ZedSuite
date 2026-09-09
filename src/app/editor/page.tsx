@@ -44,6 +44,9 @@ import {
   EDITOR_MIN_ZOOM,
   EDITOR_SIDEBAR_DEFAULT_WIDTH,
   EDITOR_TOOLBAR_MIN_CSS_WIDTH,
+  APP_MIN_ZOOM_PERCENT,
+  APP_MAX_ZOOM_PERCENT,
+  storedEditorZoomPercent,
 } from "@/lib/webview-zoom";
 import { DTCModal } from "@/components/dtc-modal";
 import { isMacOS } from "@/lib/platform";
@@ -51,7 +54,7 @@ import { PowerEstimateModal } from "@/components/power-estimate-modal";
 import type { FileRecord } from "@/lib/types";
 import { PROJECT_NAME_MAX_LENGTH } from "@/lib/types";
 import { SolutionsModal } from "@/components/solutions-modal";
-import { getSolutionImplementation } from "@/lib/ecu/solutions";
+import { getSolutionImplementation, isLaunchControlActive } from "@/lib/ecu/solutions";
 import { CompareModal } from "@/components/compare-modal";
 import FloatingLines from "@/components/FloatingLines";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
@@ -2171,11 +2174,7 @@ function EditorPageContent() {
   const [isClosingProjectInfoModal, setIsClosingProjectInfoModal] = useState(false);
 
   // Zoom de l'éditeur (webview native, persisté) — boutons +/− de la toolbar
-  const [editorZoom, setEditorZoom] = useState<number>(() => {
-    if (typeof window === "undefined") return 100;
-    const saved = parseInt(localStorage.getItem("zedsuite-editor-zoom") || "100", 10);
-    return Number.isFinite(saved) && saved >= 60 && saved <= 100 ? saved : 100;
-  });
+  const [editorZoom, setEditorZoom] = useState<number>(() => storedEditorZoomPercent());
   useEffect(() => {
     localStorage.setItem("zedsuite-editor-zoom", String(editorZoom));
   }, [editorZoom]);
@@ -2186,10 +2185,14 @@ function EditorPageContent() {
   const [windowLogicalW, setWindowLogicalW] = useState<number | null>(null);
   // sidebarWidth est déclaré plus bas ; l'effet de mesure est près de setAppMinWidth.
   // Plafond imposé par la largeur de la fenêtre (effet plus bas) : la barre
-  // d'outils et la liste des maps doivent tenir. Bornes 60 à 100 %.
+  // d'outils et la liste des maps doivent tenir. Bornes 50 à 100 % (le
+  // plancher est passé de 60 à 50 % pour les écrans 1024x768, issue #21).
   const zoomCapRef = useRef<number>(100);
   const clampEditorZoom = (value: number) =>
-    Math.min(Math.min(100, zoomCapRef.current), Math.max(60, Math.round(value)));
+    Math.min(
+      Math.min(APP_MAX_ZOOM_PERCENT, zoomCapRef.current),
+      Math.max(APP_MIN_ZOOM_PERCENT, Math.round(value)),
+    );
   // Pas de 5 % pour les boutons − / + ; valeur libre par saisie (règle du 07/09,
   // un zoom abaissé à 85 % par la fenêtre ne pouvait plus être remis à 80 %)
   const changeEditorZoom = (delta: number) =>
@@ -3697,9 +3700,13 @@ function EditorPageContent() {
         return prev; // taille choisie par l'utilisateur : on la garde
       }
 
-      // Calculer la hauteur maximale disponible dans le workspace
+      // Hauteur maximale retenue. Une taille posée à la MAIN est gardée telle
+      // quelle, à 8 px du bord comme la remise en zone de travail : la marge de
+      // 40 px, prévue pour les tailles calculées à l'ouverture, amputait la
+      // fenêtre que l'utilisateur venait d'étirer.
       const workspaceRect = workspaceRef.current?.getBoundingClientRect();
-      const maxWorkspaceHeight = workspaceRect ? workspaceRect.height - 40 : 1800; // 40px de marge en bas
+      const bottomMargin = source === 'user' ? 8 : 40;
+      const maxWorkspaceHeight = workspaceRect ? workspaceRect.height - bottomMargin : 1800;
 
       // Pas de minimum artificiel : la taille demandée est déjà calée sur le
       // tableau réel (un plancher trop haut créerait un espace à droite/en bas)
@@ -4261,8 +4268,16 @@ function EditorPageContent() {
         const { clearMapDataCache } = await import("@/components/map-viewer");
         clearMapDataCache();
 
-        // Clear any pending binary modifications since we just loaded saved ones
-        setBinaryModifications(new Map());
+        // Les modifications binaires de la version (DTC, solutions, checksum)
+        // sont REMISES EN ÉTAT, pas vidées : l'enregistrement réécrit la liste
+        // complète des edits de la version, donc tout ce qui n'est pas en
+        // mémoire à ce moment-là disparaît du disque. Vidées ici, le patch de
+        // launch control et les DTC coupés étaient perdus au premier
+        // enregistrement suivant (issue #23) — le fichier exporté restait bon
+        // puisqu'il part des octets en mémoire, d'où « ça marche sur la voiture
+        // mais c'est revenu à la réouverture ». Même traitement que les
+        // modifications de cellules, restaurées juste au-dessus.
+        setBinaryModifications(loadedBinaryModifications);
       } catch (error: any) {
         console.error("❌ [FRONTEND] loadVersionModifications error", error?.message || error);
       }
@@ -4818,8 +4833,12 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
         if (projectData?.fileId) {
           await refreshVersions(projectData.fileId);
         }
-        setAllMapModifications(new Map());
-        setBinaryModifications(new Map());
+        // L'état N'EST PLUS VIDÉ : il décrit le contenu de la version qu'on
+        // vient d'écrire, et le rechargement qui l'aurait restauré est sauté
+        // juste au-dessus (skipNextVersionChangeRef). Vidé, l'enregistrement
+        // suivant réécrivait les edits de la version à partir d'une mémoire
+        // vide et effaçait tout le travail précédent : patch de launch
+        // control, DTC coupés, cellules déjà enregistrées (issue #23).
         // Note: mapAxisLabels is intentionally NOT cleared here. Clearing it
         // would unset MapViewer's `initialXAxisLabels` and let the next mount
         // re-read the original labels from the file, wiping the user's edits
@@ -4900,8 +4919,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
         if (projectData?.fileId) {
           await refreshVersions(projectData.fileId);
         }
-        setAllMapModifications(new Map());
-        setBinaryModifications(new Map());
+        // Idem : l'état reste le reflet de la version enregistrée (issue #23).
         // Note: mapAxisLabels intentionally kept; see comment in handleSaveAndContinue.
         setHasUnsavedChanges(false);
 
@@ -5204,10 +5222,10 @@ if (binaryModifications.size > 0) {
 // doublons à chaque enregistrement, plus de course entre écritures.
 await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: editsToSave });
 
-      // Reset binary modifications after save.
-      // Note: mapAxisLabels intentionally kept so the user's axis edits stay
-      // visible across map close/reopen until the next version switch.
-      setBinaryModifications(new Map());
+      // Les modifications binaires RESTENT en mémoire après enregistrement :
+      // elles font partie du contenu de la version, comme les cellules de maps
+      // gardées elles aussi. Vidées, l'enregistrement suivant les effaçait du
+      // disque (issue #23).
 
       // 4. Rafraîchir les versions - let the useEffect reload modifications from DB
       // This ensures consistency between local state and database
@@ -5342,10 +5360,9 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
         }
       }
 
-      // Reset binary modifications after save.
-      // Note: mapAxisLabels intentionally kept so axis edits remain visible
-      // across map close/reopen until the next version switch.
-      setBinaryModifications(new Map());
+      // Gardées après enregistrement, comme les cellules de maps : sans ça
+      // l'enregistrement suivant réécrivait les edits de la version sans elles
+      // et le DTC coupé revenait activé (issue #23).
 
       // Refresh versions - skip reload since we're on the same version
       // The modifications are already in local state and now saved to DB
@@ -6069,8 +6086,23 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
   const isLimpMap = (name?: string | null) =>
     (name || "").toLowerCase().includes("(limp)");
 
+  // Launch control : la carte n'existe que si son axe de vitesse est écrit
+  // dans les octets courants. Une liste de maps enregistrée après une
+  // activation dont les octets n'ont pas suivi (version d'origine, patch
+  // perdu) la ramenait avec des axes lus dans le descripteur neutralisé,
+  // soit des valeurs aberrantes (issue #23). Même contrôle que le détecteur.
+  const isInactiveLaunchControl = (map: MapData) => {
+    if (!(map.name || "").toLowerCase().includes("launch control")) return false;
+    const yAxis = map.y_axis_address;
+    if (typeof yAxis !== "number" || yAxis <= 0) return false;
+    const data = projectData?.file_data;
+    if (!data || data.length === 0) return false;
+    return !isLaunchControlActive(data as unknown as number[], yAxis);
+  };
+
   const groupedMaps = projectData?.detectionResults?.maps?.reduce((acc, map) => {
     if (isLimpMap(map.name)) return acc;
+    if (isInactiveLaunchControl(map)) return acc;
     // Insensible à la casse : les anciens projets stockent « VCDS Diagnostic »,
     // le détecteur écrit désormais « VCDS diagnostic » (D minuscule).
     const folder = (map.subcategory || "").toLowerCase() === "vcds diagnostic"
@@ -6163,10 +6195,11 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
             barre d'outils : cliquer-glisser ici déplace l'application
             (les champs interactifs plus bas gardent leurs propres clics). */}
         <div data-tauri-drag-region className="p-4 flex-shrink-0" style={{ borderBottom: `1px solid ${getBorderColor()}` }}>
-          {/* Sur macOS les feux de la fenêtre occupent ce coin : le logo est
-              centré dans l'en-tête du panneau, ce qui le garde propre à tous
-              les zooms (à 60 % il reste à droite des feux). Windows : à gauche. */}
-          <div data-tauri-drag-region className={isMacOS() ? "mb-4 flex items-center justify-center" : "mb-4 flex items-center"}>
+          {/* Logo centré dans l'en-tête du panneau, sur toutes les
+              plateformes : même interface partout (demande du 09/09). Sur
+              macOS cela le garde aussi à droite des feux de la fenêtre, à
+              tous les zooms. */}
+          <div data-tauri-drag-region className="mb-4 flex items-center justify-center">
             <div data-tauri-drag-region className="relative inline-block">
               <div data-tauri-drag-region className="text-xl font-bold">
                 <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent">Zed</span><span style={{ color: getTextColor() }}>Suite</span>
@@ -7720,6 +7753,20 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           }}
           onApplySolutions={(solutionIds: string[]) => {
             if (!projectData || solutionIds.length === 0) return;
+            // Rien ne s'écrit sur l'Ori : cette version est le fichier
+            // d'origine et ne conserve aucune modification (le chargement la
+            // remet à zéro). Les octets étaient appliqués à l'écran puis
+            // perdus à la réouverture, en laissant derrière eux la carte
+            // ajoutée par la solution — d'où un launch control « actif » dont
+            // l'axe redevenait aberrant (issue #23).
+            if (isOnOriVersion()) {
+              toast({
+                title: t.errors.oriVersionReadOnly,
+                description: t.errors.oriVersionReadOnlyDescription,
+                variant: "destructive",
+              });
+              return;
+            }
 
             const originalData = originalFileDataRef.current
               ? new Uint8Array(originalFileDataRef.current)
@@ -7852,6 +7899,20 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           }}
           onDisableDTCs={(dtcs: DetectedDTC[], codeblocks: CodeblockInfo[]) => {
             if (!projectData || dtcs.length === 0) return;
+            // Rien ne s'écrit sur l'Ori : cette version est le fichier
+            // d'origine et ne conserve aucune modification (le chargement la
+            // remet à zéro). Les octets étaient appliqués à l'écran puis
+            // perdus à la réouverture, en laissant derrière eux la carte
+            // ajoutée par la solution — d'où un launch control « actif » dont
+            // l'axe redevenait aberrant (issue #23).
+            if (isOnOriVersion()) {
+              toast({
+                title: t.errors.oriVersionReadOnly,
+                description: t.errors.oriVersionReadOnlyDescription,
+                variant: "destructive",
+              });
+              return;
+            }
 
             // Get original data from ref (for tracking changes)
             const originalData = originalFileDataRef.current
@@ -7908,6 +7969,20 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           }}
           onEnableDTCs={(dtcs: DetectedDTC[], codeblocks: CodeblockInfo[]) => {
             if (!projectData || dtcs.length === 0) return;
+            // Rien ne s'écrit sur l'Ori : cette version est le fichier
+            // d'origine et ne conserve aucune modification (le chargement la
+            // remet à zéro). Les octets étaient appliqués à l'écran puis
+            // perdus à la réouverture, en laissant derrière eux la carte
+            // ajoutée par la solution — d'où un launch control « actif » dont
+            // l'axe redevenait aberrant (issue #23).
+            if (isOnOriVersion()) {
+              toast({
+                title: t.errors.oriVersionReadOnly,
+                description: t.errors.oriVersionReadOnlyDescription,
+                variant: "destructive",
+              });
+              return;
+            }
             // Réactivation : on remet l'octet de contrôle à sa valeur d'ORIGINE
             // (fichier Ori) quand on l'a, sinon à la valeur « actif » connue du
             // mapping. Une adresse revenue à l'origine sort des modifications

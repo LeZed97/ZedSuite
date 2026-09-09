@@ -94,7 +94,11 @@ pub fn identify_ecu(
 ///   45 — EDC15P : « Injector duration 00 » avec les corrections d'axes dans
 ///       l'ordre de ses adresses (régime ×1 en X, IQ ×0,01 en Y) ; N75 16×11
 ///       des 1.4 TDI lu 11 colonnes IQ × 16 lignes régime.
-pub const DETECTOR_VERSION: u32 = 45;
+///   46 — EDC15P : axes du driver wish attribués par identifiant, limite de
+///       surpression sur axe de rapport cyclique C1, limiteur par débit
+///       d'air attendu seulement quand le fichier en porte la structure ;
+///       EDC15VM : limiteur par débit d'air à 11 points d'axe (352 octets).
+pub const DETECTOR_VERSION: u32 = 46;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -130,7 +134,7 @@ pub fn detect_maps(request: DetectMapsArgs) -> Result<DetectMapsResponse, String
     let maps: Vec<DetectedMap> =
         detector.detect_maps_with_options(&data, request.ecu_type.as_deref(), request.tuned_mode);
 
-    let expected_maps = build_expected_report(request.ecu_type.as_deref(), &maps);
+    let expected_maps = build_expected_report(request.ecu_type.as_deref(), &maps, &data);
 
     let response = DetectMapsResponse {
         success: true,
@@ -159,10 +163,11 @@ pub fn detect_maps(request: DetectMapsArgs) -> Result<DetectMapsResponse, String
 fn build_expected_report(
     ecu_type: Option<&str>,
     maps: &[DetectedMap],
+    data: &[u8],
 ) -> Option<Vec<ExpectedMapStatus>> {
     let ecu = ecu_type.unwrap_or("").to_uppercase();
     if ecu.contains("EDC15P") {
-        return build_expected_report_edc15p(maps);
+        return build_expected_report_edc15p(maps, data);
     }
     if ecu.contains("EDC15VM") {
         return build_expected_report_edc15vm(maps);
@@ -323,7 +328,38 @@ fn build_expected_report(
 /// vérifiées au banc sur 28 fichiers / 71 codeblocks, tous à 100 %) —
 /// chaque règle est agrégée sur l'ensemble des codeblocks détectés
 /// (attendu = n_codeblocks × minimum par codeblock).
-fn build_expected_report_edc15p(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapStatus>> {
+/// Le fichier porte-t-il une structure de limiteur par debit d'air, soit
+/// [regime EC/EA x16][debit d'air DA x13] suivie de ses 416 octets ?
+///
+/// Tous les logiciels n'ont pas cette carte : le 038906019FJ n'a que le
+/// limiteur de fumee, sur l'axe de regime F9, et sa reference WinOLS ne liste
+/// pas d'IQ by MAF limiter non plus. L'attendre partout affichait un manque
+/// qui n'en etait pas un (issue #20). On ne l'attend donc que lorsque la
+/// structure est la, ce qui laisse la regle utile : elle signale toujours une
+/// structure presente que le detecteur n'a pas su nommer.
+fn has_iq_by_maf_structure(data: &[u8]) -> bool {
+    let rd = |o: usize| u16::from_le_bytes([data[o], data[o + 1]]);
+    let need = 4 + 32 + 4 + 26 + 416;
+    let mut t = 0usize;
+    while t + need <= data.len() {
+        let rpm_id_high = (rd(t) >> 8) as u8;
+        if (rpm_id_high == 0xEC || rpm_id_high == 0xEA) && rd(t + 2) == 16 {
+            let second = t + 4 + 32;
+            // L'axe de debit d'air part au-dessus de 250 mg/st (bruts x0,1),
+            // ce qui l'ecarte d'un axe de pression de suralimentation.
+            if (rd(second) >> 8) as u8 == 0xDA && rd(second + 2) == 13 && rd(second + 4) >= 2500 {
+                return true;
+            }
+        }
+        t += 2;
+    }
+    false
+}
+
+fn build_expected_report_edc15p(
+    maps: &[DetectedMap],
+    data: &[u8],
+) -> Option<Vec<ExpectedMapStatus>> {
     use std::collections::HashSet;
     let codeblocks: HashSet<u32> = maps.iter().filter_map(|m| m.codeblock_id).collect();
     let n_cb = codeblocks.len().max(1);
@@ -402,6 +438,17 @@ fn build_expected_report_edc15p(maps: &[DetectedMap]) -> Option<Vec<ExpectedMapS
             .collect()
     } else {
         rules
+    };
+
+    // Familles absentes de certains logiciels : on ne les attend que si le
+    // binaire en porte la structure (voir has_iq_by_maf_structure).
+    let rules: Vec<(&str, usize, u8, &str)> = if has_iq_by_maf_structure(data) {
+        rules
+    } else {
+        rules
+            .into_iter()
+            .filter(|(label, _, _, _)| *label != "IQ by MAF limiter")
+            .collect()
     };
 
     let report: Vec<ExpectedMapStatus> = rules

@@ -63,15 +63,38 @@ export const EDITOR_TOOLBAR_MIN_CSS_WIDTH = 1025;
 /** Largeur par défaut de la liste des maps de l'éditeur. */
 export const EDITOR_SIDEBAR_DEFAULT_WIDTH = 335;
 
+/** Bornes communes aux deux écrans : 50 % en bas, 100 % en haut, pas de 5 %
+ *  sur les boutons − / +, valeur libre à la saisie. */
+export const APP_MIN_ZOOM_PERCENT = 50;
+export const APP_MAX_ZOOM_PERCENT = 100;
+export const APP_ZOOM_STEP = 5;
+
+/** Zoom d'ouverture du dashboard, réglable puis mémorisé. */
+export const DASHBOARD_DEFAULT_ZOOM_PERCENT = 90;
+
+function storedZoomPercent(key: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = parseInt(localStorage.getItem(key) || "", 10);
+    return Number.isFinite(saved)
+      && saved >= APP_MIN_ZOOM_PERCENT
+      && saved <= APP_MAX_ZOOM_PERCENT
+      ? saved
+      : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Zoom de l'éditeur mémorisé (en %), 100 hors plage ou hors navigateur. */
 export function storedEditorZoomPercent(): number {
-  if (typeof window === "undefined") return 100;
-  try {
-    const saved = parseInt(localStorage.getItem("zedsuite-editor-zoom") || "100", 10);
-    return Number.isFinite(saved) && saved >= 60 && saved <= 100 ? saved : 100;
-  } catch {
-    return 100;
-  }
+  return storedZoomPercent("zedsuite-editor-zoom", 100);
+}
+
+/** Zoom du dashboard mémorisé (en %), 90 par défaut — la valeur que l'écran
+ *  a toujours eue, réglable depuis sa barre de titre depuis la 1.1.9. */
+export function storedDashboardZoomPercent(): number {
+  return storedZoomPercent("zedsuite-dashboard-zoom", DASHBOARD_DEFAULT_ZOOM_PERCENT);
 }
 
 /** Largeur logique minimale de la fenêtre telle que l'éditeur la demande
@@ -100,8 +123,8 @@ export async function monitorLogicalWidth(): Promise<number | null> {
 /** Marge gardée entre la fenêtre et le bord de l'écran (px logiques). */
 const SCREEN_MARGIN = 16;
 
-/** Zoom le plus bas que l'éditeur accepte (60 %). */
-export const EDITOR_MIN_ZOOM = 0.6;
+/** Zoom le plus bas que l'éditeur accepte (50 %). */
+export const EDITOR_MIN_ZOOM = APP_MIN_ZOOM_PERCENT / 100;
 
 /** Largeur logique minimale de la fenêtre : la barre d'outils + la liste
  *  des maps au zoom le plus bas. En dessous, le zoom automatique ne peut

@@ -1066,6 +1066,45 @@ impl EDC15VMDetector {
                 }
             }
 
+            // ── Size 352 (16x11) DD/DA - IQ by MAF/MAP, variante ASV
+            // (038906012, issue #24) : l'axe de débit d'air y a 11 points
+            // quand les autres logiciels en ont 10, 12 ou 13. Même règle de
+            // plage d'axe X que les autres tailles ; rien d'autre n'est
+            // accepté ici pour ne pas ramasser une carte 16x11 étrangère.
+            if !named && map.size == 352 {
+                if matches!((xh, yh),
+                    (0xDD, 0xDA) | (0xDA, 0xDD) | (0xDC, 0xDA) | (0xDA, 0xDC) |
+                    (0xE0, 0xDC) | (0xDC, 0xE0) | (0xEB, 0xDA) | (0xDA, 0xEB)
+                ) {
+                    let x_axis_max = map
+                        .x_axis_address
+                        .map(|addr| {
+                            (0..x_len)
+                                .map(|i| {
+                                    let off = addr as usize + i * 2;
+                                    if off + 1 < data.len() {
+                                        u16::from_le_bytes([data[off], data[off + 1]])
+                                    } else {
+                                        0
+                                    }
+                                })
+                                .max()
+                                .unwrap_or(0)
+                        })
+                        .unwrap_or(0);
+                    if x_axis_max > 2600 {
+                        map.name = Some("IQ by MAF limiter".to_string());
+                        map.x_axis_correction = Some(0.1);
+                    } else {
+                        map.name = Some("IQ by MAP limiter".to_string());
+                        map.x_axis_correction = Some(1.0);
+                    }
+                    map.correction_factor = Some(0.01);
+                    map.category = Some("Smoke limitation".to_string());
+                    named = true;
+                }
+            }
+
             // ── Size 384 (16x12) DD/DA - IQ by MAF/MAP (variante golf
             // zlatarica : [DD(16)] 861..5355 + [DA(12)] 3000..9500 à
             // 0x5C990) — même règle de plage d'axe X que le 320.

@@ -1131,7 +1131,10 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         const chromeH = winRect.height - contRect.height;
         // Mémoriser la taille naturelle réelle du tableau (échelle 1) —
         // référence exacte pour tous les calculs d'échelle suivants
-        naturalTableSizeRef.current = { w: tableRect.width, h: tableRect.height };
+        // Mesure ENTIÈRE, indépendante de la position : getBoundingClientRect rend
+        // des valeurs fractionnaires qui varient d'un pixel selon l'endroit où la
+        // fenêtre est posée, et ce pixel se retrouvait dans l'échelle recalculée.
+        naturalTableSizeRef.current = { w: tableEl.offsetWidth, h: tableEl.offsetHeight };
         width = Math.max(
           TEXT_WINDOW_MIN_WIDTH,
           computeTitleNeededWidth(),
@@ -1146,7 +1149,10 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         const contRect = container.getBoundingClientRect();
         const chromeW = winRect.width - contRect.width;
         // Référence exacte (échelle 1) pour la mise à l'échelle des cellules
-        naturalTableSizeRef.current = { w: tableRect.width, h: tableRect.height };
+        // Mesure ENTIÈRE, indépendante de la position : getBoundingClientRect rend
+        // des valeurs fractionnaires qui varient d'un pixel selon l'endroit où la
+        // fenêtre est posée, et ce pixel se retrouvait dans l'échelle recalculée.
+        naturalTableSizeRef.current = { w: tableEl.offsetWidth, h: tableEl.offsetHeight };
         width = Math.max(
           TEXT_WINDOW_MIN_WIDTH,
           computeTitleNeededWidth(),
@@ -1170,6 +1176,36 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       hasCalculatedSizeRef.current = true; // Bloquer tous les futurs calculs
 
       onAutoSizeRef.current?.(width, height, 'auto');
+
+      // Ce calcul d'ouverture repose l'échelle des cellules à 1. Or il rejoue
+      // aussi quand la fenêtre est recréée — ce qui arrive à chaque fois
+      // qu'elle repasse au premier plan — alors que sa TAILLE, elle, est
+      // conservée par l'éditeur (il ignore une demande « auto » sur une
+      // fenêtre redimensionnée à la main). Le tableau se retrouvait à sa
+      // taille d'ouverture au milieu d'une grande fenêtre. On rétablit donc
+      // l'échelle qui remplit la fenêtre réellement affichée.
+      //
+      // Le minimum des deux axes protège le cas qui avait motivé le plafond
+      // d'origine : une fenêtre plus large que son tableau à cause d'un titre
+      // long garde une hauteur collée au tableau, donc un rapport de 1 en
+      // hauteur, et rien ne gonfle.
+      if (container && windowEl && !easyViewMode) {
+        const winNow = windowEl.getBoundingClientRect();
+        const contNow = container.getBoundingClientRect();
+        const natW = naturalTableSizeRef.current?.w ?? 0;
+        const natH = naturalTableSizeRef.current?.h ?? 0;
+        if (natW > 0 && natH > 0) {
+          const fit = Math.min(
+            (contNow.width - 2) / natW,
+            (contNow.height - CELL_BOTTOM_GAP) / natH,
+          );
+          if (fit > 1.001) {
+            const restored = Math.min(CELL_MAX_SCALE, fit);
+            cellScaleRef.current = restored;
+            applyCellVars(container, restored);
+          }
+        }
+      }
     });
 
     return () => cancelAnimationFrame(rafId);
@@ -1257,6 +1293,12 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     const windowEl = (e.currentTarget as HTMLElement).closest('[data-map-address]') as HTMLElement | null;
     if (!windowEl) return;
 
+    // Hauteur maximale que l'éditeur enregistrera : il ramène toute fenêtre à
+    // la hauteur de la zone de travail moins 8 px. Le geste doit s'arrêter là,
+    // sinon la fenêtre paraît plus grande pendant le glissement puis reprend
+    // la valeur retenue au rendu suivant.
+    const workspaceH = windowEl.parentElement?.getBoundingClientRect().height ?? 0;
+    const maxCommitH = workspaceH > 0 ? workspaceH - 8 : Infinity;
     const winRect = windowEl.getBoundingClientRect();
     const startX = e.clientX;
     const startY = e.clientY;
@@ -1378,6 +1420,12 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       } else {
         const factor = Math.min(rawW / Math.max(1, originW), rawH / Math.max(1, originH));
         s = Math.min(CELL_MAX_SCALE, Math.max(CELL_MIN_SCALE, scaleAtDragStart * factor));
+      }
+      // La fenêtre est collée au tableau : plafonner l'échelle pour que la
+      // hauteur qui en découle soit enregistrable telle quelle.
+      if (maxCommitH !== Infinity) {
+        const capH = (maxCommitH - chromeH - CELL_BOTTOM_GAP) / naturalH;
+        if (capH > CELL_MIN_SCALE) s = Math.min(s, capH);
       }
       cellScaleRef.current = s;
       applyCellVars(container, s);

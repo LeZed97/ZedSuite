@@ -7,10 +7,8 @@ Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](ht
 ## Prévu
 
 - Comparer les maps de deux versions d'un projet dans la fenêtre Compare, qui fait aujourd'hui la comparaison binaire : la même map des deux versions côte à côte, différences surlignées.
-- Annuler avec Ctrl+Z dans l'éditeur.
 - Vue 2D façon WinOLS pour les matrices complètes : une courbe par ligne, ligne sélectionnée mise en avant.
 - Un switch d'inversion du N75 sur EDC15VM, pour les voitures passées d'un turbo à wastegate à un VNT ou l'inverse : le bloc qui le pilote est localisé sur la plupart des fichiers du banc, le switch lui-même n'est pas encore fait.
-- DTC des logiciels EDC15 compacts (038906012K, 012L, 012AA, 012AP, 012CP, 019AJ, 019AN) : la lecture et la commutation par chemin de défaut fonctionnent depuis la 1.1.7, mais la commutation n'a pas encore été confirmée sur un véhicule. Retours bienvenus.
 - EDC15P des premiers PD (1999-2002, 038906019A / 019AJ) : la détection des maps est faite et la table des DTC est lue sur les 019AJ ; le checksum n'est pas encore supporté, la table des DTC des 019A a encore une autre disposition, et la map MAP linearisation n'est pas trouvée sur les 019A.
 - Meilleure détection EDC15VM : quelques fichiers ne sont pas encore entièrement couverts, le 2.5 V6 (dumps de 1 Mo) en particulier, et les maps N146 et N75 de la génération 012K / 012AP. Les corrections sont faites pour les numéros de logiciel envoyés par les utilisateurs (SOI unique et switch MAP/MAF du 012M dans la 1.1.7).
 - EDC15VM : vérifier sur véhicule que les maps SVRL sont réellement actives quand le détecteur les trouve.
@@ -20,16 +18,17 @@ Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](ht
 
 ## Demandé par les utilisateurs, à l'étude
 
+- Annuler avec Ctrl+Z dans l'éditeur.
 - Import et export CSV (le mappack JSON pour WinOLS existe déjà), et import DAMOS.
 - Maps favorites, pour retrouver vite celles qu'on modifie le plus.
 - Une version de référence autre que l'Ori pour « valeur d'origine » et la comparaison.
-- Inverse driver wish et MAF linearisation dans la liste des maps (masquées volontairement aujourd'hui : ce sont des tables de conversion, pas des maps de tuning).
+- Inverse driver wish et MAF linearisation dans la liste des maps.
 - Modifier les maps directement dans la vue 3D.
+- Ajuster l'estimation de puissance pour d'autres nez que Firad, comme Recambo ou DSSR.
 - Modifier deux versions du même projet côte à côte.
 - Plus de fonctions dans la fenêtre Propriétés des maps.
-- Surligner dans les fenêtres de maps toutes les valeurs différentes de l'origine : aujourd'hui seules les cellules que vous avez modifiées sont en rouge.
+- Surligner dans les fenêtres de maps toutes les valeurs différentes de l'origine.
 - Une version Linux. L'interface est le même code que sur Windows et macOS, seule la partie coque serait à faire ; cela dépendra du nombre de demandes.
-- Ajuster d'un coup les durations d'injection et les maps SOI pour des nez d'injecteurs plus gros (Firad, Recambo…).
 
 ## Pas prévu pour l'instant
 

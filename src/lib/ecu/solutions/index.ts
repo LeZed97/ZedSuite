@@ -97,7 +97,14 @@ export function findSequence(
 
 /**
  * Octets de l'axe Y du Launch Control : en-tête (14 valeurs) puis les paliers
- * de vitesse véhicule 0 → 260 km/h en 16 bits petit-boutiste.
+ * de vitesse véhicule en 16 bits petit-boutiste.
+ *
+ * Les paliers écrits sont les valeurs BRUTES 0, 20 … 260 ; l'axe se lit avec
+ * le facteur 0,15625 km/h par bit, soit 0 à 40,6 km/h à l'écran — la plage
+ * d'un launch control, et la même que celle d'EDCSuite sur ces fichiers
+ * (40,6 km/h et 5361 tr/min en bout d'axes, vérifié le 09/09/2026). Ne pas
+ * « corriger » ces paliers en les multipliant par 6,4 : la voiture réagit
+ * comme prévu avec ceux-ci.
  */
 export function generateLaunchControlYAxisBytes(): number[] {
   // Compteur d'axe en 16 bits petit-boutiste, comme le reste du fichier
@@ -113,6 +120,35 @@ export function generateLaunchControlYAxisBytes(): number[] {
   }
 
   return bytes;
+}
+
+/**
+ * L'axe de vitesse du Launch Control est-il réellement écrit à cette adresse ?
+ *
+ * Même contrôle que le détecteur Rust (`launch_control.rs`) : l'en-tête de
+ * 14 valeurs, dans l'un des deux encodages rencontrés, puis les 14 paliers
+ * exacts. Sert à ne pas afficher une carte de launch control héritée d'une
+ * liste enregistrée alors que les octets, eux, sont revenus à l'origine :
+ * ses axes seraient lus dans le descripteur neutralisé et afficheraient
+ * n'importe quoi (issue #23).
+ */
+export function isLaunchControlActive(
+  data: Uint8Array | number[],
+  yAxisAddress: number,
+): boolean {
+  const at = (i: number): number | undefined => (data as any)[i];
+  const header = yAxisAddress - 2;
+  if (header < 0 || yAxisAddress + 28 > (data as any).length) return false;
+  const h0 = at(header);
+  const h1 = at(header + 1);
+  const headerOk = (h0 === 0x00 && h1 === 0x0e) || (h0 === 0x0e && h1 === 0x00);
+  if (!headerOk) return false;
+  const steps = [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260];
+  return steps.every((expected, i) => {
+    const lo = at(yAxisAddress + 2 * i);
+    const hi = at(yAxisAddress + 2 * i + 1);
+    return lo !== undefined && hi !== undefined && (lo | (hi << 8)) === expected;
+  });
 }
 
 // Structure de la zone Launch Control, relative à la signature
