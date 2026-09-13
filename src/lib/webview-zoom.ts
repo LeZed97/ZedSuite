@@ -147,13 +147,20 @@ export async function windowLogicalWidth(): Promise<number | null> {
 
 /** Appelle `cb` avec la largeur logique à chaque redimensionnement de la
  *  fenêtre (ancrage Windows, plein écran, poignée). Renvoie la fonction de
- *  désabonnement ; ne fait rien hors Tauri. */
+ *  désabonnement ; ne fait rien hors Tauri.
+ *
+ *  Une fenêtre réduite dans la barre des tâches envoie aussi un
+ *  redimensionnement, avec la taille de son icône (quelques dizaines de
+ *  pixels) : l'éditeur y voyait une fenêtre trop étroite et abaissait le
+ *  zoom réglé jusqu'au plancher de 50 %, sans le remonter au retour, à
+ *  chaque réduction (issue #33). Ces événements sont ignorés. */
 export async function onWindowResized(cb: (logicalWidth: number) => void): Promise<() => void> {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     return await win.onResized(async ({ payload }) => {
       try {
+        if (payload.width <= 0 || (await win.isMinimized())) return;
         const factor = await win.scaleFactor();
         cb(payload.toLogical(factor).width);
       } catch {
@@ -197,8 +204,12 @@ export async function setAppMinWidth(cssWidth: number, zoom = 1): Promise<void> 
         resizeListenerInstalled = true;
         await win.onResized(async () => {
           if (pendingMinWidth === null) return;
-          const [fs, max] = await Promise.all([win.isFullscreen(), win.isMaximized()]);
-          if (fs || max) return;
+          // Réduite dans la barre des tâches, la fenêtre n'est ni maximisée
+          // ni en plein écran pour Windows : sans ce garde-fou, la largeur
+          // minimale s'appliquait à une fenêtre de taille nulle (setSize
+          // avec une hauteur de 0) pendant la réduction.
+          const [fs, max, min] = await Promise.all([win.isFullscreen(), win.isMaximized(), win.isMinimized()]);
+          if (fs || max || min) return;
           const w = pendingMinWidth;
           pendingMinWidth = null;
           await setAppMinWidth(w, 1);

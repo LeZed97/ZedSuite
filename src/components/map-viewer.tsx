@@ -9,8 +9,10 @@ import { useTheme } from "@/contexts/theme-context";
 import { useI18n } from "@/contexts/i18n-context";
 import { PromptModal } from "@/components/prompt-modal";
 import { isBigEndianEcu, hasUnsignedAxes } from "@/lib/ecu-endianness";
-import { resolveMapCellLayout, resolveAxisLabels } from "@/lib/map-cell-layout";
+import { resolveMapCellLayout, resolveAxisLabels, resolveAxisSources } from "@/lib/map-cell-layout";
 import { getMapValueRange, clampMapValue } from "@/lib/map-value-range";
+import { gridToText, parseGridText } from "@/lib/clipboard-grid";
+import { readSystemClipboardText, writeSystemClipboardText } from "@/lib/system-clipboard";
 
 // Import Plotly dynamiquement pour ├®viter les probl├¿mes SSR
 import dynamic from "next/dynamic";
@@ -82,6 +84,10 @@ function readClipboard(): InternalClipboard | null {
   }
 }
 
+// Vrai quand la dernière copie n'a pas pu atteindre le presse-papiers système :
+// le collage repart alors du presse-papiers interne, jamais d'un vieux contenu.
+let systemClipboardWriteFailed = false;
+
 function writeClipboard(value: InternalClipboard | null): void {
   inMemoryClipboard = value;
   if (typeof window === 'undefined') return;
@@ -94,6 +100,32 @@ function writeClipboard(value: InternalClipboard | null): void {
   } catch {
     // localStorage may be unavailable (private mode, quota) — keep in-memory only.
   }
+  // Copie AUSSI dans le presse-papiers du système, en texte tabulé : la
+  // sélection se colle telle quelle dans Excel, EDC Suite ou un éditeur
+  // (issue #30). Asynchrone, sans bloquer la copie interne.
+  if (value !== null) {
+    void writeSystemClipboardText(gridToText(value.values)).then((ok) => {
+      systemClipboardWriteFailed = !ok;
+    });
+  }
+}
+
+/**
+ * Presse-papiers à coller : le texte du SYSTÈME d'abord (un bloc copié depuis
+ * Excel / EDC Suite, ou notre propre copie qui y a été écrite), le presse-
+ * papiers interne sinon. Pour un axe, une ligne ou une colonne d'Excel devient
+ * une liste de valeurs.
+ */
+async function readClipboardPreferSystem(target: 'cell' | 'axis'): Promise<InternalClipboard | null> {
+  const internal = readClipboard();
+  if (systemClipboardWriteFailed && internal) return internal;
+  const grid = parseGridText(await readSystemClipboardText());
+  if (!grid) return internal;
+  if (target === 'axis') {
+    const flat = grid.flat().filter((v) => v !== '');
+    return { values: flat.map((v) => [v]), type: 'xAxis', rows: flat.length, cols: 1 };
+  }
+  return { values: grid, type: 'cell', rows: grid.length, cols: grid[0]?.length ?? 0 };
 }
 
 interface CachedMapData {
@@ -330,7 +362,7 @@ const TEXT_VIEW_CHROME_HEIGHT = 64; // titre + onglets avec marge réduite
 // Bornes d'échelle des cellules (vue texte) — échelle uniforme pour conserver
 // le format rectangulaire des cellules à toutes les tailles
 const CELL_MIN_SCALE = 0.55; // réduction max : cellules ~31x11 (fenêtre bien plus compacte)
-const CELL_MAX_SCALE = 1.3; // agrandissement max : cellules ~73x26
+const CELL_MAX_SCALE = 1.69; // agrandissement max : cellules ~95x34 (+30 % le 12/09, fenêtres qui s'arrêtaient trop tôt sur grand écran, issue #21)
 // Espace réservé sous le tableau : la rangée de boutons Text/2D/3D (~26px,
 // positionnée en absolute bottom-0 DANS la zone de contenu) + légère respiration
 const CELL_BOTTOM_GAP = 30;
@@ -393,6 +425,9 @@ interface MapViewerProps {
   // Persisted axis-label edits (the parent stores them across map close/reopen).
   initialXAxisLabels?: string[];
   initialYAxisLabels?: string[];
+  /** Fenêtre déjà redimensionnée à la main par l'utilisateur (l'éditeur
+   *  garde alors sa taille et ignore la taille calculée à l'ouverture) */
+  userSized?: boolean;
   onAxisLabelsChange?: (axes: { x?: string[]; y?: string[] }) => void;
   // Tells the parent how display row/col indices map back to file row/col, so
   // exports can write modified cells to the correct byte offsets.
@@ -496,6 +531,7 @@ export function MapViewer({
   onModificationsChange,
   initialXAxisLabels,
   initialYAxisLabels,
+  userSized = false,
   onAxisLabelsChange,
   onAxesFlipChange,
   theme: themeProp,
@@ -1046,13 +1082,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     const w = Math.max(30, 56 * s);
     const h = Math.max(12, 20 * s);
     const yAxisW = Math.max(26, 44 * s);
-    const font = Math.max(8, Math.min(13, Math.round(11 * s))); // police en px entiers (netteté)
+    const font = Math.max(8, Math.min(17, Math.round(11 * s))); // police en px entiers (netteté) ; plafond suivi de CELL_MAX_SCALE
     const pad = s < 0.9 ? '1px 2px' : '2px 4px';
     container.style.setProperty('--zs-cell-w', `${w.toFixed(2)}px`);
     container.style.setProperty('--zs-cell-h', `${h.toFixed(2)}px`);
     container.style.setProperty('--zs-yaxis-w', `${yAxisW.toFixed(2)}px`);
     container.style.setProperty('--zs-yaxis-max', `${(yAxisW + 16).toFixed(2)}px`);
     container.style.setProperty('--zs-cell-font', `${font}px`);
+    // Unités de la case d'angle (rpm / mg/st) : même progression que les cellules
+    container.style.setProperty('--zs-axis-unit-font', `${Math.max(7, Math.min(13, Math.round(8 * s)))}px`);
     container.style.setProperty('--zs-cell-pad', pad);
   }, []);
 
@@ -1083,6 +1121,14 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
 
     // CRITIQUE: Ne calculer qu'UNE SEULE FOIS au montage initial
     if (hasCalculatedSizeRef.current) {
+      return;
+    }
+    // Tableau pas encore rempli (les valeurs sont extraites juste après le
+    // montage) : mesurer maintenant fixerait une taille naturelle minuscule
+    // pour toute la vie de la fenêtre — échelle fausse à l'ouverture, fenêtre
+    // traitée en « petite map » au redimensionnement, largeur bloquée à celle
+    // du titre. On attend les données ; l'effet rejoue quand elles arrivent.
+    if (displayMapValues.length === 0) {
       return;
     }
 
@@ -1189,7 +1235,14 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       // d'origine : une fenêtre plus large que son tableau à cause d'un titre
       // long garde une hauteur collée au tableau, donc un rapport de 1 en
       // hauteur, et rien ne gonfle.
-      if (container && windowEl && !easyViewMode) {
+      //
+      // Seulement pour une fenêtre que l'utilisateur a déjà redimensionnée :
+      // à l'ouverture, la fenêtre porte encore la taille par défaut de
+      // l'éditeur (240×140 au moins), plus grande que le tableau d'une petite
+      // map — l'échelle montait au maximum puis la fenêtre se calait sur le
+      // tableau à l'échelle 1, et les cellules débordaient sur les boutons
+      // (1×1, 2×1 : signalé le 13/09 après le passage du maximum à 1,69).
+      if (userSized && container && windowEl && !easyViewMode) {
         const winNow = windowEl.getBoundingClientRect();
         const contNow = container.getBoundingClientRect();
         const natW = naturalTableSizeRef.current?.w ?? 0;
@@ -1209,7 +1262,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [viewMode, displayXAxisLabels.length, displayYAxisLabels.length, easyViewMode, mapData.address]);
+  }, [viewMode, displayXAxisLabels.length, displayYAxisLabels.length, displayMapValues.length, easyViewMode, mapData.address]);
   
   // Mise à l'échelle des cellules selon la taille du conteneur (vue texte),
   // pour les changements de taille PROGRAMMATIQUES (ouverture, clamp workspace).
@@ -1759,33 +1812,35 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
         e.preventDefault();
-        const clip = readClipboard();
-        if (!clip) return;
-        let pastedCount = 0;
-        if (selectedCells.size > 0) {
-          pastedCount += pasteCellSelection(clip);
-        } else if (selectedXAxisCells.size > 0) {
-          const startIndex = Array.from(selectedXAxisCells).sort((a, b) => a - b)[0] ?? 0;
-          clip.values.forEach((rowValues, offset) => {
-            const value = rowValues[0];
-            const displayIdx = startIndex + offset;
-            if (value && displayIdx < displayXAxisLabels.length) {
-              mutateDisplayXAxis(displayIdx, () => value);
-              pastedCount++;
-            }
-          });
-        } else if (selectedYAxisCells.size > 0) {
-          const startIndex = Array.from(selectedYAxisCells).sort((a, b) => a - b)[0] ?? 0;
-          clip.values.forEach((rowValues, offset) => {
-            const value = rowValues[0];
-            const displayIdx = startIndex + offset;
-            if (value && displayIdx < displayYAxisLabels.length) {
-              mutateDisplayYAxis(displayIdx, () => value);
-              pastedCount++;
-            }
-          });
-        }
-        toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+        // Presse-papiers système d'abord (Excel, EDC Suite…), interne sinon
+        void readClipboardPreferSystem(selectedCells.size > 0 ? 'cell' : 'axis').then((clip) => {
+          if (!clip) return;
+          let pastedCount = 0;
+          if (selectedCells.size > 0) {
+            pastedCount += pasteCellSelection(clip);
+          } else if (selectedXAxisCells.size > 0) {
+            const startIndex = Array.from(selectedXAxisCells).sort((a, b) => a - b)[0] ?? 0;
+            clip.values.forEach((rowValues, offset) => {
+              const value = rowValues[0];
+              const displayIdx = startIndex + offset;
+              if (value && displayIdx < displayXAxisLabels.length) {
+                mutateDisplayXAxis(displayIdx, () => value);
+                pastedCount++;
+              }
+            });
+          } else if (selectedYAxisCells.size > 0) {
+            const startIndex = Array.from(selectedYAxisCells).sort((a, b) => a - b)[0] ?? 0;
+            clip.values.forEach((rowValues, offset) => {
+              const value = rowValues[0];
+              const displayIdx = startIndex + offset;
+              if (value && displayIdx < displayYAxisLabels.length) {
+                mutateDisplayYAxis(displayIdx, () => value);
+                pastedCount++;
+              }
+            });
+          }
+          toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+        });
         return;
       }
 
@@ -2332,16 +2387,14 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // L'inversion se fait plus haut comme une transposition pure du résultat
     // (displayMapValues + swap des labels), au même titre que le mirror.
 
-    const egrSwapAddresses = false; // pour EGR, garder X = x_axis (IQ), Y = y_axis (RPM)
-
-    // Standard address assignment - backend handles any swapping needed
-    let xAxisAddr = egrSwapAddresses
-      ? (mapData.y_axis_address || 0)
-      : (boostNeedsAxisSwap ? (mapData.y_axis_address || 0) : (mapData.x_axis_address || 0));
-
-    let yAxisAddr = egrSwapAddresses
-      ? (mapData.x_axis_address || 0)
-      : (boostNeedsAxisSwap ? (mapData.x_axis_address || 0) : (mapData.y_axis_address || 0));
+    // Adresse, facteur et offset des axes AFFICHÉS : règle partagée avec
+    // l'éditeur (écriture des libellés édités) dans lib/map-cell-layout — les
+    // deux DOIVENT lire/écrire le même axe au même facteur. Sur les maps dont
+    // la vue transpose (durations 01-05, Drivers wish MJD6, torque limiter,
+    // N75 13x16), l'axe du haut vient de l'adresse Y du détecteur.
+    const axisSources = resolveAxisSources(mapData);
+    let xAxisAddr = axisSources.x.address;
+    let yAxisAddr = axisSources.y.address;
 
     // GARDE Boost target (EDC15, little-endian) : les détections antérieures au
     // fix du détecteur émettaient les adresses croisées (X → axe RPM 16 valeurs,
@@ -2365,64 +2418,12 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       }
     }
     
-    // Special case: Injector duration 01-04 need corrections swapped but NOT addresses
-    // These maps have correct addresses but inverted correction factors from backend
-    // Injector duration: swap corrections for 01-04 (backend factors inverted),
-    // and fall back to heuristic for other duration maps when metadata looks inverted.
-    const xLabelLower = (mapData.x_label || "").toLowerCase();
-    const yLabelLower = (mapData.y_label || "").toLowerCase();
-    const xLooksRpm = xLabelLower.includes("rpm") || xLabelLower.includes("engine speed");
-    const yLooksRpm = yLabelLower.includes("rpm") || yLabelLower.includes("engine speed");
-    const xLooksIQ = xLabelLower.includes("mg") || xLabelLower.includes("iq");
-    const yLooksIQ = yLabelLower.includes("mg") || yLabelLower.includes("iq");
-    const correctionsLookInverted =
-      isInjectorDuration &&
-      (
-        (xLooksRpm && yLooksIQ && (mapData.x_axis_correction ?? 1) < (mapData.y_axis_correction ?? 1)) ||
-        (xLooksIQ && yLooksRpm && (mapData.x_axis_correction ?? 1) > (mapData.y_axis_correction ?? 1))
-      );
-    
-    // Start IQ: NO swap needed - backend now sends correct data:
-    // - x_axis = Temp with x_axis_correction=0.1, x_axis_offset=-273.1
-    // - y_axis = RPM with y_axis_correction=1.0, y_axis_offset=0.0
-    // For Injector duration 01-04: swap corrections only (addresses are correct but corrections are inverted)
-    
-    // Les corrections du détecteur suivent ses adresses d'axes (durations
-    // comprises depuis la version 45) : seule l'heuristique sur les libellés
-    // reste, pour des données de détection anciennes encore en cache.
-    const swapCorrectionsOnly = correctionsLookInverted && !boostNeedsAxisSwap;
-    // Bases génériques (non-boost)
-    const baseXAxisCorrection = mapData.x_axis_correction ?? 1.0;
-    const baseYAxisCorrection = mapData.y_axis_correction ?? 1.0;
-    const baseXAxisOffset = mapData.x_axis_offset ?? 0.0;
-    const baseYAxisOffset = mapData.y_axis_offset ?? 0.0;
-    // Boost target: backend NOW sends correct values, use them directly
-    // Backend sends: x_axis = IQ (0.01 correction), y_axis = RPM (1.0 correction)
-    const boostDefaultXAxisCorrection = mapData.x_axis_correction ?? 0.01;  // X = IQ
-    const boostDefaultYAxisCorrection = mapData.y_axis_correction ?? 1.0;   // Y = RPM
-    const boostDefaultXAxisOffset = mapData.x_axis_offset ?? 0.0;
-    const boostDefaultYAxisOffset = mapData.y_axis_offset ?? 0.0;
-
-    // Standard correction assignment - use backend values
-    let xAxisCorrection = isIdleRpm
-      ? (mapData.x_axis_correction ?? 0.1) // Idle RPM: Temp en X (axe X backend)
-      : (isBoostTarget ? boostDefaultXAxisCorrection : (boostNeedsAxisSwap || swapCorrectionsOnly ? baseYAxisCorrection : baseXAxisCorrection));
-    let xAxisOffset = isIdleRpm
-      ? (mapData.x_axis_offset ?? -273.1)
-      : (isBoostTarget ? boostDefaultXAxisOffset : (boostNeedsAxisSwap || swapCorrectionsOnly ? baseYAxisOffset : baseXAxisOffset));
-    let yAxisCorrection = isIdleRpm
-      ? (mapData.y_axis_correction ?? 1.0) // Idle RPM: valeur RPM en Y (axe Y backend)
-      : (isBoostTarget ? boostDefaultYAxisCorrection : (boostNeedsAxisSwap || swapCorrectionsOnly ? baseXAxisCorrection : baseYAxisCorrection));
-    let yAxisOffset = isIdleRpm
-      ? (mapData.y_axis_offset ?? 0.0)
-      : (isBoostTarget ? boostDefaultYAxisOffset : (boostNeedsAxisSwap || swapCorrectionsOnly ? baseXAxisOffset : baseYAxisOffset));
-
-    // Hard override for Boost target already applied above via isBoostTarget flag
-    // Idle RPM: force temperature scaling on X (0.1, -273.1) to display °C correctly
-    if (isIdleRpm) {
-      xAxisCorrection = 0.1;
-      xAxisOffset = -273.1;
-    }
+    // Corrections d'affichage (même source que les adresses, voir plus haut) ;
+    // les réglages de la fenêtre Propriétés s'appliquent ensuite.
+    let xAxisCorrection = axisSources.x.correction;
+    let xAxisOffset = axisSources.x.offset;
+    let yAxisCorrection = axisSources.y.correction;
+    let yAxisOffset = axisSources.y.offset;
 
     // Per-project display overrides from the map Properties window
     // (WinOLS convention: displayed = raw * factor / divisor + offset).
@@ -4257,7 +4258,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                   <table ref={tableRef} className="border-collapse" style={{ marginTop: '0px', width: 'max-content', tableLayout: 'auto' }}>
                     <thead>
                       <tr>
-                        <th className="sticky left-0 z-20 px-1.5 py-1 text-[11px] font-medium text-center relative"
+                        <th className="sticky left-0 z-20 px-1.5 py-1 font-medium text-center relative"
                           style={{
                             background: getAxisCellBg(),
                             border: `1px solid ${getCellBorderColor()}`,
@@ -4266,15 +4267,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                           {(displayMapValues.length > 1 || (displayMapValues[0] && displayMapValues[0].length > 1)) && (
                             <div className="flex flex-col justify-between h-full w-full py-0.5">
                               <div
-                                className="text-[8px] leading-tight truncate max-w-full px-0.5 text-right"
-                                style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
+                                className="leading-tight truncate max-w-full px-0.5 text-right"
+                                style={{ fontSize: 'var(--zs-axis-unit-font, 8px)', color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
                                 title={parseAxisUnits().xUnit}
                               >
                                 {parseAxisUnits().xUnit}
                               </div>
                               <div
-                                className="text-[8px] leading-tight truncate max-w-full px-0.5 text-center"
-                                style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
+                                className="leading-tight truncate max-w-full px-0.5 text-center"
+                                style={{ fontSize: 'var(--zs-axis-unit-font, 8px)', color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
                                 title={parseAxisUnits().yUnit}
                               >
                                 {parseAxisUnits().yUnit}
@@ -4426,17 +4427,18 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                     <button
                       className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
                       onClick={() => {
-                        const clip = readClipboard();
-                        if (!clip) {
-                          toast({ title: t.common.error, description: "Nothing to paste", variant: "destructive" });
-                          setContextMenu(null);
-                          return;
-                        }
-                        if (contextMenu.type === 'cell') {
-                          const pastedCount = pasteCellSelection(clip);
-                          toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
-                        }
+                        const menuType = contextMenu.type;
                         setContextMenu(null);
+                        void readClipboardPreferSystem(menuType === 'cell' ? 'cell' : 'axis').then((clip) => {
+                          if (!clip) {
+                            toast({ title: t.common.error, description: "Nothing to paste", variant: "destructive" });
+                            return;
+                          }
+                          if (menuType === 'cell') {
+                            const pastedCount = pasteCellSelection(clip);
+                            toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+                          }
+                        });
                       }}
                     >
                       {t.mapViewer.paste}
@@ -4807,7 +4809,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             <table ref={tableRef} className="border-collapse" style={{ marginTop: '0px', width: 'max-content', tableLayout: 'auto' }}>
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-20 px-1.5 py-1 text-[11px] font-medium text-center relative"
+                  <th className="sticky left-0 z-20 px-1.5 py-1 font-medium text-center relative"
                           style={{
                             background: getAxisCellBg(),
                             border: `1px solid ${getCellBorderColor()}`,
@@ -4817,15 +4819,15 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                     {(displayMapValues.length > 1 || (displayMapValues[0] && displayMapValues[0].length > 1)) && (
                       <div className="flex flex-col justify-between h-full w-full py-0.5">
                         <div
-                          className="text-[8px] leading-tight truncate max-w-full px-0.5 text-right"
-                          style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
+                          className="leading-tight truncate max-w-full px-0.5 text-right"
+                          style={{ fontSize: 'var(--zs-axis-unit-font, 8px)', color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
                           title={parseAxisUnits().xUnit}
                         >
                           {parseAxisUnits().xUnit}
                         </div>
                         <div
-                          className="text-[8px] leading-tight truncate max-w-full px-0.5 text-center"
-                          style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
+                          className="leading-tight truncate max-w-full px-0.5 text-center"
+                          style={{ fontSize: 'var(--zs-axis-unit-font, 8px)', color: theme === 'light' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.5)' }}
                           title={parseAxisUnits().yUnit}
                         >
                           {parseAxisUnits().yUnit}
@@ -4989,46 +4991,47 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
               <button
                 className="px-3 py-1.5 text-left rounded hover:bg-white/10 transition-colors"
                 onClick={() => {
-                  const clip = readClipboard();
-                  if (!clip) {
-                    toast({ title: t.common.error, description: "Nothing to paste", variant: "destructive" });
-                    setContextMenu(null);
-                    return;
-                  }
-
-                  if (contextMenu.type === 'cell') {
-                    const pastedCount = pasteCellSelection(clip);
-                    toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
-                  } else if (contextMenu.type === 'xAxis') {
-                    const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
-                    const startIndex = indices[0] ?? 0;
-                    const displayLen = displayXAxisLabels.length;
-                    let pastedCount = 0;
-                    clip.values.forEach((rowValues, offset) => {
-                      const value = rowValues[0];
-                      const displayIdx = startIndex + offset;
-                      if (value && displayIdx < displayLen) {
-                        mutateDisplayXAxis(displayIdx, () => value);
-                        pastedCount++;
-                      }
-                    });
-                    toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
-                  } else if (contextMenu.type === 'yAxis') {
-                    const indices = Array.from(selectedYAxisCells).sort((a, b) => a - b);
-                    const startIndex = indices[0] ?? 0;
-                    const displayLen = displayYAxisLabels.length;
-                    let pastedCount = 0;
-                    clip.values.forEach((rowValues, offset) => {
-                      const value = rowValues[0];
-                      const displayIdx = startIndex + offset;
-                      if (value && displayIdx < displayLen) {
-                        mutateDisplayYAxis(displayIdx, () => value);
-                        pastedCount++;
-                      }
-                    });
-                    toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
-                  }
+                  const menuType = contextMenu.type;
                   setContextMenu(null);
+                  void readClipboardPreferSystem(menuType === 'cell' ? 'cell' : 'axis').then((clip) => {
+                    if (!clip) {
+                      toast({ title: t.common.error, description: "Nothing to paste", variant: "destructive" });
+                      return;
+                    }
+
+                    if (menuType === 'cell') {
+                      const pastedCount = pasteCellSelection(clip);
+                      toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+                    } else if (menuType === 'xAxis') {
+                      const indices = Array.from(selectedXAxisCells).sort((a, b) => a - b);
+                      const startIndex = indices[0] ?? 0;
+                      const displayLen = displayXAxisLabels.length;
+                      let pastedCount = 0;
+                      clip.values.forEach((rowValues, offset) => {
+                        const value = rowValues[0];
+                        const displayIdx = startIndex + offset;
+                        if (value && displayIdx < displayLen) {
+                          mutateDisplayXAxis(displayIdx, () => value);
+                          pastedCount++;
+                        }
+                      });
+                      toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+                    } else if (menuType === 'yAxis') {
+                      const indices = Array.from(selectedYAxisCells).sort((a, b) => a - b);
+                      const startIndex = indices[0] ?? 0;
+                      const displayLen = displayYAxisLabels.length;
+                      let pastedCount = 0;
+                      clip.values.forEach((rowValues, offset) => {
+                        const value = rowValues[0];
+                        const displayIdx = startIndex + offset;
+                        if (value && displayIdx < displayLen) {
+                          mutateDisplayYAxis(displayIdx, () => value);
+                          pastedCount++;
+                        }
+                      });
+                      toast({ title: t.mapViewer.paste, description: `${pastedCount} value(s) pasted` });
+                    }
+                  });
                 }}
               >
                 {t.mapViewer.paste}

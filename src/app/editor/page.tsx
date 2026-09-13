@@ -28,6 +28,8 @@ import {
   FileJson,
   Gauge,
   ArrowLeftRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { PiHeadCircuit } from "react-icons/pi";
 import { HexdumpViewer, type MapRegion } from "@/components/hexdump-viewer";
@@ -64,7 +66,16 @@ import { MODAL_GLASS, MODAL_GLASS_LIGHT, TOAST_GLASS, TOAST_GLASS_LIGHT } from "
 import { StyledSelect } from "@/components/styled-select";
 import { formatEcuWithManufacturer } from "@/lib/ecu-manufacturer";
 import { isBigEndianEcu } from "@/lib/ecu-endianness";
-import { resolveMapCellLayout } from "@/lib/map-cell-layout";
+import { resolveMapCellLayout, resolveAxisSources } from "@/lib/map-cell-layout";
+import {
+  applyDisplayOverrides,
+  displaySettingsDiffer,
+  extractDisplayOverrides,
+  loadMapDisplayPrefs,
+  mapFamilyKey,
+  normalizeEcuKey,
+  saveMapDisplayPref,
+} from "@/lib/map-display-prefs";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { PromptModal } from "@/components/prompt-modal";
 import { correctChecksumByEcuType, isChecksumSupported, ChecksumResult } from "@/lib/ecu/bosch/checksums";
@@ -2425,6 +2436,15 @@ function EditorPageContent() {
 
   // Sidebar resize state
   const [sidebarWidth, setSidebarWidth] = useState(EDITOR_SIDEBAR_DEFAULT_WIDTH);
+  // Panneau replié (bouton en haut du panneau, demande du 12/09) : une bande
+  // étroite avec le bouton de dépliage, tout le reste masqué mais monté (la
+  // liste garde ses dossiers ouverts). Largeur EFFECTIVE utilisée partout où
+  // la largeur du panneau compte — plafond de zoom, largeur minimale de la
+  // fenêtre, variable CSS — : replier rend de la place, donc du zoom, sur
+  // les petits écrans. Replié, on ne peut pas ouvrir de map : voulu.
+  const SIDEBAR_COLLAPSED_WIDTH = 48;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const effectiveSidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
   const isResizing = useRef(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -2437,8 +2457,8 @@ function EditorPageContent() {
   // Taille minimale de la fenêtre = barre d'outils + liste des maps au zoom
   // le plus bas : en dessous le zoom automatique ne peut plus suivre.
   useEffect(() => {
-    setAppMinWidth(editorFloorLogicalWidth(sidebarWidth), 1);
-  }, [sidebarWidth]);
+    setAppMinWidth(editorFloorLogicalWidth(effectiveSidebarWidth), 1);
+  }, [effectiveSidebarWidth]);
 
   // Mesure de la fenêtre : au montage puis à chaque redimensionnement.
   useEffect(() => {
@@ -2465,11 +2485,11 @@ function EditorPageContent() {
   // + qui le remonte (règle du 07/09).
   useEffect(() => {
     if (!windowLogicalW) return;
-    const fit = (windowLogicalW - 8) / (EDITOR_TOOLBAR_MIN_CSS_WIDTH + sidebarWidth);
+    const fit = (windowLogicalW - 8) / (EDITOR_TOOLBAR_MIN_CSS_WIDTH + effectiveSidebarWidth);
     const cap = Math.min(100, Math.max(Math.round(EDITOR_MIN_ZOOM * 100), Math.floor(fit * 100)));
     zoomCapRef.current = cap;
     setEditorZoom((z) => (z > cap ? cap : z));
-  }, [windowLogicalW, sidebarWidth]);
+  }, [windowLogicalW, effectiveSidebarWidth]);
   const effectiveZoom = editorZoom / 100;
   useEffect(() => {
     setAppZoom(effectiveZoom);
@@ -2529,11 +2549,11 @@ function EditorPageContent() {
 
   // Sync sidebar width to CSS variable for global Toaster positioning
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidth}px`);
+    document.documentElement.style.setProperty('--sidebar-width', `${effectiveSidebarWidth}px`);
     return () => {
       document.documentElement.style.removeProperty('--sidebar-width');
     };
-  }, [sidebarWidth]);
+  }, [effectiveSidebarWidth]);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const mapRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const dragState = useRef<{
@@ -2978,10 +2998,6 @@ function EditorPageContent() {
       return {
         cellCorrection: (ds ? effFactor(ds.factor, ds.divisor) : undefined) ?? (mapInfo.correction_factor ?? 1.0),
         cellOffset: ds && typeof ds.offset === 'number' && isFinite(ds.offset) ? ds.offset : (mapInfo.offset ?? 0.0),
-        xCorrection: (ds ? effFactor(ds.xAxis.factor, ds.xAxis.divisor) : undefined) ?? mapInfo.x_axis_correction,
-        xOffset: ds && typeof ds.xAxis.offset === 'number' && isFinite(ds.xAxis.offset) ? ds.xAxis.offset : mapInfo.x_axis_offset,
-        yCorrection: (ds ? effFactor(ds.yAxis.factor, ds.yAxis.divisor) : undefined) ?? mapInfo.y_axis_correction,
-        yOffset: ds && typeof ds.yAxis.offset === 'number' && isFinite(ds.yAxis.offset) ? ds.yAxis.offset : mapInfo.y_axis_offset,
       };
     };
 
@@ -3020,22 +3036,34 @@ function EditorPageContent() {
     axisEdits.forEach((axes, mapAddress) => {
       const mapInfo = maps.find((m: MapData) => m.address === mapAddress);
       if (!mapInfo) return;
-      const eff = getEffectiveCorrections(mapInfo);
+      // Les libellés sont ceux des axes AFFICHÉS (haut / gauche) : même
+      // adresse et même facteur que la lecture du MapViewer, via
+      // lib/map-cell-layout. Sur les maps dont la vue transpose (durations
+      // 01-05 EDC15, Drivers wish MJD6, torque limiter, N75 13x16), l'axe du
+      // haut est à l'adresse Y du détecteur : écrire aux adresses X/Y brutes
+      // envoyait l'axe IQ d'une duration, sans son facteur, dans l'axe de
+      // régime (issue #27, 019CC). Les réglages de la fenêtre Propriétés
+      // (axes affichés) s'appliquent par-dessus, comme à la lecture.
+      const sources = resolveAxisSources(mapInfo);
+      const ds = mapDisplaySettingsStore.get(mapInfo.address);
+      const xCorrection = (ds ? effFactor(ds.xAxis.factor, ds.xAxis.divisor) : undefined) ?? sources.x.correction;
+      const xOffset = ds && typeof ds.xAxis.offset === 'number' && isFinite(ds.xAxis.offset) ? ds.xAxis.offset : sources.x.offset;
+      const yCorrection = (ds ? effFactor(ds.yAxis.factor, ds.yAxis.divisor) : undefined) ?? sources.y.correction;
+      const yOffset = ds && typeof ds.yAxis.offset === 'number' && isFinite(ds.yAxis.offset) ? ds.yAxis.offset : sources.y.offset;
       // Même garde que MapViewer côté lecture : sur les Boost target EDC15
       // issus d'une détection antérieure au fix du détecteur, x_axis_address
       // et y_axis_address sont croisés (X → axe RPM, Y → axe IQ). Structure
       // fichier [ID u16][len u16 LE][valeurs] → longueur réelle à adresse-2 ;
       // si X pointe l'axe de `rows` valeurs et Y celui de `cols`, on échange
       // avant d'écrire, sinon les labels édités partiraient au mauvais axe.
-      let xAddr = mapInfo.x_axis_address;
-      let yAddr = mapInfo.y_axis_address;
+      let xAddr = sources.x.address;
+      let yAddr = sources.y.address;
       const dims2 = mapInfo.dimensions?.TwoDimensional;
       if (
         !ecuBigEndian &&
         (mapInfo.name || '').toLowerCase().includes('boost target map') &&
         dims2 && dims2.rows !== dims2.cols &&
-        typeof xAddr === 'number' && xAddr > 2 &&
-        typeof yAddr === 'number' && yAddr > 2
+        xAddr > 2 && yAddr > 2
       ) {
         const lenAt = (addr: number): number | null =>
           addr - 2 >= 0 && addr < data.length ? (data[addr - 2] | (data[addr - 1] << 8)) : null;
@@ -3046,10 +3074,10 @@ function EditorPageContent() {
         }
       }
       if (axes.x && axes.x.length > 0) {
-        writeAxis(xAddr, axes.x, eff.xCorrection, eff.xOffset);
+        writeAxis(xAddr, axes.x, xCorrection, xOffset);
       }
       if (axes.y && axes.y.length > 0) {
-        writeAxis(yAddr, axes.y, eff.yCorrection, eff.yOffset);
+        writeAxis(yAddr, axes.y, yCorrection, yOffset);
       }
     });
 
@@ -3510,15 +3538,20 @@ function EditorPageContent() {
   };
 
   // `realWidth` = largeur rendue (le minWidth CSS calculé sur les colonnes
-  // peut dépasser layout.width). Une fenêtre plus large que la zone de
-  // travail peut être glissée vers la GAUCHE, derrière la liste des maps,
-  // jusqu'à ce que son bord droit — et la croix de fermeture — arrive au
-  // bord de la zone (sur demande, maps larges type torque limiter 21 col.).
+  // peut dépasser layout.width). TOUTE fenêtre peut être glissée vers la
+  // GAUCHE, derrière la liste des maps, tant qu'il en reste au moins
+  // MAP_WINDOW_KEEP_VISIBLE px dans la zone de travail — la fin de la barre de
+  // titre et la croix de fermeture, pour la reprendre. Avant, seules les
+  // fenêtres plus larges que la zone (torque limiter 21 colonnes) pouvaient
+  // passer derrière, et par une borne qui ne se débloquait qu'au second
+  // glisser ; demandé pour toutes les maps le 12/09. Une seule borne
+  // continue, plus de seuil lié à la largeur.
+  const MAP_WINDOW_KEEP_VISIBLE = 160;
   const clampPosition = (x: number, y: number, width: number, height: number, realWidth?: number) => {
     const workspaceRect = workspaceRef.current?.getBoundingClientRect();
     if (!workspaceRect) return { x, y };
     const w = Math.max(width, realWidth ?? 0);
-    const minX = Math.min(0, workspaceRect.width - w);
+    const minX = Math.min(0, MAP_WINDOW_KEEP_VISIBLE - w);
     const maxX = Math.max(0, workspaceRect.width - w);
     const maxY = Math.max(0, workspaceRect.height - height);
     return {
@@ -5619,36 +5652,58 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     }, 200);
   };
 
-  // Handler pour sauvegarder les paramètres d'affichage d'une map
-  const handleSaveMapDisplaySettings = (mapAddress: number, settings: MapDisplaySettings) => {
+  // Persistance du store de réglages d'affichage : copie de session + fichier
+  // projet (files.map_display_settings). Chemin commun à la fenêtre
+  // Propriétés, au bouton d'inversion et à la mémoire par calculateur.
+  const persistMapDisplayStore = (store: Map<number, MapDisplaySettings>) => {
+    const settingsObj: Record<string, MapDisplaySettings> = {};
+    store.forEach((value, key) => {
+      settingsObj[key.toString()] = value;
+    });
+    if (projectData) {
+      const updatedData = { ...projectData, mapDisplaySettings: settingsObj };
+      saveProjectToSession(updatedData);
+    }
+    if (projectData?.fileId) {
+      fetch(`/api/files/${projectData.fileId}/display-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: settingsObj }),
+      }).catch(() => {
+        // Session copy already saved — backend retry happens on next save
+      });
+    }
+  };
+
+  // Sauvegarde des réglages d'affichage d'une map, appliqués à toute sa
+  // FAMILLE (même nom sans numéro : « Injector duration 02 » → toutes les
+  // Injector duration, « Driver wish » de chaque codeblock…), demande du
+  // 13/09. La map source reçoit ses réglages tels quels ; chaque autre
+  // membre reçoit le même ÉCART (inversion, miroirs, facteurs/décimales
+  // modifiés) appliqué sur ses propres défauts — adresses et dimensions
+  // restent les siennes. Si « mémoriser par calculateur » est coché, l'écart
+  // est aussi enregistré pour le type d'ECU du projet.
+  const handleSaveMapDisplaySettings = (mapAddress: number, next: MapDisplaySettings) => {
+    const maps: MapData[] = projectData?.detectionResults?.maps ?? [];
+    const source = maps.find((m) => m.address === mapAddress);
+    const family = source ? mapFamilyKey(source.name) : null;
+    const overrides = source ? extractDisplayOverrides(next, getDefaultMapDisplaySettings(source)) : null;
     setMapDisplaySettingsStore(prev => {
       const newStore = new Map(prev);
-      newStore.set(mapAddress, settings);
-
-      // Sauvegarder dans projectData (sans file_data) pour persister avec le projet
-      const settingsObj: Record<string, MapDisplaySettings> = {};
-      newStore.forEach((value, key) => {
-        settingsObj[key.toString()] = value;
-      });
-      if (projectData) {
-        const updatedData = { ...projectData, mapDisplaySettings: settingsObj };
-        saveProjectToSession(updatedData);
-      }
-
-      // Persist to the backend (PocketBase files.map_display_settings) so the
-      // per-project layout survives browser restarts and other devices.
-      if (projectData?.fileId) {
-        fetch(`/api/files/${projectData.fileId}/display-settings`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ settings: settingsObj }),
-        }).catch(() => {
-          // Session copy already saved — backend retry happens on next save
+      newStore.set(mapAddress, next);
+      if (family !== null && overrides) {
+        maps.forEach((m) => {
+          if (m.address === mapAddress || mapFamilyKey(m.name) !== family) return;
+          newStore.set(m.address, applyDisplayOverrides(getDefaultMapDisplaySettings(m), overrides));
         });
       }
-
+      persistMapDisplayStore(newStore);
       return newStore;
     });
+    if (family !== null && overrides && settings.rememberMapDisplay) {
+      const ecuKey = normalizeEcuKey(projectData?.ecu_type);
+      if (ecuKey) saveMapDisplayPref(ecuKey, family, overrides);
+    }
 
     showInlineNotification(t.notifications.settingsSaved);
   };
@@ -5660,14 +5715,45 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     return getDefaultMapDisplaySettings(map);
   }, [mapDisplaySettingsStore]);
 
-  // Toggle du bouton "inverser l'affichage" dans l'en-tête d'une map. Réutilise
-  // le même chemin de persistance que la fenêtre Propriétés (store + PocketBase).
+  // Toggle du bouton "inverser l'affichage" dans l'en-tête d'une map. Même
+  // chemin que la fenêtre Propriétés : toute la famille suit.
   const handleToggleInvertDisplay = useCallback((mapAddress: number, invert: boolean) => {
     const map = projectData?.detectionResults?.maps?.find((m: MapData) => m.address === mapAddress);
     if (!map) return;
     const base = mapDisplaySettingsStore.get(mapAddress) ?? getDefaultMapDisplaySettings(map);
     handleSaveMapDisplaySettings(mapAddress, { ...base, invertDisplay: invert });
   }, [projectData, mapDisplaySettingsStore, handleSaveMapDisplaySettings]);
+
+  // Mémoire par calculateur : à l'ouverture d'un projet (ou quand l'option
+  // est cochée), les écarts enregistrés pour ce type d'ECU sont appliqués
+  // aux familles concernées — ils PRIMENT sur les réglages stockés dans le
+  // projet, pour que tous les projets d'un même calculateur se présentent
+  // pareil. Idempotent : rien n'est réécrit si le store est déjà conforme.
+  const mapsForDisplayPrefs = projectData?.detectionResults?.maps;
+  const ecuKeyForDisplayPrefs = normalizeEcuKey(projectData?.ecu_type);
+  useEffect(() => {
+    if (!settings.rememberMapDisplay || !mapsForDisplayPrefs || !ecuKeyForDisplayPrefs) return;
+    const prefs = loadMapDisplayPrefs()[ecuKeyForDisplayPrefs];
+    if (!prefs || Object.keys(prefs).length === 0) return;
+    setMapDisplaySettingsStore(prev => {
+      let changed = false;
+      const newStore = new Map(prev);
+      mapsForDisplayPrefs.forEach((m: MapData) => {
+        const o = prefs[mapFamilyKey(m.name)];
+        if (!o) return;
+        const nextSettings = applyDisplayOverrides(getDefaultMapDisplaySettings(m), o);
+        const current = prev.get(m.address);
+        if (!current || displaySettingsDiffer(current, nextSettings)) {
+          newStore.set(m.address, nextSettings);
+          changed = true;
+        }
+      });
+      if (!changed) return prev;
+      persistMapDisplayStore(newStore);
+      return newStore;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapsForDisplayPrefs, ecuKeyForDisplayPrefs, projectData?.fileId, settings.rememberMapDisplay]);
 
   const toggleFolder = (folderName: string) => {
     // Block opening sub-folders when mappack is locked (only allow "all" root folder)
@@ -6179,11 +6265,12 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       {/* Left Sidebar - Project Info & Maps Tree - FULL HEIGHT */}
       <div
         ref={sidebarRef}
-        className="flex flex-col h-screen relative"
+        className="flex flex-col h-screen relative overflow-hidden"
         style={{
-          width: `${sidebarWidth}px`,
-          minWidth: '338px',
-          maxWidth: '500px',
+          width: `${effectiveSidebarWidth}px`,
+          minWidth: sidebarCollapsed ? `${SIDEBAR_COLLAPSED_WIDTH}px` : '338px',
+          maxWidth: sidebarCollapsed ? `${SIDEBAR_COLLAPSED_WIDTH}px` : '500px',
+          transition: 'width 220ms ease, min-width 220ms ease, max-width 220ms ease',
           background: getSidebarBg(),
           backdropFilter: getGlassBlur(),
           WebkitBackdropFilter: getGlassBlur(),
@@ -6191,10 +6278,83 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           zIndex: 1
         }}
       >
+        {/* Panneau replié : logo de l'app tout en haut, bouton de dépliage
+            aligné sur la barre de titre de la fenêtre Hexdump, puis les quatre
+            actions en format compact — mêmes dégradés, mêmes règles de
+            déverrouillage que les boutons complets. Sous les feux de la
+            fenêtre sur macOS. */}
+        {sidebarCollapsed && (
+          <div className={`flex flex-col items-center gap-2 pt-3 flex-shrink-0 ${isMacOS() ? 'mt-10' : ''}`}>
+            <img src="/zedsuite-icon.svg" alt="ZedSuite" className="w-8 h-8 object-contain" />
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              title={t.sidebar.expand}
+              className={`-mt-px p-1.5 rounded-md transition-colors ${theme === 'light' ? 'text-black hover:bg-black/10' : 'text-white hover:bg-white/10'}`}
+            >
+              <PanelLeftOpen className="w-5 h-5" />
+            </button>
+            <div className="flex flex-col items-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => { if (mappackUnlocked) setIsSolutionsOpen(true); }}
+                disabled={!mappackUnlocked}
+                title={t.sidebar.solutions}
+                className={`relative overflow-hidden rounded-lg backdrop-blur-md border w-9 h-9 flex items-center justify-center transition-all duration-300 ${!mappackUnlocked ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105 hover:shadow-xl'} ${theme === 'light' ? 'bg-gradient-to-l from-red-600 via-red-500 to-orange-500 border-black/10 hover:shadow-red-600/35' : 'bg-gradient-to-l from-red-600/90 via-red-500/90 to-orange-500/90 border-white/15 hover:shadow-red-500/35'}`}
+              >
+                <PiHeadCircuit className="w-4 h-4" style={{ color: '#ffffff' }} />
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (mappackUnlocked) setIsDTCOpen(true); }}
+                disabled={!mappackUnlocked}
+                title={t.sidebar.dtcCodes}
+                className={`relative overflow-hidden rounded-lg backdrop-blur-md border w-9 h-9 flex items-center justify-center transition-all duration-300 ${!mappackUnlocked ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105 hover:shadow-xl'} ${theme === 'light' ? 'bg-gradient-to-l from-amber-500 via-yellow-500 to-amber-400 border-black/10 hover:shadow-amber-600/35' : 'bg-gradient-to-l from-amber-500/90 via-yellow-500/90 to-amber-400/90 border-white/15 hover:shadow-amber-500/35'}`}
+              >
+                <AlertTriangle className="w-4 h-4" style={{ color: '#ffffff' }} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void openPowerEstimate()}
+                title={t.sidebar.powerEstimate}
+                className={`relative overflow-hidden rounded-lg backdrop-blur-md border w-9 h-9 flex items-center justify-center transition-all duration-300 hover:scale-105 hover:shadow-xl ${theme === 'light' ? 'bg-gradient-to-l from-blue-600 via-blue-500 to-sky-500 border-black/10 hover:shadow-blue-600/35' : 'bg-gradient-to-l from-blue-600/90 via-blue-500/90 to-sky-500/90 border-white/15 hover:shadow-blue-500/35'}`}
+              >
+                <Gauge className="w-4 h-4" style={{ color: '#ffffff' }} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCompareOpen(true)}
+                title={t.toolbar.compare}
+                className={`relative overflow-hidden rounded-lg backdrop-blur-md border w-9 h-9 flex items-center justify-center transition-all duration-300 hover:scale-105 hover:shadow-xl ${theme === 'light' ? 'bg-gradient-to-l from-violet-600 via-purple-500 to-fuchsia-500 border-black/10 hover:shadow-violet-600/35' : 'bg-gradient-to-l from-violet-600/90 via-purple-500/90 to-fuchsia-500/90 border-white/15 hover:shadow-violet-500/35'}`}
+              >
+                <ArrowLeftRight className="w-4 h-4" style={{ color: '#ffffff' }} />
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Contenu du panneau : masqué mais monté quand il est replié */}
+        <div
+          className="flex flex-col flex-1 min-h-0"
+          style={{
+            opacity: sidebarCollapsed ? 0 : 1,
+            visibility: sidebarCollapsed ? 'hidden' : 'visible',
+            pointerEvents: sidebarCollapsed ? 'none' : 'auto',
+            transition: 'opacity 160ms ease',
+          }}
+        >
         {/* Logo & Project Info — zone de déplacement de la fenêtre, comme la
             barre d'outils : cliquer-glisser ici déplace l'application
             (les champs interactifs plus bas gardent leurs propres clics). */}
-        <div data-tauri-drag-region className="p-4 flex-shrink-0" style={{ borderBottom: `1px solid ${getBorderColor()}` }}>
+        <div data-tauri-drag-region className="p-4 flex-shrink-0 relative" style={{ borderBottom: `1px solid ${getBorderColor()}` }}>
+          {/* Bouton de repli du panneau, dans le coin du carré du haut */}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(true)}
+            title={t.sidebar.collapse}
+            className={`absolute top-2 right-2 p-1.5 rounded-md transition-colors ${theme === 'light' ? 'text-black hover:bg-black/10' : 'text-white hover:bg-white/10'}`}
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
           {/* Logo centré dans l'en-tête du panneau, sur toutes les
               plateformes : même interface partout (demande du 09/09). Sur
               macOS cela le garde aussi à droite des feux de la fenêtre, à
@@ -6772,12 +6932,16 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           </div>
         </div>
 
-        {/* Resize Handle */}
-        <div
-          onMouseDown={handleMouseDown}
-          className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-primary/50 transition-colors"
-          style={{ background: 'transparent' }}
-        />
+        </div>
+
+        {/* Resize Handle (pas de redimensionnement quand le panneau est replié) */}
+        {!sidebarCollapsed && (
+          <div
+            onMouseDown={handleMouseDown}
+            className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-primary/50 transition-colors"
+            style={{ background: 'transparent' }}
+          />
+        )}
       </div>
 
       {/* Main Content Area - STARTS AFTER SIDEBAR (z-1: above the ambient halos) */}
@@ -7358,6 +7522,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
                             easyViewMode={mapEasyViewStatus.get(map.address) || false}
                             onViewModeChange={(mode) => handleViewModeChange(map.address, mode)}
                             onAutoSize={(w, h, source) => handleMapAutoSize(map.address, w, h, source)}
+                            userSized={userResizedMapsRef.current.has(map.address)}
                             onDragStart={(e) => handleMapDragStart(map.address, e)}
                             onResizeActiveChange={(active) => {
                               setOverlayCursor('se-resize');

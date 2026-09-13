@@ -14,7 +14,7 @@ import { openExternal, ZEDSUITE_RELEASES_URL } from "@/lib/open-external";
 import { MODAL_GLASS } from "@/lib/modal-glass";
 import { useI18n } from "@/contexts/i18n-context";
 import { describeUpdateError, downloadAndInstallUpdate, type UpdateInfo } from "@/lib/update";
-import { isMacOS } from "@/lib/platform";
+import { isLinux, isMacOS } from "@/lib/platform";
 
 interface UpdateDialogProps {
   info: UpdateInfo;
@@ -55,6 +55,12 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
 
   const startUpdate = async () => {
     if (!info.download_url) {
+      if (isLinux()) {
+        // No auto-installer on Linux (AppImage/deb): send the user to the
+        // releases page so they can grab the asset themselves.
+        void openExternal(ZEDSUITE_RELEASES_URL);
+        return;
+      }
       // Release sans build pour cette plateforme (macOS publié après Windows)
       setError(isMacOS() ? t.updateDialog.noInstallerMac : t.updateDialog.noInstaller);
       return;
@@ -172,7 +178,11 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
               onClick={startUpdate}
               disabled={downloading}
             >
-              {downloading ? t.updateDialog.updating : t.updateDialog.updateNow}
+              {downloading
+                ? t.updateDialog.updating
+                : isLinux() && !info.download_url
+                  ? t.updateDialog.viewOnGithub
+                  : t.updateDialog.updateNow}
             </Button>
           </div>
         </div>

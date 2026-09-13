@@ -2,7 +2,7 @@
 
 Diese Seite listet auf, was geplant ist, was Nutzer gewünscht haben und was nicht geplant ist.
 
-Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https://github.com/LeZed97/ZedSuite/issues) öffnen, im [ecuconnections-Thread](https://www.ecuconnections.com/forum/viewtopic.php?p=393279#p393279) schreiben oder mich über meine Netzwerke erreichen: [linktr.ee/zedperf](https://linktr.ee/zedperf). Jede Meldung wird gelesen.
+Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https://github.com/LeZed97/ZedSuite/issues) öffnen oder mich über meine Netzwerke erreichen: [linktr.ee/zedperf](https://linktr.ee/zedperf). Jede Meldung wird gelesen.
 
 ## Geplant
 
@@ -15,6 +15,7 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 - EDC16U31: bessere Erkennung, es fehlen noch einige EDC16U31-Dateien auf dem Prüfstand, um sie sauber abzuschließen (die 12x12-Familie bei 0x1D7xxx hat noch keinen Namen).
 - EDC16U1: Identifikation der Touareg-V10-Dateien, bei denen heute nur eine der beiden Steuergerätenummern gefunden wird (sechs Dateien auf dem Prüfstand).
 - Erkennung der PID-Kennfelder der Ladedruckregelung, zuerst bei EDC15P.
+- XDF-Kompatibilität (TunerPro-Definitionsdateien, um Kennfeldlisten in diesem Format zu lesen und zu schreiben). Für später geplant, wenn ich die Zeit finde, mich damit zu befassen.
 
 ## Von Nutzern gewünscht, in Prüfung
 
@@ -28,12 +29,12 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 - Zwei Versionen desselben Projekts nebeneinander bearbeiten.
 - Mehr Funktionen im Eigenschaften-Fenster der Kennfelder.
 - Alle vom Original abweichenden Werte in den Kennfeldfenstern hervorheben.
-- Die Kennfeldausrichtung merken (axis mirror): heute wird die Anzeigetransposition Kennfeld für Kennfeld und nur im geöffneten Projekt eingestellt. Geplant ist, die Wahl auf die ganze Kennfeldfamilie anzuwenden und als globale Einstellung zu speichern, damit alle Projekte die Kennfelder gleich öffnen.
-- Eine Linux-Version. Die Oberfläche ist derselbe Code wie unter Windows und macOS, nur die Hülle wäre zu machen; es hängt davon ab, wie viele danach fragen.
+- Größere Map-Fenster und ein echter 100-%-Zoom auf kleinen Bildschirmen. Heute wächst ein Map-Fenster nicht mehr, sobald seine Zellen ihre Maximalgröße erreichen, was rechts Leerraum lässt, und der Zoom des Editors wird durch die Breite begrenzt, die Werkzeugleiste und Map-Liste verlangen, etwa 75 % auf einem 1024 Pixel breiten Bildschirm. Geplant ist, die Obergrenze der Zellengröße anzuheben und Werkzeugleiste und Liste sparsamer zu machen, damit der Zoom auf jedem Bildschirm 100 % erreicht; eine einstellbare Schriftgröße wird ebenfalls geprüft.
 
 ## Vorerst nicht geplant
 
-- Neue Steuergeräte (BMW- und PSA-EDC15/EDC16 usw.).
+- Neue Steuergeräte von mir (BMW- und PSA-EDC15/EDC16, EDC17 usw.). Ein Detektor braucht mindestens zwei bis drei Monate und einen großen Bestand an Originaldateien und Mappacks, um richtig zu sein, und ich pflege ZedSuite in meiner Freizeit: Arbeit in dieser Größe kann ich nicht verschenken. Eine Familie kann weiterhin über einen Beitrag kommen, der die Anforderungen aus [CONTRIBUTING.md](CONTRIBUTING.md) erfüllt.
+- Automatische Lösungen (EGR off, DPF off, Tuning per Klick). ZedSuite bleibt ein Werkzeug zum Lernen und zum Verstehen der Datei, im Geist von EDCSuite.
 - Eine ins Steuergerät gepatchte Kennfeld-Umschaltroutine (Multimap): in WinOLS mit den für EDC15 kursierenden Routinen erledigen und die Datei dann als Version importieren, der zusätzliche Codeblock und seine Kennfelder werden seit 1.1.6 angezeigt.
 - Mehr Referenzdaten (Marken, Motoren) für den Importbildschirm.
 - Windows-7-Kompatibilität.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { StyledSelect } from "@/components/styled-select";
 import {
@@ -12,6 +12,8 @@ import { useTheme } from "@/contexts/theme-context";
 import { useSettings, UserSettings } from "@/contexts/settings-context";
 import { useI18n } from "@/contexts/i18n-context";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
+import { clearMapDisplayPrefs, hasMapDisplayPrefs } from "@/lib/map-display-prefs";
+import { ConfirmModal } from "@/components/confirm-modal";
 
 interface SettingsMenuProps {
   isOpen: boolean;
@@ -32,6 +34,15 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
   const { theme, setTheme } = useTheme();
   const { settings, updateSettings, saveSettings } = useSettings();
   const { t } = useI18n();
+
+  // Mémoire d'affichage des maps par calculateur : le bouton « oublier »
+  // n'apparaît que s'il y a quelque chose à oublier (relu à l'ouverture)
+  const [hasMapPrefs, setHasMapPrefs] = useState(false);
+  // Confirmation avant d'oublier (clic trop rapide)
+  const [confirmForget, setConfirmForget] = useState(false);
+  useEffect(() => {
+    if (isOpen) setHasMapPrefs(hasMapDisplayPrefs());
+  }, [isOpen]);
 
   // Application immédiate + persistance d'un réglage
   const apply = async (patch: Partial<UserSettings>) => {
@@ -319,6 +330,37 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
                       </div>
                     </div>
                   </div>
+
+                  {/* Mémoriser l'affichage des maps par calculateur */}
+                  <div className="p-4 rounded-lg" style={cardBg}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <label htmlFor="remember-map-display" className={`font-medium cursor-pointer text-sm ${textMain}`}>
+                          {t.settings.rememberMapDisplay}
+                        </label>
+                        <p className={`text-xs mt-1 ${textSub}`}>
+                          {t.settings.rememberMapDisplayDescription}
+                        </p>
+                        {hasMapPrefs && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmForget(true)}
+                            className={`text-xs mt-2 underline underline-offset-2 transition-colors ${textSub} hover:opacity-80`}
+                          >
+                            {t.settings.rememberMapDisplayReset}
+                          </button>
+                        )}
+                      </div>
+                      <div className="ml-4">
+                        <Toggle
+                          id="remember-map-display"
+                          checked={settings.rememberMapDisplay}
+                          onColor="rgba(59, 130, 246, 0.5)"
+                          onChange={(v) => void apply({ rememberMapDisplay: v })}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -416,6 +458,26 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
           </div>
         </div>
       </div>
+
+      {/* Confirmation « oublier les réglages mémorisés » — rendue dans le fond
+          du menu (z-index relatif à son contexte d'empilement) ; le clic sur
+          son propre fond ne doit pas fermer le menu derrière. */}
+      {confirmForget && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ConfirmModal
+            title={t.settings.rememberMapDisplayResetTitle}
+            description={t.settings.rememberMapDisplayResetDescription}
+            confirmLabel={t.settings.rememberMapDisplayResetConfirm}
+            cancelLabel={t.settings.cancel}
+            onCancel={() => setConfirmForget(false)}
+            onConfirm={() => {
+              clearMapDisplayPrefs();
+              setHasMapPrefs(false);
+              setConfirmForget(false);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

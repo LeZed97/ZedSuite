@@ -4,7 +4,7 @@
 pub mod launch_control; // Détection du Launch Control (EDC15P/EDC15VM)
 pub mod egr_temperature; // Détection de l'EGR temperature map (EDC15P/EDC15VM)
 pub mod duration_orientation; // Ordre des lignes du bloc Duration EDC16 (régime décroissant sur certains softs)
-pub mod map_maf_switch; // Switch MAP/MAF des EDC16 (U1/U31/U34)
+pub mod map_maf_switch; // Switchs de la limitation de fumee des EDC16 (U1/U31/U34)
 
 pub mod edc15p;     // Bosch EDC15P (VAG 1.9 TDI PD)
 pub mod edc15vm;    // Bosch EDC15VM (VM variant)

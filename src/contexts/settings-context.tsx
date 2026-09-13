@@ -17,6 +17,10 @@ export interface UserSettings {
   editorWallpaper: "auto" | "lines" | "lines-light" | "editor" | "white" | "black" | "custom";
   /** Nom de l'entreprise de reprogrammation — affiché sur les PDF exportés */
   companyName: string;
+  /** Mémoriser l'affichage des maps (inversion, miroirs, facteurs) par
+   *  type de calculateur et le réappliquer aux autres projets du même ECU
+   *  (lib/map-display-prefs) */
+  rememberMapDisplay: boolean;
 }
 
 // Detect browser language
@@ -41,6 +45,7 @@ const defaultSettings: UserSettings = {
   dashboardWallpaper: "auto",
   editorWallpaper: "auto",
   companyName: "",
+  rememberMapDisplay: false,
 };
 
 export interface PlatformSettings {
@@ -94,6 +99,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             dashboardWallpaper: parsed.dashboardWallpaper ?? defaultSettings.dashboardWallpaper,
             editorWallpaper: parsed.editorWallpaper ?? defaultSettings.editorWallpaper,
             companyName: parsed.companyName ?? defaultSettings.companyName,
+            rememberMapDisplay: parsed.rememberMapDisplay ?? defaultSettings.rememberMapDisplay,
           };
           // Apply localStorage settings immediately
           setSettings(localSettings);
@@ -127,6 +133,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 dashboardWallpaper: data.dashboardWallpaper ?? defaultSettings.dashboardWallpaper,
                 editorWallpaper: data.editorWallpaper ?? defaultSettings.editorWallpaper,
                 companyName: data.companyName ?? defaultSettings.companyName,
+                rememberMapDisplay: data.rememberMapDisplay ?? defaultSettings.rememberMapDisplay,
               });
             }
             // If local settings exist, keep them (they are more recent from user's last save)

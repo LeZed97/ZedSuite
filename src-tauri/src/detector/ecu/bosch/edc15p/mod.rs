@@ -2262,22 +2262,13 @@ impl EDC15PDetector {
     /// Structure: [Y_axis F9 16vals][X_axis DA 13vals][Z_axis temp selector][Maps 416 bytes each]
     /// EDCSuite: if MapSelector.MapIndexes[i] > 0, the map at that index is active
     fn find_smoke_limiter_maps(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
-        use std::io::Write;
-        let mut log_file = std::fs::OpenOptions::new()
-            .create(true).append(true)
-            .open(r"C:\temp\smoke_detection.log").ok();
-
-        if let Some(ref mut f) = log_file {
-            let _ = writeln!(f, "\n=== find_smoke_limiter_maps called ===");
-            let _ = writeln!(f, "data len={}", data.len());
-        }
+        log::debug!("\n=== find_smoke_limiter_maps called ===");
+        log::debug!("data len={}", data.len());
 
         // Early exit if file too small
         let layout = self.layout();
         if data.len() < layout.scan_start() + 500 {
-            if let Some(ref mut f) = log_file {
-                let _ = writeln!(f, "File too small, skipping");
-            }
+            log::debug!("File too small, skipping");
             return;
         }
 
@@ -2287,9 +2278,7 @@ impl EDC15PDetector {
         let mut y_f9_count = 0;
         let end_pos = data.len().saturating_sub(500);
 
-        if let Some(ref mut f) = log_file {
-            let _ = writeln!(f, "Scanning from 0x{:X} to 0x{:X}", t, end_pos);
-        }
+        log::debug!("Scanning from 0x{:X} to 0x{:X}", t, end_pos);
 
         while t < end_pos {
             // Look for Y axis: ID high byte 0xF9, length 16
@@ -2315,10 +2304,8 @@ impl EDC15PDetector {
                             let z_offset = x_offset + 4 + (x_len * 2);
 
                             found_count += 1;
-                            if let Some(ref mut f) = log_file {
-                                let _ = writeln!(f, "Found Y+X #{} at 0x{:X}: Y_ID=0x{:04X}({}), X_ID=0x{:04X}({}), Z at 0x{:X}",
-                                    found_count, t, y_id, y_len, x_id, x_len, z_offset);
-                            }
+                            log::debug!("Found Y+X #{} at 0x{:X}: Y_ID=0x{:04X}({}), X_ID=0x{:04X}({}), Z at 0x{:X}",
+                                found_count, t, y_id, y_len, x_id, x_len, z_offset);
 
                             let map_size = 416; // 13 * 16 * 2 = 416 bytes
 
@@ -2362,10 +2349,8 @@ impl EDC15PDetector {
                                                 indexes.push(idx);
                                             }
 
-                                                        if let Some(ref mut f) = log_file {
-                                                let _ = writeln!(f, "Multi-smoke at 0x{:X}: {} maps, temps={:?}, indexes={:?}, first_map=0x{:X}",
-                                                    t, z_len, temperatures, indexes, first_map_offset);
-                                            }
+                                            log::debug!("Multi-smoke at 0x{:X}: {} maps, temps={:?}, indexes={:?}, first_map=0x{:X}",
+                                                t, z_len, temperatures, indexes, first_map_offset);
 
                                             // Keep all non-empty maps (even if they have identical data)
                                             // Each map corresponds to a temperature threshold (-20°C, 40°C, 80°C etc.)
@@ -2395,10 +2380,8 @@ impl EDC15PDetector {
 
                                             let active_count = active_indices.len();
 
-                                            if let Some(ref mut f) = log_file {
-                                                let _ = writeln!(f, "Active non-empty maps: {} out of {} (active: {:?})",
-                                                    active_count, z_len, active_indices);
-                                            }
+                                            log::debug!("Active non-empty maps: {} out of {} (active: {:?})",
+                                                active_count, z_len, active_indices);
 
                                             // Create a map for each UNIQUE temperature slot only
                                             for &i in &active_indices {
@@ -2446,9 +2429,7 @@ impl EDC15PDetector {
 
                                                         maps.push(smoke_map);
                                                         detected_addresses.insert(map_addr as u32);
-                                                        if let Some(ref mut f) = log_file {
-                                                            let _ = writeln!(f, "✅ Added smoke limiter {} at 0x{:X} (temp={}°C)", i + 1, map_addr, temp);
-                                                        }
+                                                        log::debug!("Added smoke limiter {} at 0x{:X} (temp={}°C)", i + 1, map_addr, temp);
                                                     }
                                             }
 
@@ -2504,12 +2485,10 @@ impl EDC15PDetector {
             }
             t += 2;
         }
-        if let Some(ref mut f) = log_file {
-            let _ = writeln!(f, "=== Scan complete ===");
-            let _ = writeln!(f, "Y_F9 occurrences: {}", y_f9_count);
-            let _ = writeln!(f, "Smoke structures: {}", found_count);
-            let _ = writeln!(f, "Maps in vector: {}", maps.len());
-        }
+        log::debug!("=== Scan complete ===");
+        log::debug!("Y_F9 occurrences: {}", y_f9_count);
+        log::debug!("Smoke structures: {}", found_count);
+        log::debug!("Maps in vector: {}", maps.len());
     }
 
     /// Helper function to find a byte sequence with mask
@@ -3597,9 +3576,9 @@ impl EDC15PDetector {
             // « Display offset » chez EDCSuite, mais c'est un facteur d'échelle,
             // pas un décalage : nommées « Display scaling » (signalé sur le forum).
             let entries: [(u32, &str, &str); 3] = [
-                (42_u32, "VCDS Diagnostic Torque Display scaling", "Scaling factor of the VCDS torque display (Display offset in EDCSuite), not an offset. Max shown = 255 / value × 1000 Nm: 620 = 411 Nm, 425 = 600 Nm. New value = 255 / wanted Nm × 1000"),
-                (66_u32, "VCDS Diagnostic MAP Display scaling", "Scaling factor of the VCDS boost display (Display offset in EDCSuite), not an offset. Max shown = 255 / value × 10000 mbar: 980 = 2602 mbar (stock 2.5 bar sensor), 833 = 3061 mbar (3 bar), 638 = 4000 mbar (4 bar). New value = 255 / wanted mbar × 10000"),
-                (iq_off, "VCDS Diagnostic IQ Display scaling", "Scaling factor of the VCDS injection quantity display (Display offset in EDCSuite), not an offset. Max shown = 255 / value × 100 mg: 364 = 70 mg, 255 = 100 mg. New value = 255 / wanted mg × 100"),
+                (42_u32, "VCDS Diagnostic Torque Display scaling", "Max shown = 255 / value × 1000 Nm: 620 = 411 Nm, 425 = 600 Nm. New value = 255 / wanted Nm × 1000"),
+                (66_u32, "VCDS Diagnostic MAP Display scaling", "Max shown = 255 / value × 10000 mbar: 980 = 2602 mbar (stock 2.5 bar sensor), 833 = 3061 mbar (3 bar), 638 = 4000 mbar (4 bar). New value = 255 / wanted mbar × 10000"),
+                (iq_off, "VCDS Diagnostic IQ Display scaling", "Max shown = 255 / value × 100 mg: 364 = 70 mg, 255 = 100 mg. New value = 255 / wanted mg × 100"),
             ];
             for (off, label, desc) in entries {
                 let addr = base_u32 + off;

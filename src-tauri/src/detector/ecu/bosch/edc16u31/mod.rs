@@ -796,6 +796,16 @@ impl EDC16U31Detector {
             }
         }
 
+        // Switchs de la limitation de fumée (MAF/MAP, lambda/cartes) : un
+        // octet chacun, motif commun aux trois familles EDC16 (issues #24 et
+        // #31). Ici et non dans le bloc des durations : les logiciels sans
+        // bloc reconnu ont aussi leurs switchs, et un fichier à deux
+        // sélecteurs ne doit pas les recevoir deux fois.
+        {
+            let mut seen: HashSet<u32> = all_maps.iter().map(|m| m.address).collect();
+            super::map_maf_switch::detect_smoke_switches(data, &mut all_maps, &mut seen);
+        }
+
         Self::normalize_boost_names(&mut all_maps);
 
         all_maps
@@ -5314,12 +5324,6 @@ impl EDC16U31Detector {
         // Duration 00/01, appliquée à tout le bloc
         super::duration_orientation::mark_duration_block_orientation(data, &mut maps);
 
-        // Switch MAP/MAF : un octet par bloc de calibration, motif commun aux
-        // trois familles EDC16 (issue #24)
-        {
-            let mut seen: std::collections::HashSet<u32> = maps.iter().map(|m| m.address).collect();
-            super::map_maf_switch::detect_map_maf_switch(data, &mut maps, &mut seen);
-        }
 
         maps
     }

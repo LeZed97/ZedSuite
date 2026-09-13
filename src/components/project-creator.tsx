@@ -625,7 +625,7 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
 
           {/* Notes */}
           <div>
-            <label className={labelCls}>{t.upload?.notes || "Notes (Optional)"}</label>
+            <label className={labelCls}>{t.upload?.notes || "Notes"}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

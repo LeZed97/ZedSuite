@@ -2,9 +2,9 @@
 
 **English** · [Français](README.fr.md)
 
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-0078d4) ![Engine](https://img.shields.io/badge/detection%20engine-Rust-e6522c) ![License](https://img.shields.io/badge/license-GPL--3.0-2ea44f) ![Downloads](https://img.shields.io/github/downloads/LeZed97/ZedSuite/total)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078d4) ![Engine](https://img.shields.io/badge/detection%20engine-Rust-e6522c) ![License](https://img.shields.io/badge/license-GPL--3.0-2ea44f) ![Downloads](https://img.shields.io/github/downloads/LeZed97/ZedSuite/total)
 
-**Open source map editor for VAG-group Bosch EDC15/EDC16 ECUs — 100% local, on Windows and macOS.**
+**Open source map editor for VAG-group Bosch EDC15/EDC16 ECUs — 100% local, on Windows, macOS and Linux.**
 
 Drop in an ECU dump and ZedSuite finds the maps for you — Driver Wish, Turbo Boost, N75, SOI, torque limiters and the rest. Edit them in a table, on a 2D graph or a 3D surface, or straight in the hexdump. Keep versions, compare them, disable or re-enable DTCs, fix the checksum, export your binary or a WinOLS mappack.
 
@@ -35,7 +35,7 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 - **Versioning** — "Ori" + named versions per project, compare view
 - **Lean storage** — original binary + a modification file per version, rebuilt automatically at export
 - **Virtual dyno** — power/torque estimation from the maps, printable PDF report
-- **DTC on/off** — read the fault-code table, disable codes and re-enable them later (EDC15 and EDC16)
+- **DTC on/off** — read the fault-code table, disable codes and re-enable them later (EDC15 and EDC16); every VAG code comes with its description in the five languages of the app
 - **Solutions** — one-click patches (launch control, …); deliberately kept to a minimum so the release wouldn't take even more time, more may come later
 - **Checksum correction** — EDC15 family and EDC16, implemented natively
 - **Brand auto-fill** — embedded ECU reference database (Bosch/VAG part numbers)
@@ -44,12 +44,6 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 - **3 themes** — dark, light and OLED, for every kind of screen
 - **Any screen size** — resizable map panel and browser-style zoom in the editor, from laptops to ultrawides
 - **Five languages** — English, French, Spanish, Italian and German, for the app and the installer; adding another is easy (a single translations file), and map names are deliberately untranslated — they stay in English
-
-### Maps you will not find in the list
-
-Two tables that other tools list are deliberately left out on EDC15P: inverse driver wish and MAF linearisation. They convert one quantity into another, they are not tuning maps, and leaving them out keeps the list short and readable. On EDC15VM, a set of small timing-correction tables is hidden as well: they were showing up as a second injection timing map and misled people, and the reference tool does not list them either. If you need any of them, say so in an issue: a few requests and they come back.
-
-If a map you expect is really missing, the completeness badge tells you — it lists what the ECU family should carry and what was not found.
 
 ## 🔧 Working with modified files
 
@@ -74,28 +68,36 @@ The detection engine itself is the result of long reverse-engineering sessions o
 
 Rust for the detection engine was a deliberate choice. The project started as a SaaS meant to be hosted: beyond being much faster than EDCSuite's C# (no .NET runtime, no garbage collector, native machine code in a small standalone binary), I tried to optimize everything as far as possible for a web version where every detection ran server-side. As a result, a full detection takes under a second on any file: about 0.1 s on an EDC15VM (512 KB), 0.3 to 0.5 s on an EDC16 (1 to 2 MB) and around one second on an EDC15P, the heaviest scan. Against C/C++: the same speed, but a much stricter compiler that catches at build time the kind of errors that crash a tool on an unexpected file. And since Tauri is Rust too, the exact same engine that used to run on a server now runs embedded in the app, unchanged.
 
-The interface itself is a web page: HTML, CSS and TypeScript, rendered by the browser engine the system already ships (WebView2 on Windows, WebKit on macOS). Around it, the Rust shell opens the window, reads and writes the files, and runs the detection engine, compiled natively for each platform.
+The interface itself is a web page: HTML, CSS and TypeScript, rendered by the browser engine the system already ships (WebView2 on Windows, WebKit on macOS, WebKitGTK on Linux). Around it, the Rust shell opens the window, reads and writes the files, and runs the detection engine, compiled natively for each platform.
 
-That is why the macOS version did not need a rewrite. The dashboard, the map editor, the 2D and 3D views, the hexdump, the DTC and power tools are the same code on both systems, to the pixel. Only the shell knows where it runs: the title bar, the file dialogs, where the projects are stored and how an update is installed.
+That is why the macOS and Linux versions did not need a rewrite. The dashboard, the map editor, the 2D and 3D views, the hexdump, the DTC and power tools are the same code on the three systems, to the pixel. Only the shell knows where it runs: the title bar, the file dialogs, where the projects are stored and how an update is installed.
 
-The web stack brings more than portability. No browser is bundled, so the Windows installer weighs about 6 MB and the app starts in a second. Graphs, themes and the five languages are built with tools made for that. And every fix to the interface reaches Windows and macOS at once; a Linux build would only need the shell side.
+The web stack brings more than portability. No browser is bundled, so the Windows installer weighs about 6 MB and the app starts in a second. Graphs, themes and the five languages are built with tools made for that. And every fix to the interface reaches Windows, macOS and Linux at once.
+
+## 🧭 What ZedSuite is, and what it will not become
+
+ZedSuite stays in the spirit of EDCSuite: a tool everyone can have to learn the craft. You open a file, you see the maps, you understand what does what and you edit it yourself. That is also why there are no automatic solutions (EGR off, DPF off, one-click tunes) and why there will not be: the point is to understand the file, not to press a button.
+
+**No new ECU family from me.** Every detector in the app took months of reverse engineering on hundreds of original and tuned files, checked against WinOLS packs and damos references, and that bench work is what makes the map list trustworthy. Doing it again for another family means two to three months minimum and a large corpus of original files and mappacks for that ECU. I maintain ZedSuite on my free time, and work of that size is not something I could give away for free. The supported list stays the VAG EDC15/EDC16 range, finished properly. A new family can still come from a contribution that meets the bar below.
 
 ## 🤝 Contributing
 
-Community contributions are welcome: **new ECU detectors** are the most valuable ones. See [CONTRIBUTING.md](CONTRIBUTING.md) for the detector architecture, how the existing families were built and the bar a new family has to meet before it ships (corpus, bench, invariants, zero false positives). Found a bug or an undetected map? Open an issue with the ECU type and the file's software number, and attach the dump if you can: that is what gets it fixed, most detection fixes shipped so far came from a file a user sent. Files are only used to fix the detector and are never shared.
+Contributions are welcome, new ECU detectors first, on one condition: they follow the standards set in [CONTRIBUTING.md](CONTRIBUTING.md), which explains the detector architecture, how the existing families were built and the bar a family has to meet before it ships (corpus, bench, invariants, zero false positive, right axes and units). I maintain ZedSuite on my free time. I will gladly review and merge a pull request, but I cannot end up doing half of the work afterwards in corrections, that is time I do not have. A clean contribution that covers less is worth more than a quick one that misleads the people who trust the map list; until the bar is met, a pull request stays open as a draft.
+
+Found a bug or an undetected map? Open an issue with the ECU type and the file's software number, and attach the dump if you can: that is what gets it fixed, most detection fixes shipped so far came from a file a user sent. Files are only used to fix the detector and are never shared.
 
 ## 🙏 Thanks
 
 - **Dilemma**, who released [VAGEDCSuite](https://github.com/Blackfrosch/VAGEDCSuite) about 14 years ago. That software is how I practiced and learned this craft: automatic map recognition and a dead-simple interface, at a time when nothing else offered that. It is an enormous piece of work for a tool born in the 2000s! (The man must be an alien) A large part of ZedSuite's EDC15 detection logic is directly inherited from the work done in EDCSuite.
 - **Skalda**, who [kept VAGEDCSuite alive](https://github.com/skaldamramra/VAGEDCSuite) by updating the map detection and adding a lot of EDC15 maps. My own private build of EDCSuite started from his version, and it is what I used daily until I finally had the time to build ZedSuite.
 
-### Contributors
+### 👥 Contributors
 
 Everyone whose code, report or file changed the app, with what it changed and the version it landed in: [CONTRIBUTORS.md](CONTRIBUTORS.md). Sending a dump with a report is what makes a detection fix possible; files are only used to fix the detector and are never shared.
 
 ## ⬇️ Download
 
-Everything is in the **Assets** section of the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest). Once installed, the app keeps itself up to date on its own, on both systems.
+Everything is in the **Assets** section of the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest). Once installed, the app keeps itself up to date on its own on Windows and macOS; on Linux it tells you when a new version is out and opens the release page.
 
 **Windows** — download `ZedSuite_x.y.z_x64-setup.exe` and run it (on a 32-bit Windows, take `ZedSuite_x.y.z_x86-setup.exe` instead). ZedSuite requires **Windows 10 or 11**: adapting it to Windows 7 would have required a lot more work.
 
@@ -105,11 +107,11 @@ Everything is in the **Assets** section of the [latest release](https://github.c
 curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
 ```
 
-**Linux** — no build yet. The interface is the same code as on Windows and macOS, only the shell side would need doing. It is on the roadmap as a user request: the more people ask for it, the sooner it happens.
+**Linux** — download `ZedSuite_x.y.z_linux-x86_64.AppImage`, make it executable (`chmod +x`) and run it, or install the `.deb` with `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. 64-bit x86, Debian 12, Ubuntu 22.04 or a newer derivative (the app needs webkit2gtk 4.1). The Linux build does not update itself yet: the app tells you when a new version is out and takes you to the release page. Linux support was contributed by [@bferd](https://github.com/bferd).
 
 ## 🗺️ Roadmap
 
-What is being worked on, what is planned and what users asked for: [ROADMAP.md](ROADMAP.md) (also in [French](ROADMAP.fr.md), [Spanish](ROADMAP.es.md), [Italian](ROADMAP.it.md) and [German](ROADMAP.de.md)). The same page opens inside the app, in the app language, from the dashboard (roadmap button next to the help button).
+What is being worked on, what is planned and what users asked for: [ROADMAP.md](ROADMAP.md) (also in [French](ROADMAP.fr.md), [Spanish](ROADMAP.es.md), [Italian](ROADMAP.it.md) and [German](ROADMAP.de.md)). The same page opens inside the app, in the app language, from the dashboard (roadmap button next to the help button). XDF compatibility (TunerPro definition files) is on it, planned for later, when I have the time to look into it.
 
 ## 📫 Contact
 
@@ -133,7 +135,7 @@ ZedSuite is free and always will be. If it saved you time or a WinOLS licence, y
 Prerequisites:
 - [Node.js](https://nodejs.org) ≥ 18
 - [Rust](https://rustup.rs) (stable) — the detection engine and the app shell are Rust/Tauri
-- Windows 10/11 (WebView2 is preinstalled on Windows 11) or macOS 12+ with the Xcode command line tools (`xcode-select --install`)
+- Windows 10/11 (WebView2 is preinstalled on Windows 11), macOS 12+ with the Xcode command line tools (`xcode-select --install`), or a Linux with the [Tauri prerequisites](https://tauri.app/start/prerequisites/) (webkit2gtk 4.1, gtk3, libayatana-appindicator, librsvg)
 
 ```bash
 npm install
@@ -146,7 +148,7 @@ Build the installer:
 npm run app:build   # produces the NSIS installer under src-tauri/target/release/bundle/
 ```
 
-On macOS, `npx tauri build --target universal-apple-darwin` produces the `.app` and the `.dmg` for both architectures (`src-tauri/tauri.macos.conf.json` holds the macOS-only settings). The [macOS workflow](.github/workflows/macos.yml) does the same on a GitHub runner, checks the bundle, exercises the updater on it and attaches the files to a release.
+On macOS, `npx tauri build --target universal-apple-darwin` produces the `.app` and the `.dmg` for both architectures (`src-tauri/tauri.macos.conf.json` holds the macOS-only settings). On Linux, `npx tauri build` produces the AppImage and the `.deb` (`src-tauri/tauri.linux.conf.json`). The official builds are made on my own machines: Windows natively, macOS and Linux in virtual machines.
 
 ## 🧱 Architecture
 
@@ -161,7 +163,7 @@ src-tauri/            Rust desktop shell
   src/commands.rs     IPC commands exposed to the frontend
 ```
 
-Projects are stored in `%APPDATA%/com.zedsuite.app/projects/` on Windows and `~/Library/Application Support/com.zedperf.zedsuite/projects/` on macOS — one folder per project with the original binary, metadata and versions.
+Projects are stored in `%APPDATA%/com.zedsuite.app/projects/` on Windows, `~/Library/Application Support/com.zedperf.zedsuite/projects/` on macOS and `~/.local/share/com.zedsuite.app/projects/` on Linux — one folder per project with the original binary, metadata and versions.
 
 ## ⚖️ License and trademarks
 

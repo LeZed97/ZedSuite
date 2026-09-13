@@ -1,6 +1,6 @@
 {
   "name": "zedsuite",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "license": "GPL-3.0-only",
   "description": "ZedSuite - Open source ECU map editor (Bosch EDC15/EDC16), desktop app",
@@ -29,6 +29,7 @@
     "@react-three/fiber": "^8.15.0",
     "@tanstack/react-query": "^5.90.11",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.3",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",
     "axios": "^1.13.2",

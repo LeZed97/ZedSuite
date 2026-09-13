@@ -87,7 +87,7 @@ export function RoadmapModal({ open, onClose, theme, language, version, labels }
       onClick={onClose}
     >
       <div
-        className="rounded-lg shadow-2xl p-6 max-w-3xl w-full mx-4 border max-h-[85vh] flex flex-col"
+        className="rounded-lg shadow-2xl p-6 max-w-5xl w-full mx-4 border max-h-[85vh] flex flex-col"
         style={{ ...(light ? MODAL_GLASS_LIGHT : MODAL_GLASS), animation: "scaleIn 0.2s ease-out forwards" }}
         onClick={(e) => e.stopPropagation()}
       >

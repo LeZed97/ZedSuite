@@ -2,7 +2,7 @@
 
 Esta página recoge lo que está previsto, lo que han pedido los usuarios y lo que no está previsto.
 
-Para pedir una función o informar de un error: abre una issue en [GitHub](https://github.com/LeZed97/ZedSuite/issues), escribe en el [hilo de ecuconnections](https://www.ecuconnections.com/forum/viewtopic.php?p=393279#p393279), o contacta conmigo en mis redes: [linktr.ee/zedperf](https://linktr.ee/zedperf). Todos los mensajes se leen.
+Para pedir una función o informar de un error: abre una issue en [GitHub](https://github.com/LeZed97/ZedSuite/issues), o contacta conmigo en mis redes: [linktr.ee/zedperf](https://linktr.ee/zedperf). Todos los mensajes se leen.
 
 ## Previsto
 
@@ -15,6 +15,7 @@ Para pedir una función o informar de un error: abre una issue en [GitHub](https
 - EDC16U31: mejor detección, aún faltan algunos archivos EDC16U31 en el banco de pruebas para terminarla bien (la familia 12x12 en 0x1D7xxx sigue sin nombre).
 - EDC16U1: identificación de los archivos del Touareg V10, donde hoy solo se encuentra uno de los dos números de ECU (seis archivos en el banco).
 - Detección de los mapas PID del control de turbo, primero en EDC15P.
+- Compatibilidad XDF (archivos de definición de TunerPro, para leer y escribir listas de mapas en ese formato). Previsto para más adelante, cuando tenga tiempo de dedicarme a ello.
 
 ## Pedido por los usuarios, en estudio
 
@@ -28,12 +29,12 @@ Para pedir una función o informar de un error: abre una issue en [GitHub](https
 - Editar dos versiones del mismo proyecto lado a lado.
 - Más funciones en la ventana de Propiedades de los mapas.
 - Resaltar en las ventanas de mapas todos los valores distintos del original.
-- Recordar la orientación de los mapas (axis mirror): hoy la transposición de la vista se ajusta mapa por mapa y solo en el proyecto abierto. La idea es aplicar la elección a toda la familia de mapas de una vez y guardarla como ajuste global, para que todos los proyectos abran los mapas igual.
-- Una versión para Linux. La interfaz es el mismo código que en Windows y macOS, solo habría que hacer la parte del contenedor; dependerá de cuánta gente la pida.
+- Ventanas de mapas más grandes y un zoom real al 100 % en pantallas pequeñas. Hoy una ventana de mapa deja de crecer cuando sus celdas alcanzan su tamaño máximo, lo que deja espacio vacío a la derecha, y el zoom del editor está limitado por el ancho que exigen la barra de herramientas y la lista de mapas, alrededor del 75 % en una pantalla de 1024 píxeles de ancho. La idea es subir el tope del tamaño de celda y hacer que la barra de herramientas y la lista ocupen menos, para que el zoom llegue al 100 % en cualquier pantalla; también se estudia un tamaño de fuente ajustable.
 
 ## No previsto por ahora
 
-- Añadir nuevas ECU (EDC15/EDC16 de BMW y PSA, etc.).
+- Nuevas ECU hechas por mí (EDC15/EDC16 de BMW y PSA, EDC17, etc.). Un detector necesita dos o tres meses como mínimo y un gran corpus de archivos originales y mappacks para ser correcto, y mantengo ZedSuite en mi tiempo libre: un trabajo de ese tamaño no es algo que pueda regalar. Una familia puede llegar igualmente por una contribución que cumpla el nivel exigido en [CONTRIBUTING.md](CONTRIBUTING.md).
+- Soluciones automáticas (EGR off, DPF off, stage con un clic). ZedSuite sigue siendo una herramienta para aprender y entender el archivo, en el espíritu de EDCSuite.
 - Una rutina de conmutación de mapas (multimap) parcheada en la ECU: hazla en WinOLS con las rutinas que circulan para EDC15 e importa después el archivo como versión, el codeblock añadido y sus mapas se muestran desde la 1.1.6.
 - Más datos de referencia de ECU (marcas, motores) para la pantalla de importación.
 - Compatibilidad con Windows 7.

@@ -44,6 +44,7 @@ export interface PowerPdfData {
   locale?: string; // "fr-FR" / "en-GB" — suit la langue de l'application
   theme?: PdfTheme; // choisi à l'export (défaut : sombre, style de l'app)
   companyName?: string; // entreprise de reprogrammation (réglages)
+  logoDataUrl?: string; // logo personnalisé (réglages) — remplace « ZedSuite » en en-tête
   tunerLabel: string; // « Tuner » / « Mappeur » — affiché même sans nom
 }
 
@@ -174,7 +175,10 @@ export async function exportPowerPdf(
 
   // ── En-tête : logo « ZedSuite » comme dans l'éditeur (« Zed » en
   // dégradé red-600 → red-500 → orange-500, « Suite » en blanc/encre) —
-  // le nom de l'entreprise s'affiche plus bas, sur la ligne client
+  // le nom de l'entreprise s'affiche plus bas, sur la ligne client.
+  // Si l'utilisateur a choisi un logo dans les Paramètres, son image
+  // prend la place du texte : même coin, même hauteur que les lettres
+  // (boîte 11 mm de haut, 70 mm de large max, ratio conservé).
   doc.setFont("helvetica", "bold");
   doc.setFontSize(21);
   const LOGO_STOPS: Array<[number, number, number]> = [
@@ -182,15 +186,37 @@ export async function exportPowerPdf(
     [239, 68, 68], // red-500
     [249, 115, 22], // orange-500
   ];
-  let lx0 = MARGIN;
-  "Zed".split("").forEach((ch, i) => {
-    doc.setTextColor(...LOGO_STOPS[Math.min(i, LOGO_STOPS.length - 1)]);
-    doc.text(ch, lx0, y + 1.5);
-    lx0 += doc.getTextWidth(ch);
-  });
-  doc.setTextColor(...INK);
-  doc.text("Suite", lx0, y + 1.5);
+  let customLogoDrawn = false;
+  if (data.logoDataUrl) {
+    try {
+      const props = doc.getImageProperties(data.logoDataUrl);
+      if (props.width > 0 && props.height > 0) {
+        const LOGO_BOX_H = 11;
+        const LOGO_BOX_W = 70;
+        const k = Math.min(LOGO_BOX_W / props.width, LOGO_BOX_H / props.height);
+        const lw = props.width * k;
+        const lh = props.height * k;
+        // centré verticalement sur la zone qu'occupent les lettres « ZedSuite »
+        const LOGO_TEXT_CENTER_Y = y - 1.2;
+        doc.addImage(data.logoDataUrl, MARGIN, LOGO_TEXT_CENTER_Y - lh / 2, lw, lh);
+        customLogoDrawn = true;
+      }
+    } catch {
+      // image illisible par jsPDF : on retombe sur le logo texte
+    }
+  }
+  if (!customLogoDrawn) {
+    let lx0 = MARGIN;
+    "Zed".split("").forEach((ch, i) => {
+      doc.setTextColor(...LOGO_STOPS[Math.min(i, LOGO_STOPS.length - 1)]);
+      doc.text(ch, lx0, y + 1.5);
+      lx0 += doc.getTextWidth(ch);
+    });
+    doc.setTextColor(...INK);
+    doc.text("Suite", lx0, y + 1.5);
+  }
 
+  doc.setTextColor(...INK);
   doc.setFontSize(13.5);
   T(data.title, PAGE_W - MARGIN, y - 1.5, { align: "right" });
   doc.setFont("helvetica", "normal");

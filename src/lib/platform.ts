@@ -9,3 +9,9 @@ export function isMacOS(): boolean {
   const hint = `${navigator.platform || ""} ${navigator.userAgent || ""}`;
   return /Mac/i.test(hint) && !/iPhone|iPad/i.test(hint);
 }
+
+export function isLinux(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const hint = `${navigator.platform || ""} ${navigator.userAgent || ""}`;
+  return /Linux/i.test(hint) && !/Android/i.test(hint);
+}

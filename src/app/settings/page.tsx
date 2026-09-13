@@ -17,12 +17,18 @@ import {
   markUpdateCheckDone,
   UPDATE_AVAILABLE_EVENT,
 } from "@/lib/update";
-import { setAppZoom, setAppMinWidth } from "@/lib/webview-zoom";
+import { setAppZoom, setAppMinWidth, storedDashboardZoomPercent, editorFloorLogicalWidth } from "@/lib/webview-zoom";
 import {
   clearCustomWallpaper,
   getCustomWallpaper,
   setCustomWallpaperFromFile,
 } from "@/lib/custom-wallpaper";
+import {
+  clearReportLogo,
+  getReportLogo,
+  setReportLogoFromFile,
+  subscribeReportLogo,
+} from "@/lib/report-logo";
 
 type Wallpaper = UserSettings["dashboardWallpaper"];
 
@@ -54,12 +60,14 @@ function SettingsContent() {
   >("idle");
   const [latestVersion, setLatestVersion] = useState("");
 
-  // Même échelle que le dashboard : page réduite à 90 % (zoom natif webview),
-  // rendue à 100 % en quittant l'écran. Sans ça, revenir du dashboard
-  // affichait les Paramètres à 100 % — plus gros et avec du scroll.
+  // Même échelle que le dashboard : son zoom mémorisé (réglable depuis sa
+  // barre de titre depuis la 1.1.9, 90 % par défaut), rendu à 100 % en
+  // quittant l'écran. Un 90 % figé ici laissait les Paramètres à une autre
+  // taille que le dashboard dès que l'utilisateur avait changé son zoom.
+  // Même largeur minimale que le dashboard et l'éditeur.
   useEffect(() => {
-    setAppZoom(0.9);
-    setAppMinWidth(1100, 0.9);
+    setAppZoom(storedDashboardZoomPercent() / 100);
+    setAppMinWidth(editorFloorLogicalWidth(), 1);
     return () => {
       setAppZoom(1);
     };
@@ -141,6 +149,26 @@ function SettingsContent() {
     try {
       await setCustomWallpaperFromFile("dashboard", file);
       void setWallpaper("dashboardWallpaper", "custom");
+    } catch {
+      // image illisible ou stockage plein : on ne change rien
+    }
+  };
+
+  // Logo personnalisé des feuilles de banc (PDF) : aperçu + sélecteur de
+  // fichier. Stocké à part des réglages (data URL, lib/report-logo), comme
+  // le fond d'écran personnalisé.
+  const [reportLogo, setReportLogo] = useState<string | null>(null);
+  useEffect(() => {
+    setReportLogo(getReportLogo());
+    return subscribeReportLogo(setReportLogo);
+  }, []);
+  const reportLogoFileRef = useRef<HTMLInputElement>(null);
+  const handleReportLogoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      await setReportLogoFromFile(file);
     } catch {
       // image illisible ou stockage plein : on ne change rien
     }
@@ -396,6 +424,53 @@ function SettingsContent() {
                       : "bg-white/[0.05] border border-white/[0.10] text-white placeholder:text-slate-500"
                   }`}
                 />
+              </div>
+
+              {/* Logo personnalisé des feuilles de banc — remplace « ZedSuite »
+                  dans l'en-tête du PDF du dyno virtuel */}
+              <div className={`flex items-center justify-between gap-6 p-3 rounded-lg border ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`} style={cardBg}>
+                <div>
+                  <div className={`font-medium ${labelColor}`}>{t.settingsPage.reportLogo}</div>
+                  <div className={`text-sm ${descColor}`}>{t.settingsPage.reportLogoDesc}</div>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  {reportLogo ? (
+                    <>
+                      {/* Aperçu sur fond neutre : le PDF peut être sombre ou clair */}
+                      <div
+                        className={`h-12 w-40 rounded-md border flex items-center justify-center p-1.5 ${isLight ? 'border-black/[0.10] bg-black/[0.04]' : 'border-white/[0.10] bg-white/[0.06]'}`}
+                      >
+                        <img src={reportLogo} alt="" className="max-h-full max-w-full object-contain" />
+                      </div>
+                      <button
+                        className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${isLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+                        onClick={() => reportLogoFileRef.current?.click()}
+                      >
+                        {t.settingsPage.reportLogoChange}
+                      </button>
+                      <button
+                        className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${isLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+                        onClick={() => clearReportLogo()}
+                      >
+                        {t.settingsPage.reportLogoRemove}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${isLight ? "border-black/15 text-slate-700 hover:bg-black/5" : "border-white/15 text-slate-300 hover:bg-white/10"}`}
+                      onClick={() => reportLogoFileRef.current?.click()}
+                    >
+                      {t.settingsPage.reportLogoChoose}
+                    </button>
+                  )}
+                  <input
+                    ref={reportLogoFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void handleReportLogoFile(e)}
+                  />
+                </div>
               </div>
             </div>
           </div>

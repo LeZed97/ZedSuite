@@ -33,6 +33,8 @@
     "fs:allow-remove",
     "fs:allow-exists",
     "dialog:allow-save",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text"
   ]
 }

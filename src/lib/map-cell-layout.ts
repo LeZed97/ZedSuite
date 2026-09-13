@@ -224,3 +224,87 @@ export function resolveMapCellLayout(map: MapLayoutInput): MapCellLayout {
     cellIndex,
   };
 }
+
+export interface MapAxisSourceInput extends MapLayoutInput {
+  x_axis_address?: number | null;
+  y_axis_address?: number | null;
+  x_axis_correction?: number | null;
+  y_axis_correction?: number | null;
+  x_axis_offset?: number | null;
+  y_axis_offset?: number | null;
+  x_label?: string | null;
+  y_label?: string | null;
+}
+
+export interface AxisSource {
+  /** Adresse fichier des valeurs de l'axe (0 : pas d'axe dans le fichier) */
+  address: number;
+  /** affiché = brut * correction + offset */
+  correction: number;
+  offset: number;
+}
+
+export interface MapAxisSources {
+  /** Axe du haut (colonnes de mapValues) */
+  x: AxisSource;
+  /** Axe de gauche (lignes de mapValues) */
+  y: AxisSource;
+  /** Vrai quand l'axe du haut est lu à l'adresse Y du détecteur (et inversement) */
+  swapped: boolean;
+}
+
+/**
+ * Adresse, facteur et offset des axes AFFICHÉS d'une map, avant les réglages
+ * de la fenêtre Propriétés. Source UNIQUE du MapViewer (lecture des libellés)
+ * et de l'éditeur (écriture des libellés édités).
+ *
+ * Sur les maps dont la vue transpose les dimensions (Injector duration 01-05
+ * EDC15, Drivers wish MJD6, torque limiter, N75 13x16), l'axe du haut est lu à
+ * l'adresse Y du détecteur avec le facteur Y, et l'axe de gauche à l'adresse X.
+ * L'éditeur écrivait les libellés édités aux adresses X/Y du détecteur sans
+ * cet échange : sur un EDC15P, retoucher l'axe IQ d'une duration 01-05
+ * envoyait les quantités, brutes, dans l'axe de régime (issue #27, 019CC).
+ */
+export function resolveAxisSources(map: MapAxisSourceInput): MapAxisSources {
+  const name = (map.name || "").toLowerCase();
+  const isInjectorDuration = name.includes("injector duration") && !name.includes("selector");
+  const isIdleRpm = name.includes("idle rpm");
+  const isBoostTarget = name.includes("boost target map");
+  // Faux pour Boost target et Idle RPM : le détecteur oriente déjà leurs axes
+  const swapped = resolveMapCellLayout(map).axesSwapped;
+
+  const xAddr = map.x_axis_address || 0;
+  const yAddr = map.y_axis_address || 0;
+  const baseX = { correction: map.x_axis_correction ?? 1.0, offset: map.x_axis_offset ?? 0.0 };
+  const baseY = { correction: map.y_axis_correction ?? 1.0, offset: map.y_axis_offset ?? 0.0 };
+
+  // Heuristique héritée pour une détection ancienne encore en cache, dont les
+  // facteurs des durations ne suivaient pas les adresses : les libellés disent
+  // « régime » d'un côté et « mg » de l'autre, les facteurs disent l'inverse.
+  const xLabel = (map.x_label || "").toLowerCase();
+  const yLabel = (map.y_label || "").toLowerCase();
+  const xLooksRpm = xLabel.includes("rpm") || xLabel.includes("engine speed");
+  const yLooksRpm = yLabel.includes("rpm") || yLabel.includes("engine speed");
+  const xLooksIQ = xLabel.includes("mg") || xLabel.includes("iq");
+  const yLooksIQ = yLabel.includes("mg") || yLabel.includes("iq");
+  const correctionsLookInverted =
+    isInjectorDuration &&
+    ((xLooksRpm && yLooksIQ && baseX.correction < baseY.correction) ||
+      (xLooksIQ && yLooksRpm && baseX.correction > baseY.correction));
+  const swapCorrections = swapped || correctionsLookInverted;
+
+  let x: AxisSource = { address: swapped ? yAddr : xAddr, ...(swapCorrections ? baseY : baseX) };
+  let y: AxisSource = { address: swapped ? xAddr : yAddr, ...(swapCorrections ? baseX : baseY) };
+
+  if (isBoostTarget) {
+    // Détecteur déjà orienté : X = IQ (0.01), Y = régime (1.0)
+    x = { address: xAddr, correction: map.x_axis_correction ?? 0.01, offset: map.x_axis_offset ?? 0.0 };
+    y = { address: yAddr, correction: map.y_axis_correction ?? 1.0, offset: map.y_axis_offset ?? 0.0 };
+  }
+  if (isIdleRpm) {
+    // Température en X, en dixièmes de kelvin, quoi que dise le détecteur
+    x = { address: xAddr, correction: 0.1, offset: -273.1 };
+    y = { address: yAddr, correction: map.y_axis_correction ?? 1.0, offset: map.y_axis_offset ?? 0.0 };
+  }
+  return { x, y, swapped };
+}

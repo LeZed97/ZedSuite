@@ -40,19 +40,16 @@ const INVALID_METADATA_MARKERS = [0xC3C3, 0xFFFF, 0x0000];
 const VAG_CODE_MIN = 16471; // P0087 - first common VAG DTC
 const VAG_CODE_MAX = 20000; // Maximum valid VAG DTC code
 
-// DTC marker bytes
-const DTC_MARKER_BYTES = [0x23, 0x42, 0x58];
-
+// Seul marqueur d'entrée : 0x23. Une « méthode secondaire » acceptait aussi
+// 0x42 et 0x58 comme marqueur devant un code VAG connu ; elle fabriquait 10 à
+// 36 fausses entrées par fichier EDC15 classique (dont P0490 / P3061 sur les
+// 1.4 TDI 045906019xx) dans une liste triée de mots 16 bits située avant la
+// vraie table (codes VAG et mots 0x42xx / 0x53xx / 0x58xx dont un octet vaut
+// 0x42 ou 0x58 par hasard). Les couper n'écrivait rien (disable/enable
+// exigent le 0x23) : un interrupteur affiché sans effet. Issue #22.
 // DTC search area offset within codeblock
 const DTC_AREA_START_OFFSET = 0x2800;
 const DTC_AREA_END_OFFSET = 0x8100; // Extended to include DTCs at 0x8016/0x8020
-
-/**
- * Check if a byte is a valid DTC marker
- */
-function isDTCMarker(byte: number): boolean {
-  return DTC_MARKER_BYTES.includes(byte);
-}
 
 /**
  * Determine if a DTC entry is enabled based on status, flags, and type byte
@@ -155,42 +152,6 @@ function scanCodeblockForDTCs(data: Uint8Array, codeblock: CodeblockInfo): Detec
             system: dtcInfo.system,
           });
         }
-      }
-    }
-  }
-
-  // Secondary method: Direct VAG code detection with marker validation
-  for (let i = searchStart; i < searchEnd - 1; i++) {
-    const vagCode = data[i] | (data[i + 1] << 8);
-
-    if (
-      vagCode >= VAG_CODE_MIN &&
-      vagCode <= VAG_CODE_MAX &&
-      !seen.has(vagCode) &&
-      VAG_DTC_DATABASE[vagCode]
-    ) {
-      const prevByte = i > 0 ? data[i - 1] : 0;
-      const hasMarker = isDTCMarker(prevByte);
-
-      if (hasMarker && i >= 6) {
-        seen.add(vagCode);
-
-        const dtcInfo = VAG_DTC_DATABASE[vagCode];
-        // Structure: [status 2B] [flags 2B] [type 1B] [marker] [VAG code 2B]
-        const status = data[i - 6] | (data[i - 5] << 8);
-        const flags = data[i - 4] | (data[i - 3] << 8);
-        const typeByte = data[i - 2];
-        const enabled = isDTCEnabled(status, flags, typeByte);
-
-        dtcs.push({
-          code: dtcInfo.code,
-          vagCode,
-          address: i,
-          codeblockId: codeblock.id,
-          enabled,
-          description: dtcInfo.description,
-          system: dtcInfo.system,
-        });
       }
     }
   }

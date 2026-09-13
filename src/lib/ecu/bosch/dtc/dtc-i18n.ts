@@ -1,6 +1,6 @@
 /**
  * DTC Internationalization Helper
- * Provides bilingual access to DTC descriptions and system names
+ * Provides access to DTC descriptions and system names in the five app languages
  *
  * Uses translations from i18n/translations.ts for system names
  * Uses translations/ folder for DTC descriptions
@@ -15,7 +15,7 @@ import { translations } from '@/i18n/translations';
 import { getDTCDescription } from './translations';
 
 // Type for supported languages
-export type DTCLanguage = 'EN' | 'FR';
+export type DTCLanguage = 'EN' | 'FR' | 'ES' | 'IT' | 'DE';
 
 // Interface for translated DTC info
 export interface TranslatedDTCInfo {
@@ -83,8 +83,17 @@ export function getSystemName(systemKey: string, language: DTCLanguage = 'FR'): 
 export function translateSystemName(frenchSystem: string, language: DTCLanguage = 'FR'): string {
   if (language === 'FR') return frenchSystem;
   const key = getSystemKeyFromFrench(frenchSystem);
-  const names = getSystemNames('EN');
-  return names[key as keyof typeof names] || frenchSystem;
+  const names = getSystemNames(language);
+  const fallback = getSystemNames('EN');
+  return names[key as keyof typeof names] || fallback[key as keyof typeof fallback] || frenchSystem;
+}
+
+/** Description in the requested language: translations file first, then the EN/FR pair. */
+function describeIn(code: string, descriptionEN: string, descriptionFR: string, language: DTCLanguage): string {
+  if (language === 'FR') return descriptionFR;
+  if (language === 'EN') return descriptionEN;
+  const translated = getDTCDescription(code, language);
+  return translated !== code ? translated : descriptionEN;
 }
 
 /**
@@ -99,7 +108,7 @@ export function getDTCInfoByPCodeTranslated(
 
   return {
     code: bilingualInfo.code,
-    description: language === 'EN' ? bilingualInfo.descriptionEN : bilingualInfo.descriptionFR,
+    description: describeIn(bilingualInfo.code, bilingualInfo.descriptionEN, bilingualInfo.descriptionFR, language),
     system: getSystemName(bilingualInfo.systemKey, language),
     systemKey: bilingualInfo.systemKey,
   };
@@ -130,7 +139,7 @@ export function getDTCInfoByVagCodeTranslated(
 
   return {
     code: bilingualInfo.code,
-    description: language === 'EN' ? bilingualInfo.descriptionEN : bilingualInfo.descriptionFR,
+    description: describeIn(bilingualInfo.code, bilingualInfo.descriptionEN, bilingualInfo.descriptionFR, language),
     system: getSystemName(bilingualInfo.systemKey, language),
     systemKey: bilingualInfo.systemKey,
   };

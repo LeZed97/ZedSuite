@@ -2,6 +2,8 @@
 
 Thanks for your interest. Contributions are welcome, and **support for new ECU families** is the one I want the most. This document explains how the detection engine is organized, what it takes to add a family, and the bar a detector has to meet before it ships in the app. Please read the bar before you start: it is what decides whether a contribution can be integrated, and knowing it up front saves both of us a lot of time.
 
+A word on how this works. I maintain ZedSuite on my free time and I will not build new families myself (the README says why). I am happy to review and integrate a pull request that follows the standards below, and to answer questions along the way. What I cannot do is finish a contribution: if the bench, the invariants or the axes are not done, the work is not half done, it is not done, because a detector that is wrong on some files misleads the people who trust the map list. A clean contribution that covers less is always preferred to a wide one that is not verified.
+
 ## What the app promises
 
 ZedSuite is meant to stay simple: you open a dump, you get a short list of maps with a clear name, the right axes and the right units, and you can trust it. The whole value of the tool is in that trust.
@@ -59,7 +61,7 @@ This is what gets a new detector merged. It is the same for everyone, including 
 5. **Right axes and units on every map**, verified against the file, not only against the reference names. See the next section.
 6. **No "solutions"** (DPF off, EGR off, one-click tunes). Those are a decision on my side and are not integrated for now, whatever the quality of the code. Keep them in your fork.
 
-Until the bar is met, the family stays out of the released app and the pull request stays open as a draft. Integration is then done on my side: master keeps one commit per release, so there is no direct merge button here. Your name goes in the release notes and the README, and I will ask you to stay the reference person for reports on that family if I cannot test it myself.
+Until the bar is met, the family stays out of the released app and the pull request stays open as a draft. Integration is then done on my side: master keeps one commit per release, so there is no direct merge button here. Your commits are credited as co-authors of the release commit, and your name goes in CONTRIBUTORS.md. Your name goes in the release notes and the README, and I will ask you to stay the reference person for reports on that family if I cannot test it myself.
 
 ## Axes, units and factors
 
@@ -119,7 +121,7 @@ Say you want to add Siemens PPD1.x:
 
 ## Local data
 
-Projects live in `%APPDATA%/com.zedsuite.app/projects/<id>/` on Windows and `~/Library/Application Support/com.zedsuite.app/projects/<id>/` on macOS:
+Projects live in `%APPDATA%/com.zedsuite.app/projects/<id>/` on Windows, `~/Library/Application Support/com.zedperf.zedsuite/projects/<id>/` on macOS and `~/.local/share/com.zedsuite.app/projects/<id>/` on Linux:
 - `project.json` — metadata + detection results
 - `original.bin` — the imported binary, untouched
 - `versions.json`, `edits-<versionId>.json` — versioning data

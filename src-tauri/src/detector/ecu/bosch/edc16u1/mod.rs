@@ -869,7 +869,7 @@ impl EDC16U1Detector {
         // U1, qui rangent ces octets autrement.
         {
             let mut seen: std::collections::HashSet<u32> = all_maps.iter().map(|m| m.address).collect();
-            super::map_maf_switch::detect_map_maf_switch(data, &mut all_maps, &mut seen);
+            super::map_maf_switch::detect_smoke_switches(data, &mut all_maps, &mut seen);
         }
 
         all_maps

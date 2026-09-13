@@ -10,23 +10,31 @@
 
 import { dtcTranslationsFR } from './fr';
 import { dtcTranslationsEN } from './en';
+import { dtcTranslationsES } from './es';
+import { dtcTranslationsIT } from './it';
+import { dtcTranslationsDE } from './de';
 
-export type DTCLanguageCode = 'EN' | 'FR';
+export type DTCLanguageCode = 'EN' | 'FR' | 'ES' | 'IT' | 'DE';
 
 export const dtcTranslations: Record<DTCLanguageCode, Record<string, string>> = {
   EN: dtcTranslationsEN,
   FR: dtcTranslationsFR,
+  ES: dtcTranslationsES,
+  IT: dtcTranslationsIT,
+  DE: dtcTranslationsDE,
 };
 
 /**
  * Get DTC description in specified language
- * Falls back to French if translation not found
+ * Falls back to English, then French, if the translation is missing
  */
 export function getDTCDescription(code: string, language: DTCLanguageCode = 'FR'): string {
   const translation = dtcTranslations[language]?.[code];
   if (translation) return translation;
 
-  // Fallback to French
+  // Fallback: English (the reference file), then French
+  const englishTranslation = dtcTranslations['EN']?.[code];
+  if (englishTranslation) return englishTranslation;
   const frenchTranslation = dtcTranslations['FR']?.[code];
   if (frenchTranslation) return frenchTranslation;
 
@@ -48,4 +56,4 @@ export function getSupportedDTCLanguages(): DTCLanguageCode[] {
   return Object.keys(dtcTranslations) as DTCLanguageCode[];
 }
 
-export { dtcTranslationsFR, dtcTranslationsEN };
+export { dtcTranslationsFR, dtcTranslationsEN, dtcTranslationsES, dtcTranslationsIT, dtcTranslationsDE };

@@ -34,6 +34,7 @@ import {
   type SourceCurveResult,
 } from "@/lib/power-estimation";
 import { exportPowerPdf, type PdfCurve, type PdfTheme } from "@/lib/power-pdf";
+import { getReportLogo } from "@/lib/report-logo";
 
 /** Source vivante fournie par l'éditeur : l'état en mémoire de la version
  *  ouverte (modifications non enregistrées comprises). `refreshKey` change à
@@ -404,6 +405,7 @@ export function PowerEstimateModal({ file, onClose, live, embedded = false, onMi
           dateLabel: d.pdfDate,
           theme: pdfTheme,
           companyName: settings.companyName,
+          logoDataUrl: getReportLogo() ?? undefined,
           tunerLabel: d.pdfTuner,
         },
         `${safeName} - dyno.pdf`

@@ -2,7 +2,7 @@
 
 This page lists what is planned, what users asked for and what is not planned.
 
-To ask for a feature or report a bug: open an issue on [GitHub](https://github.com/LeZed97/ZedSuite/issues), post in the [ecuconnections thread](https://www.ecuconnections.com/forum/viewtopic.php?p=393279#p393279), or reach me on my social networks: [linktr.ee/zedperf](https://linktr.ee/zedperf). Every report is read.
+To ask for a feature or report a bug: open an issue on [GitHub](https://github.com/LeZed97/ZedSuite/issues), or reach me on my social networks: [linktr.ee/zedperf](https://linktr.ee/zedperf). Every report is read.
 
 ## Planned
 
@@ -15,6 +15,7 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - EDC16U31: better detection, a few EDC16U31 files are still missing from the test bench to finish it properly (the 12x12 family at 0x1D7xxx is still unnamed).
 - EDC16U1: identification of the Touareg V10 files, where only one of the two ECU numbers is found today (six files on the bench).
 - Detection of the turbo boost control PID maps, on EDC15P first.
+- XDF compatibility (TunerPro definition files, to read and write map lists in that format). Planned for later, when I have the time to look into it.
 
 ## Asked by users, under review
 
@@ -28,12 +29,12 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - Editing two versions of the same project side by side.
 - More functions in the map Properties window.
 - Highlighting every value that differs from stock in the map windows.
-- Remembering the map orientation (axis mirror): today the display transposition is set map by map, in one project only. The plan is to apply the choice to the whole map family at once and to save it as a global setting, so every project opens the maps the same way.
-- A Linux version. The interface is the same code as on Windows and macOS, only the shell side would need doing; it depends on how many people ask for it.
+- Bigger map windows and a real 100 % zoom on small screens. Today a map window stops growing once its cells reach their maximum size, which leaves empty space on the right, and the editor zoom is capped by the width the toolbar and the map list demand, about 75 % on a 1024 pixel wide screen. The plan is to raise the cell size ceiling and to make the toolbar and the map list take less room, so the zoom can reach 100 % on any screen; an adjustable font size is under consideration too.
 
 ## Not planned for now
 
-- Adding new ECUs (BMW and PSA EDC15/EDC16, etc.).
+- New ECU families built by me (BMW and PSA EDC15/EDC16, EDC17, etc.). A detector takes two to three months minimum and a large corpus of original files and mappacks to be right, and I maintain ZedSuite on my free time: work of that size is not something I could give away for free. A family can still come from a contribution that meets the bar of [CONTRIBUTING.md](CONTRIBUTING.md).
+- Automatic solutions (EGR off, DPF off, one-click tunes). ZedSuite stays a tool to learn and to understand the file, in the spirit of EDCSuite.
 - A map switching routine (multimap) patched into the ECU: do it in WinOLS with the routines that circulate for EDC15, then import the file as a version, the added codeblock and its maps are shown since 1.1.6.
 - More ECU reference data (brands, engines) for the import screen.
 - Windows 7 compatibility.
