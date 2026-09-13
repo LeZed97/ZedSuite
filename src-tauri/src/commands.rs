@@ -101,7 +101,7 @@ pub fn identify_ecu(
 ///   47 — Switch MAP/MAF des EDC16 (U1/U31/U34) et identification : un
 ///       EDC15VM sans référence VAG dans le binaire n'est plus pris
 ///       pour un EDC15P (2.5 V6).
-pub const DETECTOR_VERSION: u32 = 48;
+pub const DETECTOR_VERSION: u32 = 49;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
@@ -411,6 +411,9 @@ fn build_expected_report_edc15p(
         ("Limit of overboost protection", 1, 1, "Limit of overboost"),
         ("N75 duty cycle", 1, 1, "N75 duty cycle"),
         ("Boost actuator upper limit curve", 1, 1, "Boost actuator upper limit"),
+        // Quatre courbes 16 points par codeblock (I, D, DT1, P), sur tous les
+        // EDC15P du banc sauf le 019A de 1999
+        ("PID maps (4)", 4, 1, "PID map"),
         ("Expected fuel temperature", 1, 1, "Expected fuel temperature"),
         ("Fuel volume correction", 1, 1, "Fuel volume correction"),
         ("MAF correction by temperature", 1, 1, "MAF correction by temperature"),
@@ -432,7 +435,7 @@ fn build_expected_report_edc15p(
     let rules: Vec<(&str, usize, u8, &str)> = if early_generation {
         rules
             .into_iter()
-            .filter(|(label, _, _, _)| *label != "Smoke limiter" && *label != "MAP/MAF switch")
+            .filter(|(label, _, _, _)| *label != "Smoke limiter" && *label != "MAP/MAF switch" && *label != "PID maps (4)")
             .map(|(label, per_cb, mode, pat)| match label {
                 "Start of injection (paquet de 10)" => ("Start of injection (>=1)", 1, mode, pat),
                 "Start IQ" => (label, 1, mode, pat),

@@ -13,8 +13,10 @@ import { dtcTranslationsEN } from './en';
 import { dtcTranslationsES } from './es';
 import { dtcTranslationsIT } from './it';
 import { dtcTranslationsDE } from './de';
+import { dtcTranslationsPT } from './pt';
+import { dtcTranslationsRO } from './ro';
 
-export type DTCLanguageCode = 'EN' | 'FR' | 'ES' | 'IT' | 'DE';
+export type DTCLanguageCode = 'EN' | 'FR' | 'ES' | 'IT' | 'DE' | 'PT' | 'RO';
 
 export const dtcTranslations: Record<DTCLanguageCode, Record<string, string>> = {
   EN: dtcTranslationsEN,
@@ -22,6 +24,8 @@ export const dtcTranslations: Record<DTCLanguageCode, Record<string, string>> = 
   ES: dtcTranslationsES,
   IT: dtcTranslationsIT,
   DE: dtcTranslationsDE,
+  PT: dtcTranslationsPT,
+  RO: dtcTranslationsRO,
 };
 
 /**
@@ -56,4 +60,4 @@ export function getSupportedDTCLanguages(): DTCLanguageCode[] {
   return Object.keys(dtcTranslations) as DTCLanguageCode[];
 }
 
-export { dtcTranslationsFR, dtcTranslationsEN, dtcTranslationsES, dtcTranslationsIT, dtcTranslationsDE };
+export { dtcTranslationsFR, dtcTranslationsEN, dtcTranslationsES, dtcTranslationsIT, dtcTranslationsDE, dtcTranslationsPT, dtcTranslationsRO };

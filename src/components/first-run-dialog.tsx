@@ -30,7 +30,7 @@ export function FirstRunDialog({ onDone }: FirstRunDialogProps) {
   ];
 
   // Language switches live so the dialog itself changes language
-  const setLanguage = (lang: "EN" | "FR" | "ES" | "IT" | "DE") => {
+  const setLanguage = (lang: "EN" | "FR" | "ES" | "IT" | "DE" | "PT" | "RO") => {
     updateSettings({ language: lang });
   };
 
@@ -86,8 +86,10 @@ export function FirstRunDialog({ onDone }: FirstRunDialogProps) {
                 { id: "ES" as const, label: "Español" },
                 { id: "IT" as const, label: "Italiano" },
                 { id: "DE" as const, label: "Deutsch" },
+                { id: "PT" as const, label: "Português" },
+                { id: "RO" as const, label: "Română" },
               ]).map((opt) => {
-                const known = ["EN", "FR", "ES", "IT", "DE"];
+                const known = ["EN", "FR", "ES", "IT", "DE", "PT", "RO"];
                 const selected = (known.includes(settings.language) ? settings.language : "EN") === opt.id;
                 return (
                   <button

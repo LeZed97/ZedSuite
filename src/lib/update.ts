@@ -48,6 +48,11 @@ export async function downloadAndInstallUpdate(url: string, version: string): Pr
 export interface UpdateErrorStrings {
   macMoveToApplications: string;
   macInstallFailed: string;
+  linuxNotWritable: string;
+  linuxNoPkexec: string;
+  linuxCancelled: string;
+  linuxInstallFailed: string;
+  linuxUnsupported: string;
 }
 
 /**
@@ -60,6 +65,15 @@ export function describeUpdateError(raw: string, t: UpdateErrorStrings): string 
   if (raw.startsWith("macos:install_failed")) {
     const detail = raw.slice("macos:install_failed".length).replace(/^:\s*/, "").trim();
     return detail ? `${t.macInstallFailed} (${detail})` : t.macInstallFailed;
+  }
+  // Linux (src-tauri/src/update.rs, module `linux`)
+  if (raw.startsWith("linux:not_writable")) return t.linuxNotWritable;
+  if (raw.startsWith("linux:no_pkexec")) return t.linuxNoPkexec;
+  if (raw.startsWith("linux:cancelled")) return t.linuxCancelled;
+  if (raw.startsWith("linux:unsupported")) return t.linuxUnsupported;
+  if (raw.startsWith("linux:install_failed")) {
+    const detail = raw.slice("linux:install_failed".length).replace(/^:\s*/, "").trim();
+    return detail ? `${t.linuxInstallFailed} (${detail})` : t.linuxInstallFailed;
   }
   return raw;
 }

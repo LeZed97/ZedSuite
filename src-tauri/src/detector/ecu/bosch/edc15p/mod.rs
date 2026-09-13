@@ -277,7 +277,7 @@ impl EDC15PDetector {
                     map.category = Some("Engine fuel request".to_string());
                 }
                 // N75 duty cycle / Boost actuator -> Turbo Boost Pressure Control
-                else if lower.contains("n75") || lower.contains("boost actuator") {
+                else if lower.contains("n75") || lower.contains("boost actuator") || lower.contains("pid map") {
                     map.category = Some("Turbo boost pressure control".to_string());
                 }
                 // Boost / Turbo (other boost maps) -> Turbo boost pressure
@@ -1205,6 +1205,9 @@ impl EDC15PDetector {
         
         // MAP/MAF Switch - sequence: 41 02 xx xx 00 01 01 00
         self.find_map_maf_switch(data, maps, detected_addresses);
+
+        // Boost control PID curves - four 16-point curves per codeblock
+        self.find_pid_maps(data, maps, detected_addresses);
         
         // BIP temperature correction - sequence: 0A 00 4D 09 E3 09 47 0A
         self.find_bip_temp_correction(data, maps, detected_addresses);
@@ -1451,31 +1454,37 @@ impl EDC15PDetector {
 
     /// Find MAP/MAF Switch by byte sequence.
     ///
-    /// The switch word sits in a small table that reads, on every EDC15P
-    /// software of the bench, `00 01 01 00 01 | id id | vv vv | 00 01 01 tt`:
+    /// The switch word sits in a small table of one-byte switches that reads,
+    /// on every EDC15P software of the bench,
+    /// `00 01 01 ?? 01 | id id | vv vv | 00 01 ?? ??`:
     ///   - `id` = `41 02` on the classic layout (019GQ, 019KJ, 019HH…),
     ///     `01 02` on the compact layout (019AJ, 019AN, 019CJ, same as the
     ///     EDC15VM 012K);
-    ///   - `tt` = `00` on the classic layout, `01` on the compact one.
-    /// The five bytes before the identifier are part of the match so the
-    /// looser tail cannot pick up a random `00 01 01` elsewhere.
+    ///   - the two `??` are switches of their own and vary between the
+    ///     codeblocks of one file: 0 / 1 on most blocks, 4 / 0 on the third
+    ///     block of the 038906019LJ, whose switch the previous match (which
+    ///     required `00 01 01 00 01` before and `00 01 01 tt` after) missed.
+    /// Four bytes before and two after the identifier remain part of the
+    /// match; on the 38 EDC15P files of the bench that finds exactly the
+    /// same switches plus the missing one, nothing else.
     /// Limit to one per codeblock to avoid duplicates.
     fn find_map_maf_switch(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
-        const CONTEXT: [u8; 5] = [0x00, 0x01, 0x01, 0x00, 0x01];
+        const CONTEXT_LEN: usize = 5;
 
         let layout = self.layout();
         let mut found_per_codeblock: Vec<bool> = vec![false; layout.blocks.len()];
 
         let find_next = |from: usize| -> Option<usize> {
-            let mut t = from.max(CONTEXT.len());
-            while t + 8 <= data.len() {
+            let mut t = from.max(CONTEXT_LEN);
+            while t + 6 <= data.len() {
                 if (data[t] == 0x41 || data[t] == 0x01)
                     && data[t + 1] == 0x02
                     && data[t + 4] == 0x00
                     && data[t + 5] == 0x01
-                    && data[t + 6] == 0x01
-                    && (data[t + 7] == 0x00 || data[t + 7] == 0x01)
-                    && data[t - CONTEXT.len()..t] == CONTEXT
+                    && data[t - 5] == 0x00
+                    && data[t - 4] == 0x01
+                    && data[t - 3] == 0x01
+                    && data[t - 1] == 0x01
                 {
                     return Some(t);
                 }
@@ -1485,7 +1494,7 @@ impl EDC15PDetector {
         };
 
         let mut offset = 0;
-        while offset < data.len().saturating_sub(8) {
+        while offset < data.len().saturating_sub(6) {
             if let Some(found_offset) = find_next(offset) {
                 let switch_address = (found_offset + 2) as u32;
                 
@@ -1531,6 +1540,83 @@ impl EDC15PDetector {
 
     /// Find BIP temperature correction by byte sequence
     /// C# pattern: { 0x0A, 0x00, 0x4D, 0x09, 0xE3, 0x09, 0x47, 0x0A }
+    /// Boost control PID curves (Stage X names): four 16-point curves per
+    /// codeblock, each `[id lo] C0 10 00`, 16 ascending axis values, 16 values.
+    /// On every EDC15P of the bench (37 files, axis ids 0xC040 / 0xC04C /
+    /// 0xC050 / 0xC056 depending on the software) they come in the same order
+    /// and at the same spacing, I gain, D gain, DT1 memory factor, P gain
+    /// (+0, +0xCC, +0x110, +0x3CA, or +0xDE / +0x122 / +0x3DE on the compact
+    /// layout), and nothing else in the file carries that header. The 019A of
+    /// 1999 has none. Values signed, factor 0.0001 (Stage X); the axis is the
+    /// boost deviation in mbar.
+    fn find_pid_maps(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
+        const NAMES: [(&str, &str); 4] = [
+            ("PID map - I amplification", "Boost control PID, integral gain"),
+            ("PID map - D amplification", "Boost control PID, derivative gain"),
+            ("PID map - DT1 memory factor", "Boost control PID, DT1 filter memory factor"),
+            ("PID map - P amplification", "Boost control PID, proportional gain"),
+        ];
+        const AXIS_LEN: usize = 16;
+        const CURVE_LEN: usize = 32;
+
+        let layout = self.layout();
+        let mut per_block: Vec<Vec<usize>> = vec![Vec::new(); layout.blocks.len()];
+        let mut i = 0usize;
+        while i + 4 + 2 * AXIS_LEN + CURVE_LEN <= data.len() {
+            if data[i + 1] == 0xC0 && data[i + 2] == AXIS_LEN as u8 && data[i + 3] == 0x00 {
+                let axis_at = i + 4;
+                let axis = |k: usize| u16::from_le_bytes([data[axis_at + 2 * k], data[axis_at + 2 * k + 1]]);
+                let ascending = (0..AXIS_LEN - 1).all(|k| axis(k) <= axis(k + 1))
+                    && axis(0) < axis(AXIS_LEN - 1)
+                    && axis(AXIS_LEN - 1) < 5000;
+                if ascending {
+                    if let Some(cb) = layout.block_index(axis_at as u32) {
+                        per_block[cb].push(axis_at);
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        for (cb, axes) in per_block.iter().enumerate() {
+            if axes.len() != NAMES.len() {
+                if !axes.is_empty() {
+                    log::debug!("PID curves: {} candidates in codeblock {} instead of 4, skipped", axes.len(), cb + 1);
+                }
+                continue;
+            }
+            if axes[3] - axes[0] > 0x400 {
+                log::debug!("PID curves: candidates too far apart in codeblock {} (0x{:X}..0x{:X}), skipped", cb + 1, axes[0], axes[3]);
+                continue;
+            }
+            for (k, &axis_addr) in axes.iter().enumerate() {
+                let map_addr = (axis_addr + 2 * AXIS_LEN) as u32;
+                // the generic scan may have produced a map here (1x16 with a 0xC0 axis)
+                maps.retain(|m| m.address != map_addr);
+                let mut map = DetectedMap::new(
+                    map_addr,
+                    CURVE_LEN,
+                    MapDimensions::TwoDimensional { rows: 1, cols: AXIS_LEN },
+                    DataType::Int16,
+                );
+                map.name = Some(NAMES[k].0.to_string());
+                map.category = Some("Turbo boost pressure control".to_string());
+                map.subcategory = Some("3-Turbo".to_string());
+                map.description = Some(format!("{} | Axis: Boost deviation (mbar)", NAMES[k].1));
+                map.correction_factor = Some(0.0001);
+                map.offset = Some(0.0);
+                map.x_axis_address = Some(axis_addr as u32);
+                map.x_axis_correction = Some(1.0);
+                map.x_label = Some("Boost deviation (mbar)".to_string());
+                map.confidence = 0.95;
+                map.codeblock_id = Some(layout.blocks[cb].id);
+                log::debug!("Found {} at 0x{:X} (axis 0x{:X}) in codeblock {}", NAMES[k].0, map_addr, axis_addr, cb + 1);
+                detected_addresses.insert(map_addr);
+                maps.push(map);
+            }
+        }
+    }
+
     fn find_bip_temp_correction(&self, data: &[u8], maps: &mut Vec<DetectedMap>, detected_addresses: &mut HashSet<u32>) {
         let pattern: [u8; 8] = [0x0A, 0x00, 0x4D, 0x09, 0xE3, 0x09, 0x47, 0x0A];
         
@@ -3520,7 +3606,7 @@ impl EDC15PDetector {
                     &format!("VCDS Diagnostic IQ Limit {}", idx + 1),
                     0.00390625,
                     -0.15234375,
-                    "IQ Limit for VCDS group display in mg/stroke. Raw value×0.0039-0.15=mg shown. Common: 25600→100mg, 17920→70mg. Whole numbers only!",
+                    "Highest IQ the VCDS display can show (mg/stroke): 70 on a stock file, 100 once the IQ display scaling allows it. Whole numbers.",
                     "mg",
                     true // signed
                 );
@@ -3538,7 +3624,7 @@ impl EDC15PDetector {
                     &format!("VCDS Diagnostic MAP Limit {}", idx + 1),
                     0.1,
                     0.0,
-                    "MAP sensor clamp for the VCDS display (mbar). 2996 = 3 bar sensor, 4020 = 4 bar sensor, 6529.8 (stock) = no clamp",
+                    "Highest boost the VCDS display can show (mbar): about 3000 for a 3 bar sensor, 4000 for a 4 bar sensor, 6530 on a stock file = no ceiling.",
                     "mbar",
                     false
                 );
@@ -3550,7 +3636,7 @@ impl EDC15PDetector {
                 "VCDS Diagnostic Torque Limit",
                 0.00390625,
                 -0.203125,
-                "Torque clamp for the VCDS display, in display units, not Nm: real torque = value × 4.12 (100 = 412 Nm, 146 = 601 Nm, 195 = 803 Nm). Raw × 0.0039 - 0.2 = value",
+                "Highest torque the VCDS display can show, in display units (Nm = value × 4.12): 100 = 412 Nm, 146 = 601 Nm, 195 = 803 Nm.",
                 "",
                 true // signed
             );
@@ -3752,9 +3838,15 @@ impl EDC15PDetector {
             if let Some(ref name) = map.name {
                 if name.contains("Start of injection") && !name.contains("SOI limiter") {
                     // Case 1: Has temperature in name (from detect_soi_maps_by_selector) - KEEP
+                    // Only the selector-detected maps carry map_selector: a temperature
+                    // name without it is a copy (cross-codeblock propagation) and is dropped.
                     if name.contains("°C") {
-                        log::debug!("✅ Keeping SOI with temperature: {} at 0x{:X}", name, map.address);
-                        result.push(map);
+                        if map.map_selector.is_some() {
+                            log::debug!("✅ Keeping SOI with temperature: {} at 0x{:X}", name, map.address);
+                            result.push(map);
+                        } else {
+                            log::debug!("❌ Dropping copied SOI with temperature but no selector: {} at 0x{:X}", name, map.address);
+                        }
                         continue;
                     }
                     
@@ -5427,6 +5519,14 @@ impl EDC15PDetector {
         }
     }
 
+    /// SOI map named from its C5 temperature selector (detect_soi_maps_by_selector):
+    /// per-codeblock, never to be copied into another codeblock.
+    fn is_selector_named_soi(map: &DetectedMap) -> bool {
+        map.name
+            .as_ref()
+            .map_or(false, |n| n.contains("Start of injection (SOI)") && n.contains("°C"))
+    }
+
     /// Find similar maps in other codeblocks
     /// If a map is found in one codeblock, search for similar maps (same pattern) in other codeblocks
     fn find_similar_maps_in_other_codeblocks(
@@ -5435,10 +5535,23 @@ impl EDC15PDetector {
         codeblocks: &[Codeblock],
         data: &[u8],
     ) -> Vec<DetectedMap> {
-        // Group maps by pattern (name and dimensions)
-        let mut maps_by_pattern: std::collections::HashMap<String, Vec<&DetectedMap>> = std::collections::HashMap::new();
+        // Group maps by pattern (name and dimensions). Ordered map: the
+        // propagation order decides which duplicate survives the later
+        // filters, and a HashMap made the names of a file change from one
+        // detection to the next (« IQ by MAP limiter [0x05E404] » one run in
+        // five on a three-block multimap).
+        let mut maps_by_pattern: std::collections::BTreeMap<String, Vec<&DetectedMap>> = std::collections::BTreeMap::new();
         for map in &maps {
             if let Some(name) = &map.name {
+                // Les SOI nommées par le sélecteur C5 (« Start of injection (SOI) 85°C »)
+                // sont propres à chaque codeblock : chaque bloc a son propre sélecteur
+                // et ses propres températures (65/85 dans un bloc, 60/80 dans l'autre).
+                // Les propager copierait un nom d'un autre bloc sur ce qui se trouve
+                // à la même structure d'axes, c'est-à-dire la zone des axes partagés
+                // et du second sélecteur, pas une map (faux positifs du 038906019KJ).
+                if Self::is_selector_named_soi(map) {
+                    continue;
+                }
                 let key = format!("{}|{:?}", name, map.dimensions);
                 maps_by_pattern.entry(key).or_insert_with(Vec::new).push(map);
             }

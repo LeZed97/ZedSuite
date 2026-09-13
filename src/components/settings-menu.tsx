@@ -447,6 +447,8 @@ export function SettingsMenu({ isOpen, onClose, isClosing = false }: SettingsMen
                             { value: "ES", label: "Español" },
                             { value: "IT", label: "Italiano" },
                             { value: "DE", label: "Deutsch" },
+                            { value: "PT", label: "Português" },
+                            { value: "RO", label: "Română" },
                           ]}
                         />
                       </div>

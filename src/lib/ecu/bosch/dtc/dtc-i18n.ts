@@ -1,6 +1,6 @@
 /**
  * DTC Internationalization Helper
- * Provides access to DTC descriptions and system names in the five app languages
+ * Provides access to DTC descriptions and system names in the seven app languages
  *
  * Uses translations from i18n/translations.ts for system names
  * Uses translations/ folder for DTC descriptions
@@ -15,7 +15,7 @@ import { translations } from '@/i18n/translations';
 import { getDTCDescription } from './translations';
 
 // Type for supported languages
-export type DTCLanguage = 'EN' | 'FR' | 'ES' | 'IT' | 'DE';
+export type DTCLanguage = 'EN' | 'FR' | 'ES' | 'IT' | 'DE' | 'PT' | 'RO';
 
 // Interface for translated DTC info
 export interface TranslatedDTCInfo {

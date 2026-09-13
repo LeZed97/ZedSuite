@@ -14,7 +14,6 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 - EDC15VM: am Fahrzeug prüfen, ob die SVRL-Kennfelder wirklich aktiv sind, wenn der Detektor sie findet.
 - EDC16U31: bessere Erkennung, es fehlen noch einige EDC16U31-Dateien auf dem Prüfstand, um sie sauber abzuschließen (die 12x12-Familie bei 0x1D7xxx hat noch keinen Namen).
 - EDC16U1: Identifikation der Touareg-V10-Dateien, bei denen heute nur eine der beiden Steuergerätenummern gefunden wird (sechs Dateien auf dem Prüfstand).
-- Erkennung der PID-Kennfelder der Ladedruckregelung, zuerst bei EDC15P.
 - XDF-Kompatibilität (TunerPro-Definitionsdateien, um Kennfeldlisten in diesem Format zu lesen und zu schreiben). Für später geplant, wenn ich die Zeit finde, mich damit zu befassen.
 
 ## Von Nutzern gewünscht, in Prüfung
@@ -23,13 +22,11 @@ Für einen Funktionswunsch oder eine Fehlermeldung: ein Issue auf [GitHub](https
 - CSV-Import und -Export (das JSON-Mappack für WinOLS gibt es schon) und DAMOS-Import.
 - Favoriten-Kennfelder, für schnellen Zugriff auf die am häufigsten bearbeiteten.
 - Eine andere Referenzversion als Ori für „Originalwert“ und den Vergleich.
-- Inverse driver wish und MAF linearisation in der Kennfeldliste.
 - Kennfelder direkt in der 3D-Ansicht bearbeiten.
 - Die Leistungsschätzung an andere Düsen als Firad anpassen, etwa Recambo oder DSSR.
 - Zwei Versionen desselben Projekts nebeneinander bearbeiten.
 - Mehr Funktionen im Eigenschaften-Fenster der Kennfelder.
 - Alle vom Original abweichenden Werte in den Kennfeldfenstern hervorheben.
-- Größere Map-Fenster und ein echter 100-%-Zoom auf kleinen Bildschirmen. Heute wächst ein Map-Fenster nicht mehr, sobald seine Zellen ihre Maximalgröße erreichen, was rechts Leerraum lässt, und der Zoom des Editors wird durch die Breite begrenzt, die Werkzeugleiste und Map-Liste verlangen, etwa 75 % auf einem 1024 Pixel breiten Bildschirm. Geplant ist, die Obergrenze der Zellengröße anzuheben und Werkzeugleiste und Liste sparsamer zu machen, damit der Zoom auf jedem Bildschirm 100 % erreicht; eine einstellbare Schriftgröße wird ebenfalls geprüft.
 
 ## Vorerst nicht geplant
 

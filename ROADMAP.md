@@ -14,7 +14,6 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - EDC15VM: check on the car that the SVRL maps are really active when the detector finds them.
 - EDC16U31: better detection, a few EDC16U31 files are still missing from the test bench to finish it properly (the 12x12 family at 0x1D7xxx is still unnamed).
 - EDC16U1: identification of the Touareg V10 files, where only one of the two ECU numbers is found today (six files on the bench).
-- Detection of the turbo boost control PID maps, on EDC15P first.
 - XDF compatibility (TunerPro definition files, to read and write map lists in that format). Planned for later, when I have the time to look into it.
 
 ## Asked by users, under review
@@ -23,13 +22,11 @@ To ask for a feature or report a bug: open an issue on [GitHub](https://github.c
 - CSV import and export (the JSON mappack for WinOLS is already there), and DAMOS import.
 - Favourite maps, for quick access to the ones you edit most.
 - A reference version other than Ori for "original value" and the comparison.
-- Inverse driver wish and MAF linearisation in the map list.
 - Editing maps directly in the 3D view.
 - Tuning the power estimate for nozzles other than Firad, such as Recambo or DSSR.
 - Editing two versions of the same project side by side.
 - More functions in the map Properties window.
 - Highlighting every value that differs from stock in the map windows.
-- Bigger map windows and a real 100 % zoom on small screens. Today a map window stops growing once its cells reach their maximum size, which leaves empty space on the right, and the editor zoom is capped by the width the toolbar and the map list demand, about 75 % on a 1024 pixel wide screen. The plan is to raise the cell size ceiling and to make the toolbar and the map list take less room, so the zoom can reach 100 % on any screen; an adjustable font size is under consideration too.
 
 ## Not planned for now
 

@@ -17,6 +17,11 @@
 //    `ZedSuite_X.Y.Z_macos-universal.app.tar.gz` for the updater, which
 //    extracts the archive, swaps the `.app` in place and relaunches it (see
 //    the `macos` module below).
+//  - Linux: `ZedSuite_X.Y.Z_linux-x86_64.AppImage` and
+//    `ZedSuite_X.Y.Z_linux-amd64.deb`. An AppImage replaces its own file and
+//    relaunches; a `.deb` install hands the new package to apt through the
+//    system password prompt (pkexec), then relaunches (see the `linux`
+//    module below).
 
 use serde::Serialize;
 use std::io::Write;
@@ -59,8 +64,13 @@ pub enum UpdateTarget {
     WindowsX64,
     WindowsX86,
     MacOS,
-    /// No auto-installer for this build (Linux: AppImage/deb have no
-    /// in-app updater path, the user is sent to the releases page instead).
+    /// AppImage: replaces its own file (`$APPIMAGE`) and relaunches.
+    LinuxAppImage,
+    /// Installed from the `.deb` (`/usr/bin`): the new package goes through
+    /// pkexec, then the app relaunches.
+    LinuxDeb,
+    /// No auto-installer for this build (Linux run from a build folder, or
+    /// another OS): the user is sent to the releases page instead.
     Unsupported,
 }
 
@@ -75,17 +85,21 @@ impl UpdateTarget {
             } else {
                 UpdateTarget::WindowsX64
             }
+        } else if cfg!(target_os = "linux") {
+            linux_target()
         } else {
             UpdateTarget::Unsupported
         }
     }
 
-    /// "x64" | "x86" | "macos" (test bench and probes).
+    /// "x64" | "x86" | "macos" | "appimage" | "deb" (test bench and probes).
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
             "x64" => Some(UpdateTarget::WindowsX64),
             "x86" => Some(UpdateTarget::WindowsX86),
             "macos" | "mac" | "darwin" => Some(UpdateTarget::MacOS),
+            "appimage" => Some(UpdateTarget::LinuxAppImage),
+            "deb" => Some(UpdateTarget::LinuxDeb),
             _ => None,
         }
     }
@@ -95,9 +109,27 @@ impl UpdateTarget {
             UpdateTarget::WindowsX64 => "x64",
             UpdateTarget::WindowsX86 => "x86",
             UpdateTarget::MacOS => "macos",
+            UpdateTarget::LinuxAppImage => "appimage",
+            UpdateTarget::LinuxDeb => "deb",
             UpdateTarget::Unsupported => "unsupported",
         }
     }
+}
+
+/// How this Linux build is installed, decided at runtime (an AppImage sets
+/// `$APPIMAGE`; the .deb puts the binary under /usr).
+#[cfg(target_os = "linux")]
+fn linux_target() -> UpdateTarget {
+    match linux::install_kind() {
+        Some(linux::InstallKind::AppImage(_)) => UpdateTarget::LinuxAppImage,
+        Some(linux::InstallKind::Deb(_)) => UpdateTarget::LinuxDeb,
+        None => UpdateTarget::Unsupported,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_target() -> UpdateTarget {
+    UpdateTarget::Unsupported
 }
 
 /// Picks the asset a build must download among the `assets` array of a
@@ -174,6 +206,27 @@ pub fn pick_asset(assets: &[serde_json::Value], target: UpdateTarget) -> Option<
                 }
             }
         }
+        // Linux : le fichier de la même famille (.AppImage ou .deb) et de la
+        // même architecture ; un nom sans marqueur d'architecture est accepté.
+        UpdateTarget::LinuxAppImage | UpdateTarget::LinuxDeb => {
+            let ext = if target == UpdateTarget::LinuxAppImage { ".appimage" } else { ".deb" };
+            let want_arm = cfg!(target_arch = "aarch64");
+            for asset in assets {
+                let name = asset["name"].as_str().unwrap_or("").to_lowercase();
+                if !name.ends_with(ext) {
+                    continue;
+                }
+                let is_arm = name.contains("aarch64") || name.contains("arm64");
+                let is_x64 = name.contains("x86_64") || name.contains("amd64") || name.contains("x64");
+                if (want_arm && is_x64) || (!want_arm && is_arm) {
+                    continue;
+                }
+                if let Some(url) = asset["browser_download_url"].as_str() {
+                    picked = Some((name.clone(), url.to_string()));
+                    break;
+                }
+            }
+        }
         // No installer to pick for this build; the frontend sends the user
         // to the releases page instead.
         UpdateTarget::Unsupported => {}
@@ -200,6 +253,8 @@ fn roadmap_file_name(lang: &str) -> &'static str {
         "es" => "ROADMAP.es.md",
         "it" => "ROADMAP.it.md",
         "de" => "ROADMAP.de.md",
+        "pt" => "ROADMAP.pt.md",
+        "ro" => "ROADMAP.ro.md",
         _ => "ROADMAP.md",
     }
 }
@@ -210,6 +265,8 @@ fn bundled_roadmap(lang: &str) -> &'static str {
         "es" => include_str!("../../ROADMAP.es.md"),
         "it" => include_str!("../../ROADMAP.it.md"),
         "de" => include_str!("../../ROADMAP.de.md"),
+        "pt" => include_str!("../../ROADMAP.pt.md"),
+        "ro" => include_str!("../../ROADMAP.ro.md"),
         _ => include_str!("../../ROADMAP.md"),
     }
 }
@@ -318,7 +375,9 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateInfo, Strin
 /// events), installs it and exits the app:
 ///  - Windows: launches the NSIS installer, which replaces the files;
 ///  - macOS: swaps the `.app` bundle in place and reopens it once this
-///    process has exited.
+///    process has exited;
+///  - Linux: replaces the AppImage file, or installs the .deb through
+///    pkexec, and relaunches once this process has exited.
 #[tauri::command]
 pub async fn download_and_install_update(
     app: tauri::AppHandle,
@@ -330,6 +389,10 @@ pub async fn download_and_install_update(
     // temporaire) — sinon le message invite à la glisser dans Applications.
     #[cfg(target_os = "macos")]
     let bundle = macos::installed_bundle().map_err(|e| e.to_string())?;
+    // Linux : AppImage dans un dossier accessible en écriture, ou .deb avec
+    // pkexec disponible — sinon message explicite avant tout téléchargement.
+    #[cfg(target_os = "linux")]
+    let plan = linux::plan().map_err(|e| e.to_string())?;
 
     let mut res = http_client()?
         .get(&url)
@@ -346,6 +409,9 @@ pub async fn download_and_install_update(
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-')
         .collect();
+    #[cfg(target_os = "linux")]
+    let file_name = plan.download_name(&safe_version);
+    #[cfg(not(target_os = "linux"))]
     let file_name = if cfg!(target_os = "macos") {
         format!("ZedSuite-update-{safe_version}.app.tar.gz")
     } else {
@@ -391,7 +457,24 @@ pub async fn download_and_install_update(
             .map_err(|e| format!("relaunch: {e}"))?;
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        log::warn!("[update] installing {} ({})", path.display(), plan.label());
+        let installed = linux::install(&plan, &path);
+        if plan.is_deb() {
+            let _ = std::fs::remove_file(&path);
+        }
+        if let Err(e) = installed {
+            let _ = std::fs::remove_file(&path);
+            return Err(e.to_string());
+        }
+        // Relance par un petit script qui attend la fin de ce processus,
+        // puis supprime l'ancienne AppImage gardée en secours.
+        linux::relaunch_after_exit(&plan, std::process::id())
+            .map_err(|e| format!("relaunch: {e}"))?;
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         let _ = std::fs::remove_file(&path);
         return Err("update: unsupported platform".to_string());
@@ -615,6 +698,248 @@ pub mod macos {
             b = shell_quote(bundle),
             backup = shell_quote(&parent.join(BACKUP_DIR)),
             staging = shell_quote(&parent.join(STAGING_DIR)),
+        );
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&script)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map(|_| ())
+    }
+}
+
+/// Linux side of the updater. Two ways to be installed:
+///  - AppImage: the running file is `$APPIMAGE` (set by the AppImage
+///    runtime, also when AppImageLauncher moved it to ~/Applications). The
+///    downloaded file is put next to it, marked executable, then swapped in
+///    by rename; the previous file stays as `<name>.old` until the relaunch
+///    script removes it. Renaming a running AppImage is safe: its content is
+///    mounted from the open file, not from the path.
+///  - .deb: the binary sits under /usr, owned by root. The downloaded package
+///    is handed to apt through pkexec, which shows the system password
+///    prompt (the user can cancel). The running binary keeps working while
+///    dpkg replaces the file; the relaunch script starts the new one.
+/// Errors are surfaced to the frontend as `linux:<code>` and worded there.
+#[cfg(target_os = "linux")]
+pub mod linux {
+    use std::path::{Path, PathBuf};
+    use std::process::{Command, Stdio};
+
+    #[derive(Debug, Clone)]
+    pub enum InstallKind {
+        /// Path of the running AppImage file.
+        AppImage(PathBuf),
+        /// Binary installed by the package (`/usr/bin/zedsuite`).
+        Deb(PathBuf),
+    }
+
+    #[derive(Debug)]
+    pub enum InstallError {
+        /// Neither an AppImage nor a package install: nothing to replace.
+        Unsupported,
+        /// The AppImage folder refuses writes (system folder, read-only media).
+        NotWritable(PathBuf),
+        /// A .deb install needs pkexec (polkit) to get root: missing here.
+        NoPkexec,
+        /// The password prompt was dismissed.
+        Cancelled,
+        /// Download not an AppImage, swap or apt failure (details for the log).
+        InstallFailed(String),
+    }
+
+    impl std::fmt::Display for InstallError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                InstallError::Unsupported => write!(f, "linux:unsupported"),
+                InstallError::NotWritable(p) => write!(f, "linux:not_writable: {}", p.display()),
+                InstallError::NoPkexec => write!(f, "linux:no_pkexec"),
+                InstallError::Cancelled => write!(f, "linux:cancelled"),
+                InstallError::InstallFailed(msg) => write!(f, "linux:install_failed: {msg}"),
+            }
+        }
+    }
+
+    impl From<std::io::Error> for InstallError {
+        fn from(e: std::io::Error) -> Self {
+            InstallError::InstallFailed(e.to_string())
+        }
+    }
+
+    /// How this process was installed, or None when run from a build folder.
+    pub fn install_kind() -> Option<InstallKind> {
+        if let Some(p) = std::env::var_os("APPIMAGE") {
+            let p = PathBuf::from(p);
+            if p.is_file() {
+                return Some(InstallKind::AppImage(p));
+            }
+        }
+        let exe = std::env::current_exe().ok()?;
+        let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
+        if exe.starts_with("/usr/bin") || exe.starts_with("/usr/lib") || exe.starts_with("/opt") {
+            return Some(InstallKind::Deb(exe));
+        }
+        None
+    }
+
+    /// What the update will do, checked before anything is downloaded.
+    #[derive(Debug, Clone)]
+    pub struct Plan {
+        pub kind: InstallKind,
+    }
+
+    impl Plan {
+        pub fn is_deb(&self) -> bool {
+            matches!(self.kind, InstallKind::Deb(_))
+        }
+
+        pub fn label(&self) -> &'static str {
+            if self.is_deb() { "deb" } else { "appimage" }
+        }
+
+        /// Temp file name of the download.
+        pub fn download_name(&self, version: &str) -> String {
+            if self.is_deb() {
+                format!("ZedSuite-update-{version}.deb")
+            } else {
+                format!("ZedSuite-update-{version}.AppImage")
+            }
+        }
+    }
+
+    pub fn plan() -> Result<Plan, InstallError> {
+        match install_kind() {
+            Some(InstallKind::AppImage(p)) => {
+                let dir = p.parent().ok_or(InstallError::Unsupported)?;
+                if !dir_writable(dir) {
+                    return Err(InstallError::NotWritable(dir.to_path_buf()));
+                }
+                Ok(Plan { kind: InstallKind::AppImage(p) })
+            }
+            Some(InstallKind::Deb(p)) => {
+                if !Path::new("/usr/bin/pkexec").is_file() {
+                    return Err(InstallError::NoPkexec);
+                }
+                Ok(Plan { kind: InstallKind::Deb(p) })
+            }
+            None => Err(InstallError::Unsupported),
+        }
+    }
+
+    /// Writable = a file can be created there (permissions AND read-only
+    /// mounts, which a metadata check would not see).
+    pub fn dir_writable(dir: &Path) -> bool {
+        let probe = dir.join(format!(".zedsuite-update-probe-{}", std::process::id()));
+        match std::fs::File::create(&probe) {
+            Ok(_) => {
+                let _ = std::fs::remove_file(&probe);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub fn install(plan: &Plan, downloaded: &Path) -> Result<(), InstallError> {
+        match &plan.kind {
+            InstallKind::AppImage(current) => replace_appimage(downloaded, current),
+            InstallKind::Deb(_) => install_deb(downloaded),
+        }
+    }
+
+    /// Path of the backup kept next to the AppImage during the swap.
+    pub fn backup_path(current: &Path) -> PathBuf {
+        let name = current.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        current.with_file_name(format!("{name}.old"))
+    }
+
+    /// `new_file` (the download) replaces `current` in place. Pure file work,
+    /// no Tauri handle: exercised as is by `examples/linux_update_test.rs`.
+    pub fn replace_appimage(new_file: &Path, current: &Path) -> Result<(), InstallError> {
+        use std::io::Read;
+        use std::os::unix::fs::PermissionsExt;
+
+        // 1. Sanity: an AppImage is an ELF executable (a GitHub error page
+        //    or a truncated download is not).
+        let mut head = [0u8; 4];
+        std::fs::File::open(new_file)?.read_exact(&mut head)?;
+        if head != [0x7F, b'E', b'L', b'F'] {
+            return Err(InstallError::InstallFailed(
+                "downloaded file is not an AppImage".to_string(),
+            ));
+        }
+
+        // 2. Same folder as the current file (same filesystem: the swap is
+        //    an atomic rename); the temp dir may be another filesystem.
+        let dir = current.parent().ok_or(InstallError::Unsupported)?;
+        let name = current.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let staged = dir.join(format!(".{name}.new"));
+        let _ = std::fs::remove_file(&staged);
+        if std::fs::rename(new_file, &staged).is_err() {
+            std::fs::copy(new_file, &staged)?;
+            let _ = std::fs::remove_file(new_file);
+        }
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))?;
+
+        // 3. Swap, previous file kept as backup until the relaunch.
+        let backup = backup_path(current);
+        let _ = std::fs::remove_file(&backup);
+        std::fs::rename(current, &backup)?;
+        if let Err(e) = std::fs::rename(&staged, current) {
+            let _ = std::fs::rename(&backup, current);
+            let _ = std::fs::remove_file(&staged);
+            return Err(InstallError::InstallFailed(format!("swap: {e}")));
+        }
+        Ok(())
+    }
+
+    /// The package goes to apt (dependencies resolved) or dpkg, as root
+    /// through the polkit prompt.
+    pub fn install_deb(deb: &Path) -> Result<(), InstallError> {
+        let mut cmd = Command::new("/usr/bin/pkexec");
+        if Path::new("/usr/bin/apt-get").is_file() {
+            cmd.arg("/usr/bin/apt-get")
+                .arg("install")
+                .arg("-y")
+                .arg("--allow-downgrades")
+                .arg(deb);
+        } else {
+            cmd.arg("/usr/bin/dpkg").arg("-i").arg(deb);
+        }
+        let out = cmd
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| InstallError::InstallFailed(format!("pkexec: {e}")))?;
+        match out.status.code() {
+            Some(0) => Ok(()),
+            // 126 = prompt dismissed, 127 = not authorized
+            Some(126) | Some(127) => Err(InstallError::Cancelled),
+            _ => {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                Err(InstallError::InstallFailed(format!("apt: {err}")))
+            }
+        }
+    }
+
+    fn shell_quote(p: &Path) -> String {
+        format!("'{}'", p.to_string_lossy().replace('\'', "'\\''"))
+    }
+
+    /// Starts the new build once the process `pid` has exited, then removes
+    /// the AppImage backup. The AppImage runtime variables of THIS process
+    /// are dropped so the new file sets its own.
+    pub fn relaunch_after_exit(plan: &Plan, pid: u32) -> std::io::Result<()> {
+        let (exe, cleanup) = match &plan.kind {
+            InstallKind::AppImage(p) => (p.clone(), Some(backup_path(p))),
+            InstallKind::Deb(p) => (p.clone(), None),
+        };
+        let rm = cleanup
+            .map(|b| format!("; sleep 3; rm -f {}", shell_quote(&b)))
+            .unwrap_or_default();
+        let script = format!(
+            "while kill -0 {pid} 2>/dev/null; do sleep 0.2; done; \
+             env -u APPIMAGE -u APPDIR -u ARGV0 -u OWD {exe} >/dev/null 2>&1 &{rm}",
+            exe = shell_quote(&exe),
         );
         Command::new("/bin/sh")
             .arg("-c")

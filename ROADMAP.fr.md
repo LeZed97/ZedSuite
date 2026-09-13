@@ -14,7 +14,6 @@ Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](ht
 - EDC15VM : vérifier sur véhicule que les maps SVRL sont réellement actives quand le détecteur les trouve.
 - EDC16U31 : meilleure détection, il manque encore quelques fichiers EDC16U31 au banc pour finir proprement (la famille 12x12 en 0x1D7xxx n'a toujours pas de nom).
 - EDC16U1 : identification des fichiers Touareg V10, où un seul des deux numéros d'ECU est trouvé aujourd'hui (six fichiers au banc).
-- Détection des maps PID de régulation de turbo, sur EDC15P d'abord.
 - Compatibilité XDF (fichiers de définition TunerPro, pour lire et écrire des listes de maps dans ce format). Prévu pour plus tard, quand j'aurai le temps de m'y pencher.
 
 ## Demandé par les utilisateurs, à l'étude
@@ -23,13 +22,11 @@ Pour demander une fonction ou signaler un bug : ouvrez une issue sur [GitHub](ht
 - Import et export CSV (le mappack JSON pour WinOLS existe déjà), et import DAMOS.
 - Maps favorites, pour retrouver vite celles qu'on modifie le plus.
 - Une version de référence autre que l'Ori pour « valeur d'origine » et la comparaison.
-- Inverse driver wish et MAF linearisation dans la liste des maps.
 - Modifier les maps directement dans la vue 3D.
 - Ajuster l'estimation de puissance pour d'autres nez que Firad, comme Recambo ou DSSR.
 - Modifier deux versions du même projet côte à côte.
 - Plus de fonctions dans la fenêtre Propriétés des maps.
 - Surligner dans les fenêtres de maps toutes les valeurs différentes de l'origine.
-- Des fenêtres de maps plus grandes et un vrai zoom à 100 % sur les petits écrans. Aujourd'hui une fenêtre de map cesse de grandir quand ses cellules atteignent leur taille maximale, ce qui laisse du vide à droite, et le zoom de l'éditeur est plafonné par la largeur qu'exigent la barre d'outils et la liste des maps, environ 75 % sur un écran de 1024 pixels de large. L'idée est de relever le plafond de taille des cellules et de rendre la barre d'outils et la liste moins gourmandes, pour que le zoom atteigne 100 % sur n'importe quel écran ; une taille de police réglable est aussi à l'étude.
 
 ## Pas prévu pour l'instant
 

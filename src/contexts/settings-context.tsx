@@ -32,6 +32,8 @@ const detectBrowserLanguage = (): string => {
   if (lang.startsWith("es")) return "ES";
   if (lang.startsWith("it")) return "IT";
   if (lang.startsWith("de")) return "DE";
+  if (lang.startsWith("pt")) return "PT";
+  if (lang.startsWith("ro")) return "RO";
   return "EN";
 };
 

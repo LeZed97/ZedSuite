@@ -14,7 +14,6 @@ Per chiedere una funzione o segnalare un bug: apri una issue su [GitHub](https:/
 - EDC15VM: verificare in auto che le mappe SVRL siano davvero attive quando il rilevatore le trova.
 - EDC16U31: rilevamento migliore, mancano ancora alcuni file EDC16U31 nel banco di prova per finirlo bene (la famiglia 12x12 a 0x1D7xxx non ha ancora un nome).
 - EDC16U1: identificazione dei file del Touareg V10, dove oggi viene trovato solo uno dei due numeri di ECU (sei file nel banco).
-- Rilevamento delle mappe PID del controllo turbo, prima su EDC15P.
 - Compatibilità XDF (file di definizione TunerPro, per leggere e scrivere elenchi di mappe in quel formato). Previsto per più avanti, quando avrò il tempo di occuparmene.
 
 ## Chiesto dagli utenti, in valutazione
@@ -23,13 +22,11 @@ Per chiedere una funzione o segnalare un bug: apri una issue su [GitHub](https:/
 - Importazione ed esportazione CSV (il mappack JSON per WinOLS c'è già), e importazione DAMOS.
 - Mappe preferite, per raggiungere in fretta quelle che si modificano di più.
 - Una versione di riferimento diversa da Ori per il "valore originale" e il confronto.
-- Inverse driver wish e MAF linearisation nell'elenco delle mappe.
 - Modificare le mappe direttamente nella vista 3D.
 - Adattare la stima di potenza a polverizzatori diversi da Firad, come Recambo o DSSR.
 - Modificare due versioni dello stesso progetto fianco a fianco.
 - Più funzioni nella finestra Proprietà delle mappe.
 - Evidenziare nelle finestre delle mappe tutti i valori diversi dall'originale.
-- Finestre delle mappe più grandi e un vero zoom al 100 % sugli schermi piccoli. Oggi una finestra di mappa smette di crescere quando le sue celle raggiungono la dimensione massima, lasciando spazio vuoto a destra, e lo zoom dell'editor è limitato dalla larghezza richiesta dalla barra degli strumenti e dall'elenco delle mappe, circa il 75 % su uno schermo largo 1024 pixel. L'idea è alzare il limite di dimensione delle celle e rendere barra degli strumenti ed elenco meno ingombranti, perché lo zoom arrivi al 100 % su qualsiasi schermo; è allo studio anche una dimensione dei caratteri regolabile.
 
 ## Non previsto per ora
 

@@ -4,9 +4,9 @@ import { createContext, useContext, ReactNode, useMemo } from "react";
 import { useSettings } from "./settings-context";
 import { translations } from "@/i18n/translations";
 
-type Language = "EN" | "FR" | "ES" | "IT" | "DE";
+type Language = "EN" | "FR" | "ES" | "IT" | "DE" | "PT" | "RO";
 type TranslationType = (typeof translations)[Language];
-const SUPPORTED: Language[] = ["EN", "FR", "ES", "IT", "DE"];
+const SUPPORTED: Language[] = ["EN", "FR", "ES", "IT", "DE", "PT", "RO"];
 
 interface I18nContextType {
   t: TranslationType;

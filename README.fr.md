@@ -35,7 +35,7 @@ La détection n'est pas parfaite pour autant. Chaque famille a été calibrée s
 - **Versions** — « Ori » + versions nommées par projet, vue de comparaison
 - **Stockage optimisé** — fichier d'origine + fichier de modifications par version, reconstruction automatique à l'export
 - **Dyno virtuel** — estimation puissance/couple à partir des maps, rapport PDF imprimable
-- **DTC on/off** — lecture de la table des codes défaut, désactivation et réactivation (EDC15 et EDC16) ; chaque code VAG a sa description dans les cinq langues de l'app
+- **DTC on/off** — lecture de la table des codes défaut, désactivation et réactivation (EDC15 et EDC16) ; chaque code VAG a sa description dans les sept langues de l'app
 - **Solutions** — patchs en un clic (launch control, …) ; volontairement limités pour ne pas repousser encore la sortie de l'application, d'autres pourront arriver plus tard
 - **Correction de checksum** — famille EDC15 et EDC16, implémentée nativement
 - **Marque pré-remplie** — base de références ECU embarquée (numéros Bosch/VAG)
@@ -43,7 +43,7 @@ La détection n'est pas parfaite pour autant. Chaque famille a été calibrée s
 - **Mises à jour automatiques** — l'app vérifie une fois par jour sur GitHub si une nouvelle version existe ; installation en un clic
 - **3 thèmes** — sombre, clair et OLED, pour tous les types d'écrans
 - **Toutes les tailles d'écran** — menu des maps redimensionnable et zoom de l'éditeur façon navigateur, du portable à l'ultrawide
-- **Cinq langues** — anglais, français, espagnol, italien et allemand, pour l'app et l'installateur ; en ajouter une autre est simple (un seul fichier de traductions), et le nom des maps n'est volontairement pas traduit — il reste en anglais
+- **Sept langues** — anglais, français, espagnol, italien, allemand, portugais et roumain, pour l'app et l'installateur ; en ajouter une autre est simple (un seul fichier de traductions), et le nom des maps n'est volontairement pas traduit — il reste en anglais
 
 ## 🔧 Travailler avec des fichiers modifiés
 
@@ -97,7 +97,7 @@ Toutes les personnes dont du code, un signalement ou un fichier a fait évoluer 
 
 ## ⬇️ Téléchargement
 
-Tout est dans la section **Assets** de la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest). Une fois installée, l'application se met à jour toute seule sur Windows et macOS ; sur Linux, elle prévient qu'une nouvelle version est sortie et ouvre la page de la release.
+Tout est dans la section **Assets** de la [dernière release](https://github.com/LeZed97/ZedSuite/releases/latest). Une fois installée, l'application se met à jour toute seule sur les trois systèmes.
 
 **Windows** — téléchargez `ZedSuite_x.y.z_x64-setup.exe` et lancez-le (sur un Windows 32 bits, prenez `ZedSuite_x.y.z_x86-setup.exe`). ZedSuite demande **Windows 10 ou 11** : l'adapter à Windows 7 aurait demandé encore beaucoup de travail.
 
@@ -107,11 +107,11 @@ Tout est dans la section **Assets** de la [dernière release](https://github.com
 curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
 ```
 
-**Linux** — téléchargez `ZedSuite_x.y.z_linux-x86_64.AppImage`, rendez-le exécutable (`chmod +x`) et lancez-le, ou installez le `.deb` avec `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. x86 64 bits, Debian 12, Ubuntu 22.04 ou une dérivée plus récente (l'app a besoin de webkit2gtk 4.1). La version Linux ne se met pas encore à jour toute seule : l'app prévient qu'une nouvelle version est sortie et vous emmène sur la page de la release. Le support Linux a été apporté par [@bferd](https://github.com/bferd).
+**Linux** — téléchargez `ZedSuite_x.y.z_linux-x86_64.AppImage`, rendez-le exécutable (`chmod +x`) et lancez-le, ou installez le `.deb` avec `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. x86 64 bits, Debian 12, Ubuntu 22.04 ou une dérivée plus récente (l'app a besoin de webkit2gtk 4.1). Les mises à jour s'installent toutes seules là aussi : l'AppImage remplace son propre fichier, le `.deb` passe par la demande de mot de passe du système. Le support Linux a été apporté par [@bferd](https://github.com/bferd).
 
 ## 🗺️ Feuille de route
 
-Ce qui est en cours, ce qui est prévu et ce que les utilisateurs ont demandé : [ROADMAP.fr.md](ROADMAP.fr.md) (aussi en [anglais](ROADMAP.md), [espagnol](ROADMAP.es.md), [italien](ROADMAP.it.md) et [allemand](ROADMAP.de.md)). La même page s'ouvre dans l'application, dans la langue de l'app, depuis le dashboard (bouton feuille de route, à côté de l'aide). La compatibilité XDF (fichiers de définition TunerPro) y figure, prévue pour plus tard, quand j'aurai le temps de m'y pencher.
+Ce qui est en cours, ce qui est prévu et ce que les utilisateurs ont demandé : [ROADMAP.fr.md](ROADMAP.fr.md) (aussi en [anglais](ROADMAP.md), [espagnol](ROADMAP.es.md), [italien](ROADMAP.it.md), [allemand](ROADMAP.de.md), [portugais](ROADMAP.pt.md) et [roumain](ROADMAP.ro.md)). La même page s'ouvre dans l'application, dans la langue de l'app, depuis le dashboard (bouton feuille de route, à côté de l'aide). La compatibilité XDF (fichiers de définition TunerPro) y figure, prévue pour plus tard, quand j'aurai le temps de m'y pencher.
 
 ## 📫 Contact
 

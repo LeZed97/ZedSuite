@@ -4,7 +4,7 @@
 //! que `check_for_update` / `download_and_install_update` — mais n'installe
 //! rien.
 //!
-//! Usage : cargo run --example update_probe -- <owner/repo> [version_courante] [x64|x86|macos]
+//! Usage : cargo run --example update_probe -- <owner/repo> [version_courante] [x64|x86|macos|appimage|deb]
 
 use std::io::Write;
 use zedsuite_lib::update::{parse_version, pick_asset, UpdateTarget};
@@ -31,11 +31,23 @@ fn self_test_pick_asset() {
         asset("ZedSuite_1.2.0_x86-setup.exe"),
         asset("ZedSuite_1.2.0_macos-universal.dmg"),
         asset("ZedSuite_1.2.0_macos-universal.app.tar.gz"),
+        asset("ZedSuite_1.2.0_linux-x86_64.AppImage"),
+        asset("ZedSuite_1.2.0_linux-amd64.deb"),
     ];
     let name = |t| pick_asset(&release, t).map(|(n, _)| n).unwrap_or_default();
     assert_eq!(name(UpdateTarget::WindowsX64), "zedsuite_1.2.0_x64-setup.exe");
     assert_eq!(name(UpdateTarget::WindowsX86), "zedsuite_1.2.0_x86-setup.exe");
     assert_eq!(name(UpdateTarget::MacOS), "zedsuite_1.2.0_macos-universal.app.tar.gz");
+    // Linux : chaque installation prend son propre format, jamais l'autre
+    assert_eq!(name(UpdateTarget::LinuxAppImage), "zedsuite_1.2.0_linux-x86_64.appimage");
+    assert_eq!(name(UpdateTarget::LinuxDeb), "zedsuite_1.2.0_linux-amd64.deb");
+    // Release sans fichiers Linux (1.2.0 et avant) : rien, bouton « Voir sur GitHub »
+    let no_linux = [asset("ZedSuite_1.2.0_x64-setup.exe"), asset("ZedSuite_1.2.0_macos-universal.app.tar.gz")];
+    assert!(pick_asset(&no_linux, UpdateTarget::LinuxAppImage).is_none());
+    assert!(pick_asset(&no_linux, UpdateTarget::LinuxDeb).is_none());
+    // Une build x86_64 ignore un fichier aarch64
+    let arm_only = [asset("ZedSuite_1.2.0_linux-aarch64.AppImage")];
+    assert_eq!(pick_asset(&arm_only, UpdateTarget::LinuxAppImage).is_some(), cfg!(target_arch = "aarch64"));
 
     // Release Windows seule : rien pour macOS (fenêtre « pas encore de build macOS »)
     let windows_only = [asset("ZedSuite_1.2.0_x64-setup.exe"), asset("ZedSuite_1.2.0_x86-setup.exe")];
@@ -53,7 +65,7 @@ fn self_test_pick_asset() {
     ];
     let picked = pick_asset(&per_arch, UpdateTarget::MacOS).map(|(n, _)| n).unwrap();
     assert!(picked.contains(if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" }));
-    println!("pick_asset: OK (x64 / x86 / macOS, release Windows seule, dmg ignoré, par architecture)");
+    println!("pick_asset: OK (x64 / x86 / macOS / AppImage / deb, release sans Linux, dmg ignoré, par architecture)");
 }
 
 async fn run() {

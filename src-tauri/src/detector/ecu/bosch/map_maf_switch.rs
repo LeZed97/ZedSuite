@@ -112,7 +112,9 @@ fn push_switch(
         DataType::UInt8,
     );
     map.name = Some(name.to_string());
-    map.category = Some("Smoke limitation".to_string());
+    // Même dossier que les cartes de fumée des EDC16 (« Smoke Limiter »),
+    // pas la catégorie EDC15 « Smoke limitation » qui ouvrait un second dossier.
+    map.category = Some("Smoke Limiter".to_string());
     map.description = Some(description.to_string());
     map.unit = Some("-".to_string());
     map.correction_factor = Some(1.0);
@@ -159,6 +161,8 @@ mod tests {
         assert_eq!(named(&maps, "Lambda/smoke maps switch"), Some(0x404));
         assert_eq!(named(&maps, "MAP/MAF switch"), Some(0x406));
         assert_eq!(maps[0].size, 1);
+        // dans le dossier des cartes de fumée EDC16
+        assert!(maps.iter().all(|m| m.category.as_deref() == Some("Smoke Limiter")));
     }
 
     #[test]

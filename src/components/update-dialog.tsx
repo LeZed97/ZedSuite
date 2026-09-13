@@ -56,8 +56,8 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
   const startUpdate = async () => {
     if (!info.download_url) {
       if (isLinux()) {
-        // No auto-installer on Linux (AppImage/deb): send the user to the
-        // releases page so they can grab the asset themselves.
+        // Release without a Linux asset (or a copy that is neither an
+        // AppImage nor a .deb install): the releases page instead.
         void openExternal(ZEDSUITE_RELEASES_URL);
         return;
       }

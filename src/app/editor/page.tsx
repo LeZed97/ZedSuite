@@ -71,6 +71,7 @@ import {
   applyDisplayOverrides,
   displaySettingsDiffer,
   extractDisplayOverrides,
+  isEmptyOverrides,
   loadMapDisplayPrefs,
   mapFamilyKey,
   normalizeEcuKey,
@@ -1725,7 +1726,7 @@ function EditorPageContent() {
   });
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { settings, platform } = useSettings();
+  const { settings, platform, isLoading: settingsLoading } = useSettings();
   const { t } = useI18n();
 
   // Theme-based color helpers (glassmorphism tokens — OLED keeps true black)
@@ -2220,6 +2221,10 @@ function EditorPageContent() {
   const [mapPropertiesTarget, setMapPropertiesTarget] = useState<MapData | null>(null);
   // Store pour les settings d'affichage de chaque map (clé: mapAddress)
   const [mapDisplaySettingsStore, setMapDisplaySettingsStore] = useState<Map<number, MapDisplaySettings>>(new Map());
+  // Incrémenté à chaque restauration des réglages d'un projet : la mémoire
+  // par calculateur doit se réappliquer APRÈS, sinon la restauration
+  // asynchrone (réponse du fichier projet) écrase ce qu'elle avait posé.
+  const [displayRestoreTick, setDisplayRestoreTick] = useState(0);
 
   // Preview window state
   const [showPreviewWindow, setShowPreviewWindow] = useState(false);
@@ -3909,6 +3914,7 @@ function EditorPageContent() {
               });
               if (restored.size > 0) {
                 setMapDisplaySettingsStore(restored);
+                setDisplayRestoreTick((t) => t + 1);
               }
             }
 
@@ -3975,6 +3981,7 @@ function EditorPageContent() {
           restoredSettings.set(parseInt(key), value as MapDisplaySettings);
         });
         setMapDisplaySettingsStore(restoredSettings);
+        setDisplayRestoreTick((t) => t + 1);
       }
 
       // Check mappack unlock status from server
@@ -5753,7 +5760,35 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       return newStore;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapsForDisplayPrefs, ecuKeyForDisplayPrefs, projectData?.fileId, settings.rememberMapDisplay]);
+  }, [mapsForDisplayPrefs, ecuKeyForDisplayPrefs, projectData?.fileId, settings.rememberMapDisplay, displayRestoreTick]);
+
+  // Option cochée alors qu'un projet est ouvert : ce que le projet a déjà
+  // comme réglages (une famille = l'écart de sa première map réglée) est
+  // enregistré pour ce type d'ECU, pour ne pas obliger à tout refaire.
+  // Ignoré tant que les réglages ne sont pas chargés (le passage initial
+  // false → true du chargement n'est pas un clic de l'utilisateur).
+  const rememberSeenRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (settingsLoading) return;
+    const was = rememberSeenRef.current;
+    rememberSeenRef.current = settings.rememberMapDisplay;
+    if (was !== false || !settings.rememberMapDisplay) return;
+    const ecuKey = normalizeEcuKey(projectData?.ecu_type);
+    const maps: MapData[] = projectData?.detectionResults?.maps ?? [];
+    if (!ecuKey || maps.length === 0) return;
+    const done = new Set<string>();
+    maps.forEach((m) => {
+      const stored = mapDisplaySettingsStore.get(m.address);
+      if (!stored) return;
+      const family = mapFamilyKey(m.name);
+      if (done.has(family)) return;
+      const overrides = extractDisplayOverrides(stored, getDefaultMapDisplaySettings(m));
+      if (isEmptyOverrides(overrides)) return;
+      done.add(family);
+      saveMapDisplayPref(ecuKey, family, overrides);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsLoading, settings.rememberMapDisplay]);
 
   const toggleFolder = (folderName: string) => {
     // Block opening sub-folders when mappack is locked (only allow "all" root folder)

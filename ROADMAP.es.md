@@ -14,7 +14,6 @@ Para pedir una función o informar de un error: abre una issue en [GitHub](https
 - EDC15VM: comprobar en el coche que los mapas SVRL están realmente activos cuando el detector los encuentra.
 - EDC16U31: mejor detección, aún faltan algunos archivos EDC16U31 en el banco de pruebas para terminarla bien (la familia 12x12 en 0x1D7xxx sigue sin nombre).
 - EDC16U1: identificación de los archivos del Touareg V10, donde hoy solo se encuentra uno de los dos números de ECU (seis archivos en el banco).
-- Detección de los mapas PID del control de turbo, primero en EDC15P.
 - Compatibilidad XDF (archivos de definición de TunerPro, para leer y escribir listas de mapas en ese formato). Previsto para más adelante, cuando tenga tiempo de dedicarme a ello.
 
 ## Pedido por los usuarios, en estudio
@@ -23,13 +22,11 @@ Para pedir una función o informar de un error: abre una issue en [GitHub](https
 - Importación y exportación CSV (el mappack JSON para WinOLS ya existe), e importación DAMOS.
 - Mapas favoritos, para acceder rápido a los que más se editan.
 - Una versión de referencia distinta de Ori para el "valor original" y la comparación.
-- Inverse driver wish y MAF linearisation en la lista de mapas.
 - Editar mapas directamente en la vista 3D.
 - Ajustar la estimación de potencia para toberas distintas de Firad, como Recambo o DSSR.
 - Editar dos versiones del mismo proyecto lado a lado.
 - Más funciones en la ventana de Propiedades de los mapas.
 - Resaltar en las ventanas de mapas todos los valores distintos del original.
-- Ventanas de mapas más grandes y un zoom real al 100 % en pantallas pequeñas. Hoy una ventana de mapa deja de crecer cuando sus celdas alcanzan su tamaño máximo, lo que deja espacio vacío a la derecha, y el zoom del editor está limitado por el ancho que exigen la barra de herramientas y la lista de mapas, alrededor del 75 % en una pantalla de 1024 píxeles de ancho. La idea es subir el tope del tamaño de celda y hacer que la barra de herramientas y la lista ocupen menos, para que el zoom llegue al 100 % en cualquier pantalla; también se estudia un tamaño de fuente ajustable.
 
 ## No previsto por ahora
 

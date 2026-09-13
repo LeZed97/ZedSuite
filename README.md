@@ -35,7 +35,7 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 - **Versioning** — "Ori" + named versions per project, compare view
 - **Lean storage** — original binary + a modification file per version, rebuilt automatically at export
 - **Virtual dyno** — power/torque estimation from the maps, printable PDF report
-- **DTC on/off** — read the fault-code table, disable codes and re-enable them later (EDC15 and EDC16); every VAG code comes with its description in the five languages of the app
+- **DTC on/off** — read the fault-code table, disable codes and re-enable them later (EDC15 and EDC16); every VAG code comes with its description in the seven languages of the app
 - **Solutions** — one-click patches (launch control, …); deliberately kept to a minimum so the release wouldn't take even more time, more may come later
 - **Checksum correction** — EDC15 family and EDC16, implemented natively
 - **Brand auto-fill** — embedded ECU reference database (Bosch/VAG part numbers)
@@ -43,7 +43,7 @@ Detection is not perfect either. Each family was calibrated on a bench made of e
 - **Automatic updates** — the app checks GitHub once a day for new releases; one click to install
 - **3 themes** — dark, light and OLED, for every kind of screen
 - **Any screen size** — resizable map panel and browser-style zoom in the editor, from laptops to ultrawides
-- **Five languages** — English, French, Spanish, Italian and German, for the app and the installer; adding another is easy (a single translations file), and map names are deliberately untranslated — they stay in English
+- **Seven languages** — English, French, Spanish, Italian, German, Portuguese and Romanian, for the app and the installer; adding another is easy (a single translations file), and map names are deliberately untranslated — they stay in English
 
 ## 🔧 Working with modified files
 
@@ -97,7 +97,7 @@ Everyone whose code, report or file changed the app, with what it changed and th
 
 ## ⬇️ Download
 
-Everything is in the **Assets** section of the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest). Once installed, the app keeps itself up to date on its own on Windows and macOS; on Linux it tells you when a new version is out and opens the release page.
+Everything is in the **Assets** section of the [latest release](https://github.com/LeZed97/ZedSuite/releases/latest). Once installed, the app keeps itself up to date on its own on the three systems.
 
 **Windows** — download `ZedSuite_x.y.z_x64-setup.exe` and run it (on a 32-bit Windows, take `ZedSuite_x.y.z_x86-setup.exe` instead). ZedSuite requires **Windows 10 or 11**: adapting it to Windows 7 would have required a lot more work.
 
@@ -107,11 +107,11 @@ Everything is in the **Assets** section of the [latest release](https://github.c
 curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
 ```
 
-**Linux** — download `ZedSuite_x.y.z_linux-x86_64.AppImage`, make it executable (`chmod +x`) and run it, or install the `.deb` with `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. 64-bit x86, Debian 12, Ubuntu 22.04 or a newer derivative (the app needs webkit2gtk 4.1). The Linux build does not update itself yet: the app tells you when a new version is out and takes you to the release page. Linux support was contributed by [@bferd](https://github.com/bferd).
+**Linux** — download `ZedSuite_x.y.z_linux-x86_64.AppImage`, make it executable (`chmod +x`) and run it, or install the `.deb` with `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. 64-bit x86, Debian 12, Ubuntu 22.04 or a newer derivative (the app needs webkit2gtk 4.1). Updates install themselves there too: the AppImage replaces its own file, the `.deb` goes through the system password prompt. Linux support was contributed by [@bferd](https://github.com/bferd).
 
 ## 🗺️ Roadmap
 
-What is being worked on, what is planned and what users asked for: [ROADMAP.md](ROADMAP.md) (also in [French](ROADMAP.fr.md), [Spanish](ROADMAP.es.md), [Italian](ROADMAP.it.md) and [German](ROADMAP.de.md)). The same page opens inside the app, in the app language, from the dashboard (roadmap button next to the help button). XDF compatibility (TunerPro definition files) is on it, planned for later, when I have the time to look into it.
+What is being worked on, what is planned and what users asked for: [ROADMAP.md](ROADMAP.md) (also in [French](ROADMAP.fr.md), [Spanish](ROADMAP.es.md), [Italian](ROADMAP.it.md), [German](ROADMAP.de.md), [Portuguese](ROADMAP.pt.md) and [Romanian](ROADMAP.ro.md)). The same page opens inside the app, in the app language, from the dashboard (roadmap button next to the help button). XDF compatibility (TunerPro definition files) is on it, planned for later, when I have the time to look into it.
 
 ## 📫 Contact
 

@@ -27,7 +27,7 @@
  */
 
 import { isBigEndianEcu } from "./ecu-endianness";
-import { resolveAxisLabels, resolveMapCellLayout } from "./map-cell-layout";
+import { resolveAxisLabels, resolveAxisSources, resolveMapCellLayout } from "./map-cell-layout";
 
 /** Superset of the editor MapData with the raw detection fields */
 export interface ExportMapData {
@@ -64,6 +64,9 @@ type WinolsMap = Record<string, string>;
 /** Sous-ensemble des réglages d'affichage par map (fenêtre Propriétés) utile
  *  à l'export : le miroir de chaque axe. Clé = adresse de la map (string). */
 export interface MappackDisplaySettings {
+  /** Vue transposée par l'utilisateur (bouton d'inversion) : les miroirs
+   *  portent sur les axes AFFICHÉS, ils changent donc d'axe fichier. */
+  invertDisplay?: boolean;
   xAxis?: { mirror?: boolean };
   yAxis?: { mirror?: boolean };
 }
@@ -197,11 +200,28 @@ function buildWinolsMap(
   // Miroirs choisis par l'utilisateur : l'axe X s'exporte croissant par
   // défaut (bBackwards 0), l'axe Y de haut en bas comme l'app (bBackwards 1) ;
   // un miroir inverse le drapeau correspondant.
-  const xMirror = ds?.xAxis?.mirror === true;
+  // Les miroirs de la fenêtre Propriétés portent sur les axes AFFICHÉS.
+  // Quand l'app montre la map transposée (par défaut sur certaines maps, ou
+  // par le bouton d'inversion), l'axe X affiché est l'axe Y du fichier : le
+  // miroir doit suivre l'axe fichier que WinOLS lira, sinon il tombe sur le
+  // mauvais axe. Même résolution des sources d'axes que le MapViewer.
+  const shown = resolveAxisSources({
+    name: m.name, description: m.description, size: m.size ?? 0, data_type: m.data_type,
+    rows_reversed: m.rows_reversed === true, dimensions: m.dimensions,
+    x_axis_address: m.x_axis_address, y_axis_address: m.y_axis_address,
+    x_axis_correction: m.x_axis_correction, y_axis_correction: m.y_axis_correction,
+    x_axis_offset: m.x_axis_offset, y_axis_offset: m.y_axis_offset,
+    x_label: m.x_label, y_label: m.y_label,
+  });
+  const shownXIsExportedX = (shown.x.address || 0) === (xAxis.address || 0);
+  const mirrorsSwapped = !shownXIsExportedX !== (ds?.invertDisplay === true);
+  const shownXMirror = ds?.xAxis?.mirror === true;
+  const shownYMirror = ds?.yAxis?.mirror === true;
+  const xMirror = mirrorsSwapped ? shownYMirror : shownXMirror;
   // Lignes stockées à l'envers de l'axe Y (bloc Duration de certains EDC16) :
   // WinOLS lit les lignes dans l'ordre du fichier, on retourne l'axe pour
   // qu'il reste aligné (même effet qu'un miroir demandé par l'utilisateur).
-  const yMirror = (ds?.yAxis?.mirror === true) !== (m.rows_reversed === true);
+  const yMirror = (mirrorsSwapped ? shownXMirror : shownYMirror) !== (m.rows_reversed === true);
   // Même libellé que la liste de l'app : « Nom [codeblock N] » sur EDC15
   // (plusieurs jeux de maps par fichier), rien sur EDC16 (sur demande)
   const baseName = m.name || `Map ${hexAddr(m.address)}`;

@@ -116,9 +116,9 @@ export function RoadmapModal({ open, onClose, theme, language, version, labels }
                   );
                 case "list":
                   return (
-                    <ul key={key} className="space-y-1 mb-2">
+                    <ul key={key} className="columns-1 sm:columns-2 gap-x-8 mb-3">
                       {b.items.map((it, j) => (
-                        <li key={`${key}-${j}`} className="flex gap-2">
+                        <li key={`${key}-${j}`} className="flex gap-2 break-inside-avoid mb-1.5">
                           <span className={textSoft}>•</span>
                           <span>{renderInline(it, `${key}-${j}`)}</span>
                         </li>
