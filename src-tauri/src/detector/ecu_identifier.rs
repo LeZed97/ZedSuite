@@ -62,6 +62,7 @@ pub enum ECUType {
     EDC16U,      // VAG generic (fallback)
     EDC16C,      // PSA
     EDC16CP,     // PSA newer
+    EDC16C39,    // Fiat/Alfa Romeo Multijet - 2MB
 
     // Bosch EDC17 family (Diesel)
     EDC17C,
@@ -134,6 +135,14 @@ impl ECUIdentifier {
         // Identify them explicitly so they can never pass for an EDC16.
         if let Some(id) = Self::identify_unsupported_bosch(data) {
             log::debug!("🚫 Unsupported Bosch family detected: {:?}", id.ecu_type);
+            return id;
+        }
+
+        // Fiat/Alfa Romeo EDC16C39 gate. MUST run before the VAG variant
+        // logic: EDC16C39 is also a 2MB Bosch EDC16 dump and would otherwise
+        // reach detect_edc16_variant() and be labelled a VAG EDC16U34.
+        if let Some(id) = Self::identify_fiat_alfa_edc16c39(data) {
+            log::debug!("Identified as Fiat/Alfa EDC16C39: {:?}", id.ecu_type);
             return id;
         }
 
@@ -1198,7 +1207,96 @@ impl ECUIdentifier {
     fn identify_by_heuristics(_data: &[u8]) -> ECUIdentification {
         Self::unknown_ecu(0.20)
     }
-    
+
+    /// Positive identification of a Fiat/Alfa Romeo EDC16C39 (Multijet
+    /// common rail).
+    ///
+    /// Evidence used:
+    ///   A. the literal family string "EDC16C39" (found in every one of 4
+    ///      real dumps checked, both the Alfa/Fiat passenger-car layout and
+    ///      the Fiat Ducato van layout -- a real, findable marker, unlike
+    ///      the size+HW-prefix heuristic the VAG variants rely on, which
+    ///      EDC16C39 shares with several OTHER OEMs' own EDC16 chips (Opel,
+    ///      Hyundai/Kia, Iveco, Saab all badge the same base chip);
+    ///   B. structural confirmation that the calibrated EGR block
+    ///      (`AirCtl_rEGRBas`, see `edc16c39::signatures`) decodes correctly
+    ///      at its confirmed real address -- this is what raises confidence,
+    ///      and is what the detector itself needs anyway to report maps.
+    ///
+    /// Deliberately conservative: string evidence alone is enough to name
+    /// the family (returning Unknown for a real Fiat/Alfa file is the
+    /// annoying failure CONTRIBUTING.md warns about), but confidence stays
+    /// lower without the structural check, and detect_maps() will correctly
+    /// report 0 maps for a same-chip file from an OEM outside this corpus
+    /// (see edc16c39::mod's "Known limits").
+    fn identify_fiat_alfa_edc16c39(data: &[u8]) -> Option<ECUIdentification> {
+        if data.len() != 2_097_152 {
+            return None;
+        }
+        let scan_limit = std::cmp::min(Self::MAX_SCAN_BYTES.max(0x200000), data.len());
+        let has_family_string = Self::contains_sequence(&data[..scan_limit], b"EDC16C39")
+            || Self::contains_sequence(&data[..scan_limit], b"EDC16 C39");
+        if !has_family_string {
+            return None;
+        }
+
+        let structural = Self::has_edc16c39_egr_block(data);
+
+        Some(ECUIdentification {
+            manufacturer: ECUManufacturer::Bosch,
+            ecu_type: ECUType::EDC16C39,
+            variant: Some("Fiat/Alfa Romeo Multijet".to_string()),
+            software_version: Self::extract_bosch_sw_number(data),
+            hardware_version: Self::extract_bosch_hw_number_full(data),
+            part_number: None,
+            confidence: if structural { 0.92 } else { 0.75 },
+        })
+    }
+
+    /// True when the confirmed `AirCtl_rEGRBas` block (8x16, RPM x %) decodes
+    /// correctly at its real address -- see `edc16c39::signatures`'s module
+    /// doc for the corpus this was confirmed against. Positional and
+    /// structural, not a substring search, so it cannot be triggered by
+    /// coincidental bytes.
+    fn has_edc16c39_egr_block(data: &[u8]) -> bool {
+        const EGR_ADDR: usize = 0x1C4384;
+        if data.len() < EGR_ADDR + 4 {
+            return false;
+        }
+        let nx = u16::from_be_bytes([data[EGR_ADDR], data[EGR_ADDR + 1]]) as usize;
+        let ny = u16::from_be_bytes([data[EGR_ADDR + 2], data[EGR_ADDR + 3]]) as usize;
+        if nx != 8 || ny != 16 {
+            return false;
+        }
+        let x_off = EGR_ADDR + 4;
+        let end = x_off + 2 * (nx + ny);
+        if end > data.len() {
+            return false;
+        }
+        let read_i16 = |off: usize| i16::from_be_bytes([data[off], data[off + 1]]);
+        let x: Vec<i16> = (0..nx).map(|i| read_i16(x_off + i * 2)).collect();
+        let y: Vec<i16> = (0..ny).map(|i| read_i16(x_off + nx * 2 + i * 2)).collect();
+        x.windows(2).all(|w| w[1] > w[0]) && y.windows(2).all(|w| w[1] > w[0])
+    }
+
+    /// Bosch "1037" + 6 digits software number, wherever it appears in the
+    /// first `MAX_SCAN_BYTES` (unlike the CP31 marker, no single fixed offset
+    /// was confirmed stable across the 3-file EDC16C39 corpus -- see
+    /// signatures.rs's module doc).
+    fn extract_bosch_sw_number(data: &[u8]) -> Option<String> {
+        let scan_limit = std::cmp::min(Self::MAX_SCAN_BYTES, data.len());
+        let window = &data[..scan_limit];
+        let needle = b"1037";
+        let pos = window.windows(needle.len()).position(|w| w == needle)?;
+        let end = (pos + 10).min(window.len());
+        let field = &window[pos..end];
+        if field.len() == 10 && field.iter().all(|c| c.is_ascii_digit()) {
+            String::from_utf8(field.to_vec()).ok()
+        } else {
+            None
+        }
+    }
+
     // Helper methods
     
     fn unknown_ecu(confidence: f32) -> ECUIdentification {
@@ -1763,5 +1861,90 @@ mod tests {
         let sw = id.software_version.as_ref().unwrap();
         assert!(sw.contains("038906019"), "SW should contain 038906019, got: {}", sw);
         assert!(sw.contains("NJ"), "SW should contain NJ, got: {}", sw);
+    }
+
+    // ---- EDC16C39 (Fiat/Alfa Romeo Multijet) ----
+    //
+    // Fixtures reproduce the layout confirmed on 3 real dumps (Alfa Romeo
+    // 159 x2 builds, Alfa Romeo 147): family string around the calibration
+    // area, and the real `AirCtl_rEGRBas` block (8x16, RPM x %) at its
+    // confirmed address 0x1C4384. No .bin is committed.
+
+    fn edc16c39_fixture() -> Vec<u8> {
+        let mut data = vec![0u8; 2_097_152];
+        data[0x1C0601..0x1C0601 + 8].copy_from_slice(b"EDC16C39");
+        data[0x1C0010..0x1C0010 + 10].copy_from_slice(b"1037377871");
+
+        // Real AirCtl_rEGRBas block: nx=8 (rpm), ny=16 (%), then 128 Z cells.
+        let x: [i16; 8] = [0, 500, 1000, 1500, 2000, 2500, 3000, 3500];
+        let y: [i16; 16] = [
+            0, 1229, 1638, 2048, 2458, 2867, 3277, 3686, 4096, 4915, 5325, 5734, 6144, 6963, 7782,
+            8192,
+        ];
+        let addr = 0x1C4384;
+        data[addr..addr + 2].copy_from_slice(&8u16.to_be_bytes());
+        data[addr + 2..addr + 4].copy_from_slice(&16u16.to_be_bytes());
+        let mut off = addr + 4;
+        for v in x {
+            data[off..off + 2].copy_from_slice(&v.to_be_bytes());
+            off += 2;
+        }
+        for v in y {
+            data[off..off + 2].copy_from_slice(&v.to_be_bytes());
+            off += 2;
+        }
+        for _ in 0..8 {
+            for v in y {
+                data[off..off + 2].copy_from_slice(&v.to_be_bytes());
+                off += 2;
+            }
+        }
+        data
+    }
+
+    #[test]
+    fn edc16c39_dump_is_identified_by_family_string_and_structure() {
+        let id = ECUIdentifier::identify(&edc16c39_fixture());
+        assert_eq!(id.manufacturer, ECUManufacturer::Bosch);
+        assert_eq!(id.ecu_type, ECUType::EDC16C39);
+        assert!(id.confidence >= 0.90, "confidence was {}", id.confidence);
+    }
+
+    /// The whole point of the Fiat/Alfa gate: without it a 2MB EDC16C39
+    /// dump would reach detect_edc16_variant() and be labelled a VAG
+    /// EDC16U34, since both are plain 2MB Bosch EDC16 dumps.
+    #[test]
+    fn edc16c39_dump_is_never_labelled_vag() {
+        let id = ECUIdentifier::identify(&edc16c39_fixture());
+        assert_ne!(id.ecu_type, ECUType::EDC16U34);
+        assert_ne!(id.ecu_type, ECUType::EDC16U31);
+        assert_ne!(id.ecu_type, ECUType::EDC16U1);
+    }
+
+    /// Family string present but the confirmed block does not decode (e.g. a
+    /// same-chip file from an OEM outside the 3-file corpus, like Fiat
+    /// Ducato or Opel): still named EDC16C39 (real, findable evidence), but
+    /// at lower confidence, and `EDC16C39Detector::detect` will correctly
+    /// report 0 maps for it (see edc16c39::mod's "Known limits").
+    #[test]
+    fn edc16c39_dump_without_the_confirmed_block_gets_lower_confidence() {
+        let mut data = edc16c39_fixture();
+        // Corrupt the EGR block's header so it no longer decodes as 8x16.
+        data[0x1C4384..0x1C4384 + 2].copy_from_slice(&0u16.to_be_bytes());
+        let id = ECUIdentifier::identify(&data);
+        assert_eq!(id.ecu_type, ECUType::EDC16C39);
+        assert!(id.confidence < 0.90, "confidence was {}", id.confidence);
+    }
+
+    /// Negative test required by CONTRIBUTING.md: a foreign 2MB file must
+    /// not be identified as EDC16C39.
+    #[test]
+    fn foreign_2mb_file_is_not_edc16c39() {
+        let mut data = vec![0u8; 2 * 1024 * 1024];
+        for (i, b) in data.iter_mut().enumerate() {
+            *b = ((i * 7 + 13) % 251) as u8;
+        }
+        let id = ECUIdentifier::identify(&data);
+        assert_ne!(id.ecu_type, ECUType::EDC16C39);
     }
 }

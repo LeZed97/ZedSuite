@@ -164,5 +164,33 @@
     ],
     "mappack_export_enabled": true,
     "mappack_price": 40
+  },
+  {
+    "id": "edc16c39",
+    "name": "EDC16C39",
+    "manufacturer": "Bosch",
+    "family": "EDC16",
+    "processor": "MPC5xx",
+    "endianness": "Big-Endian",
+    "file_sizes": [
+      "2MB"
+    ],
+    "vehicles": "Fiat/Alfa Romeo Multijet 1.9 JTD/JTDm (Alfa 159, Alfa 147 confirmed)",
+    "detection_method": "Self-describing block header + confirmed address + axis key",
+    "status": "beta",
+    "enabled": true,
+    "map_categories": [
+      "EGR",
+      "Air control",
+      "Engine torque request",
+      "Smoke limitation",
+      "Torque to IQ Conversion",
+      "Injection system",
+      "Turbo boost pressure",
+      "Turbo boost pressure control",
+      "Start of injection SOI"
+    ],
+    "mappack_export_enabled": false,
+    "mappack_price": 40
   }
 ]

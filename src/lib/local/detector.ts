@@ -35,6 +35,7 @@ export const SUPPORTED_ECUS = new Set([
   "EDC16U1",
   "EDC16U31",
   "EDC16U34",
+  "EDC16C39",
 ]);
 
 export async function identifyEcu(

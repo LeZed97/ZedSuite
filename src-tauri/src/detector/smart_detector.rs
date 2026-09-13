@@ -1,6 +1,6 @@
 use crate::models::DetectedMap;
 use crate::detector::ecu_identifier::{ECUIdentifier, ECUIdentification, ECUType};
-use crate::detector::ecu::bosch::{EDC15PDetector, EDC15VMDetector, EDC16U1Detector, EDC16U31Detector, EDC16U34Detector};
+use crate::detector::ecu::bosch::{EDC15PDetector, EDC15VMDetector, EDC16U1Detector, EDC16U31Detector, EDC16U34Detector, EDC16C39Detector};
 use crate::detector::ecu::bosch::edc16u34::EDC16Variant;
 use crate::detector::ecu::bosch::edc16u31::EDC16Variant as EDC16U31Variant;
 
@@ -71,6 +71,12 @@ impl SmartDetector {
             ECUType::EDC16U34 => {
                 log::debug!("📋 Using EDC16U34 specialized detector");
                 self.detect_edc16u34(data, EDC16Variant::EDC16U34, tuned_mode)
+            }
+            // EDC16C39 - route to dedicated EDC16C39 detector (Fiat/Alfa Romeo)
+            ECUType::EDC16C39 => {
+                log::debug!("📋 Using EDC16C39 specialized detector");
+                let detector = if tuned_mode { EDC16C39Detector::new_tuned() } else { EDC16C39Detector::new() };
+                detector.detect(data)
             }
             // Other EDC16 variants - no detection for now (return empty)
             ECUType::EDC16U | ECUType::EDC16C | ECUType::EDC16CP => {
