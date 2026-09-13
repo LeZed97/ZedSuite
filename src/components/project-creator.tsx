@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useThemeOptional } from "@/contexts/theme-context";
-import { identifyEcu, detectMaps } from "@/lib/local/detector";
+import { identifyEcu, detectMaps, inspectOlsContainer, extractOlsVersion, type OlsVersionInfo } from "@/lib/local/detector";
 import ZedGradientDefs, { ZedFileIcon } from "@/components/zed-gradient-defs";
 // Listes déroulantes au style de l'app (même composant que la langue des paramètres)
 import { StyledSelect } from "@/components/styled-select";
@@ -59,8 +59,20 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
     versions?: any[];
   }>({});
   
-  // Cached base64 file data (avoid re-encoding for detect call)
+  // Cached base64 file data (avoid re-encoding for detect call). Once a .ols container has been
+  // resolved to one chosen version, this holds the EXTRACTED raw ROM bytes, never the raw
+  // container bytes -- identification, detection and project creation all read from here.
   const fileBase64Ref = useRef<string | null>(null);
+
+  // Set only while `analyzeECUType` is waiting on the user to pick which saved version of a
+  // multi-version `.ols` file to use; identification is deferred until then. `null` the rest of
+  // the time, including for a raw dump or a single-version `.ols` file (auto-picked, see below).
+  const [pendingOlsChoice, setPendingOlsChoice] = useState<{
+    fileDataBase64: string;
+    fileName: string;
+    versions: OlsVersionInfo[];
+  } | null>(null);
+  const [isExtractingOlsVersion, setIsExtractingOlsVersion] = useState(false);
 
   // Form state
   const [projectName, setProjectName] = useState("");
@@ -121,10 +133,44 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
         chunks.push(String.fromCharCode(...uint8Array.subarray(i, i + chunkSize)));
       }
       const fileDataBase64 = btoa(chunks.join(''));
-      fileBase64Ref.current = fileDataBase64; // Cache for later use
+
+      // A .ols file is a WinOLS PROJECT (metadata header + one or more saved ROM versions), not
+      // a raw dump -- identification/detection need the actual ROM bytes of ONE chosen version,
+      // never the container's own bytes. `inspectOlsContainer` returns null for a plain raw
+      // dump (or any file it doesn't recognise), so that path is entirely unaffected below.
+      const olsInfo = await inspectOlsContainer(fileDataBase64);
+      if (olsInfo && olsInfo.versions.length > 1) {
+        // Ambiguous: defer identification until the user picks which saved version to use.
+        setPendingOlsChoice({ fileDataBase64, fileName: file.name, versions: olsInfo.versions });
+        setIsAnalyzing(false);
+        return;
+      }
+      const resolvedBase64 = olsInfo
+        ? await extractOlsVersion(fileDataBase64, olsInfo.versions[0].index)
+        : fileDataBase64;
+
+      await identifyAndSetState(resolvedBase64, file.name);
+    } catch (error: any) {
+      toast({
+        title: t.errors.ecuIdentificationFailed,
+        description: t.errors.ecuIdentificationFailedDescription,
+        variant: "destructive",
+      });
+      setEcuIdentification({ manufacturer: "Unknown", ecu_type: "Unknown", confidence: 0 });
+      setIsAnalyzing(false);
+    }
+  };
+
+  /** Once a .ols file's version ambiguity (if any) is resolved, this is the actual identification
+   *  step -- shared by the direct (raw dump / single-version .ols) path above and by
+   *  `chooseOlsVersion` below, so both run the exact same disabled-ECU check and error handling. */
+  const identifyAndSetState = async (fileDataBase64: string, fileName: string) => {
+    setIsAnalyzing(true);
+    try {
+      fileBase64Ref.current = fileDataBase64; // Cache for later use (detection + project creation)
 
       // Identify the ECU type via the embedded Rust detection engine
-      const identResult = await identifyEcu(fileDataBase64, file.name);
+      const identResult = await identifyEcu(fileDataBase64, fileName);
 
       // Check if this ECU type is enabled in the admin database
       if (identResult?.ecu_type && identResult.ecu_type !== "Unknown") {
@@ -183,6 +229,30 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setEcuIdentification(null);
+    setPendingOlsChoice(null);
+  };
+
+  /** User picked which saved version of a multi-version `.ols` file to use (see
+   *  `pendingOlsChoice`) -- extract just that version's raw ROM bytes and run the normal
+   *  identification flow on them. */
+  const chooseOlsVersion = async (versionIndex: number) => {
+    if (!pendingOlsChoice) return;
+    setIsExtractingOlsVersion(true);
+    try {
+      const extractedBase64 = await extractOlsVersion(pendingOlsChoice.fileDataBase64, versionIndex);
+      const fileName = pendingOlsChoice.fileName;
+      setPendingOlsChoice(null);
+      await identifyAndSetState(extractedBase64, fileName);
+    } catch (error: any) {
+      toast({
+        title: t.errors.ecuIdentificationFailed,
+        description: t.errors.ecuIdentificationFailedDescription,
+        variant: "destructive",
+      });
+      setPendingOlsChoice(null);
+    } finally {
+      setIsExtractingOlsVersion(false);
+    }
   };
 
   const handleCreateProject = async () => {
@@ -427,6 +497,47 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
                   </Button>
                 </div>
 
+                {/* .ols version picker -- shown instead of the identification block while a
+                    multi-version WinOLS project is waiting on the user to pick one saved
+                    version (see `pendingOlsChoice`); identification only starts afterwards. */}
+                {pendingOlsChoice ? (
+                  <div className={`p-4 border rounded-lg ${L ? "bg-black/[0.03] border-black/10" : "bg-black/15 border-white/20"}`}>
+                    <p className={`text-sm font-medium mb-3 ${L ? "text-slate-900" : "text-white"}`}>
+                      {t.upload?.olsPickVersion || "This WinOLS project has several saved versions — pick one to import:"}
+                    </p>
+                    <div className="space-y-2">
+                      {pendingOlsChoice.versions.map((v) => (
+                        <button
+                          key={v.index}
+                          type="button"
+                          disabled={isExtractingOlsVersion}
+                          onClick={() => chooseOlsVersion(v.index)}
+                          className={`w-full text-left px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                            L
+                              ? "bg-white/60 border-black/10 hover:bg-white text-slate-900"
+                              : "bg-black/20 border-white/10 hover:bg-black/30 text-white"
+                          }`}
+                        >
+                          <span className="font-medium">
+                            {v.label || `${t.upload?.olsVersion || "Version"} ${v.index}`}
+                          </span>
+                          <span className={`ml-2 text-sm ${L ? "text-slate-500" : "text-slate-400"}`}>
+                            ({(v.size / 1024).toFixed(0)} KB)
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {isExtractingOlsVersion && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className={`loader loader-sm${L ? " loader-light" : ""}`} />
+                        <p className={`text-sm ${L ? "text-slate-500" : "text-slate-400"}`}>
+                          {t.upload?.analyzingEcu || "Analyzing ECU file..."}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 {/* ECU Identification Display */}
                 {isAnalyzing ? (
                   <div className="flex items-center gap-3 p-4 border rounded-lg bg-red-500/10 border-red-500/30">
@@ -641,7 +752,7 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
           <div className="flex gap-3 pt-4">
             <Button
               onClick={handleCreateProject}
-              disabled={!selectedFile || !projectName.trim() || isUploading || isAnalyzing || ecuIdentification?.ecu_type === "Unknown"}
+              disabled={!selectedFile || !projectName.trim() || isUploading || isAnalyzing || !!pendingOlsChoice || ecuIdentification?.ecu_type === "Unknown"}
               className="w-full bg-gradient-to-r from-red-600/90 via-red-500/90 to-orange-500/90 hover:from-red-500/90 hover:via-red-400/90 hover:to-orange-400/90 text-white shadow-lg shadow-red-500/20"
               size="lg"
             >

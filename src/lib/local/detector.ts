@@ -67,6 +67,42 @@ export async function listEcus(): Promise<{ ecus: any[]; total: number; version:
   return invoke("list_ecus");
 }
 
+export interface OlsVersionInfo {
+  index: number;
+  size: number;
+  /** Human-readable label ("Original", "Stage 2 (DPFoff EGRoff)", ...) when the file's own
+   *  RevisionTag could be confidently split per version; absent otherwise. */
+  label?: string;
+}
+
+export interface OlsInspection {
+  make: string;
+  model: string;
+  manufacturer: string;
+  ecu_name: string;
+  hw_number: string;
+  sw_number: string;
+  versions: OlsVersionInfo[];
+}
+
+/**
+ * Recognises a `.ols` WinOLS project container (as opposed to a raw ECU dump) and lists its
+ * saved versions. Returns `null` when the file isn't one -- callers should fall back to treating
+ * it as a raw dump exactly as before this existed.
+ */
+export async function inspectOlsContainer(fileDataBase64: string): Promise<OlsInspection | null> {
+  return invoke<OlsInspection | null>("inspect_ols_container", { fileDataBase64 });
+}
+
+/**
+ * Extracts one saved version's raw ROM bytes out of a `.ols` container (`versionIndex` from
+ * `inspectOlsContainer`'s returned list). The result is base64-encoded raw dump bytes: feed it to
+ * `identifyEcu`/`detectMaps` exactly as if it had been the original file.
+ */
+export async function extractOlsVersion(fileDataBase64: string, versionIndex: number): Promise<string> {
+  return invoke<string>("extract_ols_version", { fileDataBase64, versionIndex });
+}
+
 /**
  * Version courante du moteur de détection. Un projet dont les résultats
  * portent une version antérieure est re-scanné à l'ouverture : sans ça il

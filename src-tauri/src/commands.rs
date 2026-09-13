@@ -56,6 +56,39 @@ pub fn identify_ecu(
     })
 }
 
+/// Inspects a file to see if it is a `.ols` WinOLS project container (as opposed to a raw ECU
+/// dump). Returns `Ok(None)` -- not an error -- when it isn't one, so the frontend can fall back
+/// to the existing raw-dump flow unchanged.
+///
+/// A `.ols` file can hold several saved ROM versions (e.g. "Original" + "Stage 1"); the caller
+/// must pick one and pass its `index` to `extract_ols_version` before running
+/// `identify_ecu`/`detect_maps` on the result.
+#[tauri::command]
+pub fn inspect_ols_container(file_data_base64: String) -> Result<Option<crate::ols_import::OlsInspection>, String> {
+    let data = decode_base64(&file_data_base64)?;
+    let result = crate::ols_import::inspect(&data);
+    log::warn!(
+        "🧩 [INSPECT-OLS] {} bytes -> {}",
+        data.len(),
+        match &result {
+            Some(info) => format!("recognised, {} version(s)", info.versions.len()),
+            None => "not a .ols container".to_string(),
+        }
+    );
+    Ok(result)
+}
+
+/// Extracts one saved version's raw ROM bytes out of a `.ols` container (`version_index` from
+/// `inspect_ols_container`'s returned list), base64-encoded for the same IPC shape every other
+/// command here uses. The result is a plain raw dump: feed it to `identify_ecu`/`detect_maps`
+/// exactly as if it had been the original file.
+#[tauri::command]
+pub fn extract_ols_version(file_data_base64: String, version_index: u32) -> Result<String, String> {
+    let data = decode_base64(&file_data_base64)?;
+    let extracted = crate::ols_import::extract_version(&data, version_index)?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(extracted))
+}
+
 /// Version du moteur de détection.
 ///
 /// À INCRÉMENTER dès qu'une modification change les résultats produits :

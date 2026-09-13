@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod detector;
 pub mod models;
+pub mod ols_import;
 pub mod update;
 
 
@@ -79,6 +80,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::identify_ecu,
+            commands::inspect_ols_container,
+            commands::extract_ols_version,
             commands::detect_maps,
             commands::detector_version,
             commands::list_ecus,
