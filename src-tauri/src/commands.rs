@@ -101,7 +101,13 @@ pub fn identify_ecu(
 ///   47 — Switch MAP/MAF des EDC16 (U1/U31/U34) et identification : un
 ///       EDC15VM sans référence VAG dans le binaire n'est plus pris
 ///       pour un EDC15P (2.5 V6).
-pub const DETECTOR_VERSION: u32 = 49;
+///   50 — EDC16C39 (Fiat/Alfa) : deux familles ne se signalent plus deux
+///       fois sur un même fichier (une clé d'axe partagée par plusieurs
+///       variantes de logiciel pouvait retenir une adresse réelle mais
+///       étrangère à la famille) ; et le rapport de complétude du mappack
+///       n'applique plus les règles VAG (EDC16U1/U31/U34) à ce chip --
+///       elles affichaient un faux 0 % pour toute famille EDC16 non-VAG.
+pub const DETECTOR_VERSION: u32 = 50;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
