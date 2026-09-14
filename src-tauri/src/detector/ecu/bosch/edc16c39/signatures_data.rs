@@ -42,6 +42,13 @@ pub const C39_KEYS_ACCPED_TRQENU: &[AxisKey] = &[
         y: &[0, 82, 328, 819, 1638, 2458, 3277, 4096, 4915, 5734, 6554, 7373, 8192, 8198, 8199, 8200],
         // real, confirmed: DOBLO (Fiat.Doblo.Bosch.EDC16C39.51809513.0281013675.383008.v0.bin)
     },
+    AxisKey {
+        nx: 13,
+        ny: 10,
+        x: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 5000, 5300],
+        y: &[0, 82, 287, 492, 1311, 2212, 3277, 5243, 6554, 8192],
+        // real, confirmed: Fiat.Croma.Bosch.EDC16C39.51806274.391910.v0.bin
+    },
 ];
 
 /// Axis key for `AirCtl_mDesBas` (Air Mass Setpoint).
@@ -140,6 +147,14 @@ pub const C39_KEYS_LMBDSMKHIGH: &[AxisKey] = &[
         // real, confirmed: DOBLO (Fiat.Doblo.Bosch.EDC16C39.51809513.0281013675.383008.v0.bin), and
         // matches the address-window (phase 0) hit directly on Croma, Bravo and Grande Punto too.
     },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[600, 800, 1000, 1125, 1250, 1375, 1500, 1675, 1750, 1875, 2000, 2250, 2500, 2750, 3000, 3750],
+        y: &[3000, 3500, 4000, 4500, 5000, 5600, 6200, 6600, 7000, 7400, 7750, 8400, 9000, 9550, 10000, 10500],
+        // real, confirmed: Alfa147_Ducati_170hp_0281015228_395299.bin, read at the slot the reference
+        // database declares for this exact build (0x1CD438 High, 0x1CD67C Low)
+    },
 ];
 
 /// Axis key for `LmbdSmkLow` (Smoke Limiter (Lambda Low)).
@@ -176,6 +191,14 @@ pub const C39_KEYS_LMBDSMKLOW: &[AxisKey] = &[
         x: &[500, 700, 800, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4250, 4500],
         y: &[3500, 4200, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9250, 9500, 9750, 10000],
         // real, confirmed: DOBLO (Fiat.Doblo.Bosch.EDC16C39.51809513.0281013675.383008.v0.bin)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[600, 800, 1000, 1125, 1250, 1375, 1500, 1675, 1750, 1875, 2000, 2250, 2500, 2750, 3000, 3750],
+        y: &[3000, 3500, 4000, 4500, 5000, 5600, 6200, 6600, 7000, 7400, 7750, 8400, 9000, 9550, 10000, 10500],
+        // real, confirmed: Alfa147_Ducati_170hp_0281015228_395299.bin, read at the slot the reference
+        // database declares for this exact build (0x1CD438 High, 0x1CD67C Low)
     },
 ];
 
@@ -602,6 +625,13 @@ pub const C39_KEYS_ACCPED_TRQENGA: &[AxisKey] = &[
         y: &[0, 82, 328, 819, 1638, 2458, 3277, 4096, 4915, 5734, 6554, 7373, 8192, 8198, 8199, 8200],
         // real, confirmed: DOBLO (Fiat.Doblo.Bosch.EDC16C39.51809513.0281013675.383008.v0.bin)
     },
+    AxisKey {
+        nx: 13,
+        ny: 10,
+        x: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 5000, 5300],
+        y: &[0, 82, 287, 492, 1311, 2212, 3277, 5243, 6554, 8192],
+        // real, confirmed: Fiat.Croma.Bosch.EDC16C39.51806274.391910.v0.bin
+    },
 ];
 
 /// Axis key for `AccPed_trqEngB` (Driver Wish B).
@@ -642,6 +672,13 @@ pub const C39_KEYS_ACCPED_TRQENGB: &[AxisKey] = &[
         y: &[0, 82, 328, 819, 1638, 2458, 3277, 4096, 4915, 5734, 6554, 7373, 8192, 8198, 8199, 8200],
         // real, confirmed: DOBLO (Fiat.Doblo.Bosch.EDC16C39.51809513.0281013675.383008.v0.bin)
     },
+    AxisKey {
+        nx: 13,
+        ny: 10,
+        x: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 5000, 5300],
+        y: &[0, 82, 287, 492, 1311, 2212, 3277, 5243, 6554, 8192],
+        // real, confirmed: Fiat.Croma.Bosch.EDC16C39.51806274.391910.v0.bin
+    },
 ];
 
 /// Map families confirmed on the Alfa 159/147-class EDC16C39 layout (2MB dump).
@@ -650,6 +687,457 @@ pub const C39_KEYS_ACCPED_TRQENGB: &[AxisKey] = &[
 /// module doc). z_range_stock/tuned are the observed span of REAL Z data across those same
 /// 3 files (correctly signed/unsigned per the ECM-derived reference's declared physical
 /// range), widened -- not yet the "20 files" bar CONTRIBUTING.md ultimately asks for.
+/// Axis keys for `EngPrt_trqLim` (Torque Limiter). 25-point curve, corpus address 0x1CBCF6;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_ENGPRT_TRQLIM: &[AxisKey] = &[
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[0, 400, 410, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500, 5750, 6000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+6 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[0, 400, 410, 990, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500, 5750, 6000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.386726.v0.bin (+7 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[0, 400, 410, 990, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 4900, 5000, 5500, 5750, 6000],
+        y: &[],
+        // real, confirmed: Alfa.Bosch.EDC16C39.0281014459.394001.v0.bin (+2 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `TrqMaxGear1` (Gearbox Torque Limiter 1). 15-point curve, corpus address 0x1CE5D6;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEAR1: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+16 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[400, 410, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Fiat.Doblo.Bosch.EDC16C39.51798817.384357.v0.bin
+    },
+];
+
+/// Axis keys for `TrqMaxGear2` (Gearbox Torque Limiter 2). 15-point curve, corpus address 0x1CE614;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEAR2: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+17 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `TrqMaxGear3` (Gearbox Torque Limiter 3). 15-point curve, corpus address 0x1CE652;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEAR3: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+17 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `TrqMaxGear4` (Gearbox Torque Limiter 4). 15-point curve, corpus address 0x1CE690;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEAR4: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+17 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `TrqMaxGear5` (Gearbox Torque Limiter 5). 15-point curve, corpus address 0x1CE6CE;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEAR5: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+17 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `TrqMaxGear6` (Gearbox Torque Limiter 6). 15-point curve, corpus address 0x1CE70C;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEAR6: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+17 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `TrqMaxGearR` (Gearbox Torque Limiter R). 15-point curve, corpus address 0x1CE74A;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQMAXGEARR: &[AxisKey] = &[
+    AxisKey {
+        nx: 15,
+        ny: 0,
+        x: &[0, 400, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500, 5000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+17 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `EgrHys1` (EGR hysteresis 1). 25-point curve, corpus address 0x1C4AD4;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_EGRHYS1: &[AxisKey] = &[
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[500, 1000, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500, 5750, 6000, 6250, 6500, 6750, 7000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+25 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `EgrHys2` (EGR hysteresis 2). 25-point curve, corpus address 0x1C4B3A;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_EGRHYS2: &[AxisKey] = &[
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[750, 800, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4501, 4502, 4503, 4504, 4505, 4506, 4507, 4508],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+18 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[0, 1000, 1250, 1500, 2000, 3000, 3100, 3400, 4000, 4500, 4510, 4520, 4530, 4540, 4550, 4560, 4570, 4580, 4590, 4600, 4610, 4620, 4630, 4640, 4650],
+        y: &[],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281012145.377554.v0.bin (+3 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[700, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4501, 4502, 4503, 4504, 4505, 4506, 4507, 4508],
+        y: &[],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin (+1 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[650, 700, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4501, 4502, 4503, 4504, 4505, 4506, 4507, 4508],
+        y: &[],
+        // real, confirmed: Alfa.Bosch.EDC16C39.0281012146.389875.v0.bin
+    },
+];
+
+/// Axis keys for `EgrHys3` (EGR hysteresis 3). 25-point curve, corpus address 0x1C4BA0;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_EGRHYS3: &[AxisKey] = &[
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[500, 1000, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500, 5750, 6000, 6250, 6500, 6750, 7000],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+25 more file(s) with this exact grid)
+    },
+];
+
+/// Axis keys for `EgrHys4` (EGR hysteresis 4). 25-point curve, corpus address 0x1C4C06;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_EGRHYS4: &[AxisKey] = &[
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[750, 800, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4501, 4502, 4503, 4504, 4505, 4506, 4507, 4508],
+        y: &[],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+18 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[0, 1000, 1250, 1500, 2000, 3000, 3100, 3400, 4000, 4500, 4510, 4520, 4530, 4540, 4550, 4560, 4570, 4580, 4590, 4600, 4610, 4620, 4630, 4640, 4650],
+        y: &[],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281012145.377554.v0.bin (+3 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[700, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4501, 4502, 4503, 4504, 4505, 4506, 4507, 4508],
+        y: &[],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin (+1 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 25,
+        ny: 0,
+        x: &[650, 700, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4501, 4502, 4503, 4504, 4505, 4506, 4507, 4508],
+        y: &[],
+        // real, confirmed: Alfa.Bosch.EDC16C39.0281012146.389875.v0.bin
+    },
+];
+
+/// Axis keys for `TrqStrtBas` (Cranking Torque Map). 16x16 (+ declared alternate grids), corpus address 0x1E7374;
+/// each read at that family's slot on a real corpus dump.
+pub const C39_KEYS_TRQSTRTBAS: &[AxisKey] = &[
+    AxisKey {
+        nx: 10,
+        ny: 16,
+        x: &[0, 50, 400, 500, 600, 700, 800, 900, 1000, 1100],
+        y: &[2431, 2481, 2531, 2631, 2731, 2831, 2931, 3131, 3331, 3631, 3741, 3751, 3761, 3771, 3781, 3791],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+5 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 100, 400, 500, 600, 650, 700, 750, 800, 850, 900, 946, 1000, 1050, 1150, 1250],
+        y: &[2431, 2531, 2581, 2631, 2731, 2831, 2931, 3131, 3331, 3731, 3741, 3751, 3761, 3771, 3781, 3791],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.386726.v0.bin (+2 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 100, 400, 500, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1150, 1250],
+        y: &[2431, 2531, 2631, 2731, 2831, 2931, 3131, 3331, 3531, 3731, 3741, 3751, 3761, 3771, 3781, 3791],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281012145.377554.v0.bin (+5 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 100, 400, 500, 603, 650, 700, 750, 800, 850, 900, 946, 1000, 1050, 1150, 1250],
+        y: &[2431, 2531, 2631, 2731, 2831, 2931, 3131, 3331, 3531, 3731, 3741, 3751, 3761, 3771, 3781, 3791],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin (+1 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 10,
+        ny: 16,
+        x: &[0, 200, 400, 500, 600, 650, 700, 800, 1000, 1250],
+        y: &[2431, 2481, 2531, 2631, 2731, 2831, 2931, 3131, 3331, 3631, 3741, 3751, 3761, 3771, 3781, 3791],
+        // real, confirmed: FiatCroma_1.9mjtd_0281012147_A.bin
+    },
+];
+
+/// Axis key for IA_FuelAccel1 (Fuel During Acceleration 1). 16x16, address 0x1B19A0.
+pub const C39_KEYS_IA_ACCEL_1: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 500, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel2 (Fuel During Acceleration 2). 16x16, address 0x1B1BE4.
+pub const C39_KEYS_IA_ACCEL_2: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 500, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel3 (Fuel During Acceleration 3). 16x16, address 0x1B1E28.
+pub const C39_KEYS_IA_ACCEL_3: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 500, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel4 (Fuel During Acceleration 4). 16x16, address 0x1B206C.
+pub const C39_KEYS_IA_ACCEL_4: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 500, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel5 (Fuel During Acceleration 5). 16x16, address 0x1B22B0.
+pub const C39_KEYS_IA_ACCEL_5: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 300, 500, 800, 1000, 1500, 2000, 2500, 2700, 3000, 3300, 3700, 4000, 4500, 5000, 6000],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel6 (Fuel During Acceleration 6). 16x16, address 0x1B24F4.
+pub const C39_KEYS_IA_ACCEL_6: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 300, 500, 800, 1000, 1500, 2000, 2500, 2700, 3000, 3300, 3700, 4000, 4500, 5000, 6000],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel7 (Fuel During Acceleration 7). 16x16, address 0x1B2738.
+pub const C39_KEYS_IA_ACCEL_7: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 300, 500, 800, 1000, 1500, 2000, 2500, 2700, 3000, 3300, 3700, 4000, 4500, 5000, 6000],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2867, 3277, 3686, 4096, 4506, 5325, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for IA_FuelAccel8 (Fuel During Acceleration 8). 16x16, address 0x1B297C.
+pub const C39_KEYS_IA_ACCEL_8: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 500, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250],
+        y: &[0, 410, 819, 1229, 1638, 2048, 2458, 2867, 3277, 3686, 4096, 4915, 5734, 6554, 7373, 8192],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+
+
+
+
+/// Axis key for I3_InjCrvCorr1 (Injection Timing Correction 1). 16x16, address 0x1D1F98.
+pub const C39_KEYS_I3_INJCRV_CORR1: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 830, 870, 880, 920, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+7 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 850, 900, 950, 980, 1050, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin
+    },
+];
+
+/// Axis key for I3_InjCrvCorr2 (Injection Timing Correction 2). 16x16, address 0x1D21DC.
+pub const C39_KEYS_I3_INJCRV_CORR2: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 830, 870, 880, 920, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+7 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 850, 900, 950, 980, 1050, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin
+    },
+];
+
+/// Axis key for I3_InjCrvCorr3 (Injection Timing Correction 3). 16x16, address 0x1D2420.
+pub const C39_KEYS_I3_INJCRV_CORR3: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 830, 870, 880, 920, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+7 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 850, 900, 950, 980, 1050, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin
+    },
+];
+
+/// Axis key for I3_InjCrvCorr4 (Injection Timing Correction 4). 16x16, address 0x1D2664.
+pub const C39_KEYS_I3_INJCRV_CORR4: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 830, 870, 880, 920, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+7 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 850, 900, 950, 980, 1050, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin
+    },
+];
+
+/// Axis key for I3_InjCrvCorr5 (Injection Timing Correction 5). 16x16, address 0x1D28A8.
+pub const C39_KEYS_I3_INJCRV_CORR5: &[AxisKey] = &[
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 830, 870, 880, 920, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.147.Bosch.EDC16C39.0281012882.386722.v0.bin (+7 more file(s) with this exact grid)
+    },
+    AxisKey {
+        nx: 16,
+        ny: 16,
+        x: &[0, 850, 900, 950, 980, 1050, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000],
+        y: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500],
+        // real, confirmed: Alfa.159.Bosch.EDC16C39.0281013138.380494.v0.bin
+    },
+];
+
+/// Axis key for BS_TurboPressureCorr1 (Turbo Pressure Correction 1). 20x16, address 0x1E367A.
+pub const C39_KEYS_BS_TURBO2_1: &[AxisKey] = &[
+    AxisKey {
+        nx: 20,
+        ny: 16,
+        x: &[400, 600, 720, 850, 1000, 1200, 1350, 1500, 1800, 2000, 2250, 2500, 2750, 3000, 3300, 3600, 3900, 4200, 4600, 5000],
+        y: &[0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2900, 3200],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
+/// Axis key for BS_TurboPressureCorr2 (Turbo Pressure Correction 2). 20x16, address 0x1E3946.
+pub const C39_KEYS_BS_TURBO2_2: &[AxisKey] = &[
+    AxisKey {
+        nx: 20,
+        ny: 16,
+        x: &[400, 600, 720, 850, 1000, 1200, 1350, 1500, 1800, 2000, 2250, 2500, 2750, 3000, 3300, 3600, 3900, 4200, 4600, 5000],
+        y: &[0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2900, 3200],
+        // real, confirmed: Fiat.DUCATO.Bosch.EDC16C39.0281016051.398951.v0.bin (+5 more file(s) with this exact grid)
+    },
+];
+
 pub const MAP_TEMPLATES: &[MapTemplate] = &[
     MapTemplate {
         name: "Driver Wish (Neutral)",
@@ -666,6 +1154,11 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1C1CFC,
         signed: true,
         axis_keys: C39_KEYS_ACCPED_TRQENU,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        // Grids the reference database declares for this family on other real builds.
+        alt_grids: &[(13, 10), (13, 9), (16, 11), (16, 12)],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -683,6 +1176,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1C352C,
         signed: true,
         axis_keys: C39_KEYS_AIRCTL_MDESBAS,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     // Named without the token "EGR" on purpose: the frontend treats any map
@@ -706,6 +1203,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1C4384,
         signed: true,
         axis_keys: C39_KEYS_AIRCTL_REGRBAS,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -723,6 +1224,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1CD0D0,
         signed: false,
         axis_keys: C39_KEYS_LMBDSMKHIGH,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -740,6 +1245,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1CD314,
         signed: false,
         axis_keys: C39_KEYS_LMBDSMKLOW,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -757,6 +1266,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1CDBB2,
         signed: true,
         axis_keys: C39_KEYS_TRQ2QBAS,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -774,6 +1287,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1DC08A,
         signed: false,
         axis_keys: C39_KEYS_INJVCD_TIET,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -791,6 +1308,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1DF5FE,
         signed: true,
         axis_keys: C39_KEYS_PCR_CTLBAS,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -808,6 +1329,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1E132C,
         signed: false,
         axis_keys: C39_KEYS_PCR_DESBAS,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -825,6 +1350,13 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1E15B2,
         signed: false,
         axis_keys: C39_KEYS_PCR_DESMAXAP,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        // Grids the reference database declares for this family on other real builds (16x8 on 55 of 222).
+        alt_grids: &[(16, 8)],
+        // A single ceiling on every one of the 18 corpus files that carry it (4800-5600 hPa),
+        // raised by real tunes: flat is the family, not an erased zone.
+        allow_flat: true,
         calibrated: true,
     },
     MapTemplate {
@@ -842,6 +1374,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1E67E8,
         signed: false,
         axis_keys: C39_KEYS_RAIL_POINTBASE,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -859,6 +1395,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1E6BA2,
         signed: false,
         axis_keys: C39_KEYS_RAIL_POINTLIMTEM,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -876,6 +1416,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1E6C48,
         signed: false,
         axis_keys: C39_KEYS_RAIL_POINTMAX,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -893,6 +1437,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1D05DC,
         signed: true,
         axis_keys: C39_KEYS_INJCRV_BAS1,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -910,6 +1458,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1D0820,
         signed: true,
         axis_keys: C39_KEYS_INJCRV_BAS2,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -927,6 +1479,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1D0A64,
         signed: true,
         axis_keys: C39_KEYS_INJCRV_BAS3,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -944,6 +1500,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1D0CA8,
         signed: true,
         axis_keys: C39_KEYS_INJCRV_BAS4,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -961,6 +1521,10 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1D0EEC,
         signed: true,
         axis_keys: C39_KEYS_INJCRV_BAS5,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -978,6 +1542,11 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1C1AB8,
         signed: true,
         axis_keys: C39_KEYS_TRQENGDRIVEAWAY,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        // Grids the reference database declares for this family on other real builds.
+        alt_grids: &[(13, 14)],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -995,6 +1564,11 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1C1630,
         signed: true,
         axis_keys: C39_KEYS_ACCPED_TRQENGA,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        // Grids the reference database declares for this family on other real builds.
+        alt_grids: &[(13, 10)],
+        allow_flat: false,
         calibrated: true,
     },
     MapTemplate {
@@ -1012,6 +1586,629 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         address: 0x1C1874,
         signed: true,
         axis_keys: C39_KEYS_ACCPED_TRQENGB,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        // Grids the reference database declares for this family on other real builds.
+        alt_grids: &[(13, 10)],
+        allow_flat: false,
+        calibrated: true,
+    },
+    // Engine-protection torque ceiling over engine speed. Reference database: 25-point curve on
+    // 220 of 222 builds; decodes at its declared address on the shared corpus build.
+    MapTemplate {
+        name: "Torque Limiter",
+        bosch_label: "EngPrt_trqLim",
+        category: MapCategory::EngineTorqueLimiters,
+        nx: 25,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 600.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CBCF6,
+        signed: false,
+        axis_keys: C39_KEYS_ENGPRT_TRQLIM,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    // Seven back-to-back 15-point curves (gears 1..6, R), a constant 0x3E apart on 221 of the
+    // reference database's 222 builds. Mostly flat on stock files (a single ceiling, 1000 Nm
+    // = not limiting), hence allow_flat; resolved only as a complete run (see mod.rs).
+    MapTemplate {
+        name: "Gearbox Torque Limiter 1",
+        bosch_label: "TrqMaxGear1",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE5D6,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEAR1,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Gearbox Torque Limiter 2",
+        bosch_label: "TrqMaxGear2",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE614,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEAR2,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Gearbox Torque Limiter 3",
+        bosch_label: "TrqMaxGear3",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE652,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEAR3,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Gearbox Torque Limiter 4",
+        bosch_label: "TrqMaxGear4",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE690,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEAR4,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Gearbox Torque Limiter 5",
+        bosch_label: "TrqMaxGear5",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE6CE,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEAR5,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Gearbox Torque Limiter 6",
+        bosch_label: "TrqMaxGear6",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE70C,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEAR6,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Gearbox Torque Limiter R",
+        bosch_label: "TrqMaxGearR",
+        category: MapCategory::GearboxTorqueLimiter,
+        nx: 15,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (100.00, 1100.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1CE74A,
+        signed: false,
+        axis_keys: C39_KEYS_TRQMAXGEARR,
+        symbol_confirmed: true,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    // EGR hysteresis 1..4: four back-to-back 25-point curves over engine speed in the
+    // air-control zone. The reference database does not name them, so symbol_confirmed is
+    // false and these ids are ours. Identified by: (a) structure -- two high/low pairs, 1/3
+    // and 2/4 each sharing an axis, the high curve a constant 2-5 mg above the low one on
+    // every corpus file, the shape the VAG EDC16 families here report as "EGR hysteresis";
+    // (b) real edits -- every EGR-off tune in the corpus sets them to 0, and a Stage 1 Croma
+    // tune scales them by the same 1.25 as its injected quantity, hence mg/stroke. Found on
+    // 26 of 42 corpus files (0x1C4AD4, or +0xFC on Grande Punto/Punto); resolved only as a
+    // complete run (see mod.rs).
+    MapTemplate {
+        name: "EGR hysteresis 1",
+        bosch_label: "EgrHys1",
+        category: MapCategory::Egr,
+        nx: 25,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 80.00),
+        z_range_tuned: (0.00, 327.67),
+        unit: "mg/stroke",
+        address: 0x1C4AD4,
+        signed: false,
+        axis_keys: C39_KEYS_EGRHYS1,
+        symbol_confirmed: false,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "EGR hysteresis 2",
+        bosch_label: "EgrHys2",
+        category: MapCategory::Egr,
+        nx: 25,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 80.00),
+        z_range_tuned: (0.00, 327.67),
+        unit: "mg/stroke",
+        address: 0x1C4B3A,
+        signed: false,
+        axis_keys: C39_KEYS_EGRHYS2,
+        symbol_confirmed: false,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "EGR hysteresis 3",
+        bosch_label: "EgrHys3",
+        category: MapCategory::Egr,
+        nx: 25,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 80.00),
+        z_range_tuned: (0.00, 327.67),
+        unit: "mg/stroke",
+        address: 0x1C4BA0,
+        signed: false,
+        axis_keys: C39_KEYS_EGRHYS3,
+        symbol_confirmed: false,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "EGR hysteresis 4",
+        bosch_label: "EgrHys4",
+        category: MapCategory::Egr,
+        nx: 25,
+        ny: 1,
+        axes: (AxisType::Rpm, AxisType::Rpm),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 80.00),
+        z_range_tuned: (0.00, 327.67),
+        unit: "mg/stroke",
+        address: 0x1C4C06,
+        signed: false,
+        axis_keys: C39_KEYS_EGRHYS4,
+        symbol_confirmed: false,
+        shape: Shape::Curve,
+        alt_grids: &[],
+        allow_flat: true,
+        calibrated: true,
+    },
+    // Starting torque over engine speed x coolant temperature. The reference database declares
+    // it in nine grids across its 222 builds (16x16 on 97, 10x16 on 65, ...); the corpus carries
+    // 16x16 and 10x16. Left out of earlier revisions for exactly that grid spread.
+    MapTemplate {
+        name: "Cranking Torque Map",
+        bosch_label: "TrqStrtBas",
+        category: MapCategory::EngineTorqueRequest,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Temperature),
+        z_factor: 0.1000000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 600.00),
+        z_range_tuned: (0.00, 3276.70),
+        unit: "Nm",
+        address: 0x1E7374,
+        signed: false,
+        axis_keys: C39_KEYS_TRQSTRTBAS,
+        symbol_confirmed: true,
+        shape: Shape::Map,
+        alt_grids: &[(10, 16), (9, 10), (12, 10), (8, 10), (14, 16), (11, 10), (12, 14), (16, 8)],
+        allow_flat: false,
+        calibrated: true,
+    },
+    // Real, but not Bosch-named: ECM Titanium's "axis_table" DRT variant (a categorical English
+    // description per driver-vehicle entry, not the per-chip Bosch symbol the named_maps variant
+    // carries) lists 8 back-to-back 16x16 maps here as "Fuel during acceleration", one stride apart,
+    // each independently confirmed on 6 real corpus files. accepts_grid/axis checks are unaffected by
+    // the missing Bosch name; symbol_confirmed is false so build_map's description says so honestly.
+    MapTemplate {
+        name: "Fuel During Acceleration 1",
+        bosch_label: "IA_FuelAccel1",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B19A0,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_1,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 2",
+        bosch_label: "IA_FuelAccel2",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B1BE4,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_2,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 3",
+        bosch_label: "IA_FuelAccel3",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B1E28,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_3,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 4",
+        bosch_label: "IA_FuelAccel4",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B206C,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_4,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 5",
+        bosch_label: "IA_FuelAccel5",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B22B0,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_5,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 6",
+        bosch_label: "IA_FuelAccel6",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B24F4,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_6,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 7",
+        bosch_label: "IA_FuelAccel7",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B2738,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_7,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Fuel During Acceleration 8",
+        bosch_label: "IA_FuelAccel8",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::Percent),
+        z_factor: 0.0100000000,
+        z_offset: 0.0,
+        z_range_stock: (0.00, 60.00),
+        z_range_tuned: (0.00, 120.00),
+        unit: "mm3/cyc",
+        address: 0x1B297C,
+        signed: false,
+        axis_keys: C39_KEYS_IA_ACCEL_8,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    // Real, but not Bosch-named (see IA_FuelAccel1's note). ECM Titanium's axis_table variant names
+    // this 5-member 16x16 run "Injection at part throttle (Map 2)" -- distinct from InjCrv_Bas1..5
+    // (different address region, same RPM x quantity axis convention), confirmed on 9 real files.
+    // Z factor and physical range reuse InjCrv_Bas's (same axis convention, same real signed span).
+    MapTemplate {
+        name: "Injection Timing Correction 1",
+        bosch_label: "I3_InjCrvCorr1",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 0.0234356691,
+        z_offset: 0.0,
+        z_range_stock: (-30.00, 25.00),
+        z_range_tuned: (-90.00, 75.00),
+        unit: "deg",
+        address: 0x1D1F98,
+        signed: true,
+        axis_keys: C39_KEYS_I3_INJCRV_CORR1,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Injection Timing Correction 2",
+        bosch_label: "I3_InjCrvCorr2",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 0.0234356691,
+        z_offset: 0.0,
+        z_range_stock: (-30.00, 25.00),
+        z_range_tuned: (-90.00, 75.00),
+        unit: "deg",
+        address: 0x1D21DC,
+        signed: true,
+        axis_keys: C39_KEYS_I3_INJCRV_CORR2,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Injection Timing Correction 3",
+        bosch_label: "I3_InjCrvCorr3",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 0.0234356691,
+        z_offset: 0.0,
+        z_range_stock: (-30.00, 25.00),
+        z_range_tuned: (-90.00, 75.00),
+        unit: "deg",
+        address: 0x1D2420,
+        signed: true,
+        axis_keys: C39_KEYS_I3_INJCRV_CORR3,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Injection Timing Correction 4",
+        bosch_label: "I3_InjCrvCorr4",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 0.0234356691,
+        z_offset: 0.0,
+        z_range_stock: (-30.00, 25.00),
+        z_range_tuned: (-90.00, 75.00),
+        unit: "deg",
+        address: 0x1D2664,
+        signed: true,
+        axis_keys: C39_KEYS_I3_INJCRV_CORR4,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Injection Timing Correction 5",
+        bosch_label: "I3_InjCrvCorr5",
+        category: MapCategory::InjectionSystem,
+        nx: 16,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 0.0234356691,
+        z_offset: 0.0,
+        z_range_stock: (-30.00, 25.00),
+        z_range_tuned: (-90.00, 75.00),
+        unit: "deg",
+        address: 0x1D28A8,
+        signed: true,
+        axis_keys: C39_KEYS_I3_INJCRV_CORR5,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    // Real, but not Bosch-named (see IA_FuelAccel1's note). ECM Titanium's axis_table variant names
+    // this 2-member 20x16 run "Turbo pressure" -- distinct from PCR_CtlBas/PCR_DesBas (different
+    // address region, own real RPM x quantity axis), confirmed on 6 real files. Z factor reuses the
+    // boost family's 2.0 hPa convention (PCR_DesBas/PCR_DesMaxAP).
+    MapTemplate {
+        name: "Turbo Pressure Correction 1",
+        bosch_label: "BS_TurboPressureCorr1",
+        category: MapCategory::TurboBoostPressure,
+        nx: 20,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 2.0000000000,
+        z_offset: 0.0,
+        z_range_stock: (500.00, 5000.00),
+        z_range_tuned: (0.00, 10000.00),
+        unit: "hPa",
+        address: 0x1E367A,
+        signed: false,
+        axis_keys: C39_KEYS_BS_TURBO2_1,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
+        calibrated: true,
+    },
+    MapTemplate {
+        name: "Turbo Pressure Correction 2",
+        bosch_label: "BS_TurboPressureCorr2",
+        category: MapCategory::TurboBoostPressure,
+        nx: 20,
+        ny: 16,
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        z_factor: 2.0000000000,
+        z_offset: 0.0,
+        z_range_stock: (500.00, 5000.00),
+        z_range_tuned: (0.00, 10000.00),
+        unit: "hPa",
+        address: 0x1E3946,
+        signed: false,
+        axis_keys: C39_KEYS_BS_TURBO2_2,
+        symbol_confirmed: false,
+        shape: Shape::Map,
+        alt_grids: &[],
+        allow_flat: false,
         calibrated: true,
     },
 ];

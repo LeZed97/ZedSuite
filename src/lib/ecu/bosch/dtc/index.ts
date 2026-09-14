@@ -65,6 +65,16 @@ export {
   type DTCLanguage,
 } from './dtc-i18n';
 
+// `./edc16` only implements the VAG EDC16 variants (it picks U1 vs U34/C34
+// by FILE SIZE alone once it's reached, a real, size-only heuristic, so it
+// must never be reached for a non-VAG EDC16 file). `family.startsWith('EDC16')`
+// alone also matches EDC16C39 (Fiat/Alfa) and any future non-VAG EDC16
+// family; restricted to the variants this module actually implements.
+const VAG_EDC16_VARIANTS = ['EDC16U1', 'EDC16U34', 'EDC16C34'];
+function isVagEdc16(family: string): boolean {
+  return VAG_EDC16_VARIANTS.some((v) => family.includes(v));
+}
+
 /**
  * Detect DTCs based on ECU type
  */
@@ -79,7 +89,7 @@ export function detectDTCs(
     return detectEDC15PDTCs(data, family);
   }
 
-  if (family.startsWith('EDC16')) {
+  if (isVagEdc16(family)) {
     const { detectEDC16DTCs } = require('./edc16');
     return detectEDC16DTCs(data);
   }
@@ -106,7 +116,7 @@ export function disableDTC(
     return disableEDC15PDTC(data, dtc, codeblocks);
   }
 
-  if (family.startsWith('EDC16')) {
+  if (isVagEdc16(family)) {
     const { disableEDC16DTC } = require('./edc16');
     return disableEDC16DTC(data, dtc, codeblocks);
   }
@@ -132,7 +142,7 @@ export function enableDTC(
     return enableEDC15PDTC(data, dtc, codeblocks);
   }
 
-  if (family.startsWith('EDC16')) {
+  if (isVagEdc16(family)) {
     const { enableEDC16DTC } = require('./edc16');
     return enableEDC16DTC(data, dtc, codeblocks);
   }
@@ -146,7 +156,7 @@ export function enableDTC(
  * Get supported ECU families for DTC operations
  */
 export function getSupportedDTCFamilies(): string[] {
-  return ['EDC15', 'EDC16'];
+  return ['EDC15', ...VAG_EDC16_VARIANTS];
 }
 
 /**
@@ -154,5 +164,5 @@ export function getSupportedDTCFamilies(): string[] {
  */
 export function isDTCSupported(ecuFamily: string): boolean {
   const family = ecuFamily.toUpperCase();
-  return family.startsWith('EDC15') || family.startsWith('EDC16');
+  return family.startsWith('EDC15') || isVagEdc16(family);
 }

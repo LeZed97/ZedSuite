@@ -175,8 +175,8 @@
     "file_sizes": [
       "2MB"
     ],
-    "vehicles": "Fiat/Alfa Romeo Multijet 1.9 JTD/JTDm (Alfa 159, Alfa 147 confirmed)",
-    "detection_method": "Self-describing block header + confirmed address + axis key",
+    "vehicles": "Fiat/Alfa Romeo Multijet 1.9/2.4 JTD/JTDm (Alfa 147/159/GT/Brera, Fiat Bravo/Croma/Doblo/Grande Punto/Punto; not Fiat Ducato)",
+    "detection_method": "Self-describing map/curve records + confirmed address + axis keys (runs resolved as a whole)",
     "status": "beta",
     "enabled": true,
     "map_categories": [
@@ -188,7 +188,9 @@
       "Injection system",
       "Turbo boost pressure",
       "Turbo boost pressure control",
-      "Start of injection SOI"
+      "Start of injection SOI",
+      "Engine torque limiters",
+      "Gearbox torque limiter"
     ],
     "mappack_export_enabled": false,
     "mappack_price": 40

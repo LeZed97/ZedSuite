@@ -25,11 +25,17 @@ ground rules) plus a dedicated seedbox search for more Fiat/Alfa material:
   be the full flash, not run through the detector, not assumed to work.
 
 Fiat Ducato (commercial van) is the one model checked in volume (10 real,
-independent files, several software revisions) and confirmed **consistently
-0 maps** on every one — genuinely a different calibration layout on the same
-base chip, not a detector gap. Every other model above has at least one real
-file detecting maps; a few individual builds (see "Known limits") detect 0
-or very few, which on inspection reflects that specific software revision's
+independent files, several software revisions): the 34 passenger-tune
+families (torque/injection curves specific to the 1.9/2.4 JTD calibration)
+report **consistently 0** on all 10 — genuinely a different calibration
+layout, not a detector gap. Two of the newer, platform-wide families (see
+method item 8) are a real exception: they decode at 0.99 confidence on the
+6 Ducato files with a newer HW number (0281015xxx-0281016xxx), and are
+absent on the 4 older ones (0281012xxx-0281014xxx) — a real split, not
+noise, and the safety contract still holds (a match reported is a match
+present, never assumed). Every other model above has at least one real file
+detecting maps; a few individual builds (see "Known limits") detect 0 or
+very few, which on inspection reflects that specific software revision's
 memory layout rather than a missed family.
 
 ## Method
@@ -115,13 +121,86 @@ memory layout rather than a missed family.
      `includes("EDC16")` and are now restricted to U1/U31/U34; the bundled
      `mappack_export_enabled: false` flag was not consumed anywhere and is
      now a real client-side gate.
+8. A second, independent verification pass ("check once more that every
+   real ECM Titanium DRT and damos source is actually integrated") found
+   this port had only ever used HALF of ECM Titanium's own DRT data: the
+   `named_maps` variant (Bosch-symbol-labelled, 222 EDC16C39 builds). Its
+   OTHER variant, `axis_table` (a categorical English name per driver
+   entry rather than a Bosch symbol, 361 EDC16C39 builds), was mined the
+   same way and cross-checked against every family already covered.
+   9 candidate labels stood out; on inspection most of their volume
+   turned out to already be covered families surfacing under one of ECM's
+   several generic category names for the same real slot (informative,
+   not new). A rigorous run-based filter — keep only a stride-consistent,
+   independently multi-file-supported run, exactly the same bar
+   `InjCrv_Bas1..5` had to clear — separated real new families from
+   addresses that only matched via this platform's very common shared
+   16x16 RPM/generic breakpoint grid (the exact "shared by half the
+   file" risk this module's own key-matching code already warns about).
+   One candidate initially accepted this way (a 4-member "secondary"
+   driver-wish run) turned out, on cross-check against the reference
+   database's OWN declared address for that exact build, to be the
+   EXISTING `AccPed_trq*` family at its real Fiat Grande Punto/Punto
+   address (+0xFC from the Alfa address) — not a new family at all; the
+   candidate was withdrawn rather than shipped as a mislabel, and this is
+   exactly the kind of self-correction the review pass above exists to
+   catch. **15 real new families survived**: `IA_FuelAccel1..8` (an
+   8-member run) and `BS_TurboPressureCorr1..2` (2-member) also decode on
+   6 of the 10 real Ducato files (the newer HW generation) — a real,
+   platform-wide overlap, not a detector fault — and `I3_InjCrvCorr1..5`
+   (5-member), a second real injection-timing-correction run distinct
+   from `InjCrv_Bas1..5`. None of the three groups has a confirmed Bosch
+   symbol (the axis_table variant does not carry one), so they are marked
+   `symbol_confirmed: false` and the app shows "no reference symbol"
+   instead of a fabricated Bosch label.
+9. A last-mile check for a real damos (WinOLS) file for this family, or
+   any local/FTP one covering it, found none: every damos file reachable
+   (local ECM Titanium install, FTP archives) either targets a different
+   chip (EDC15C, confirmed by reading its own `{EDC15C}` header) or could
+   not be listed without downloading a multi-gigabyte archive whose own
+   directory contents gave no EDC16C39-looking file names. **Every one of
+   this family's 49 templates traces back to a real ECM Titanium DRT
+   record** — 30 to the Bosch-symbol `named_maps` variant, 19 to the
+   categorical `axis_table` variant — none to a damos.
+10. Two external oracles then measured what was still missing, instead of
+   assuming the 21 families were "the" set:
+   - **What real tuners edit.** Every one of the 47 corpus WinOLS projects
+     saves 2+ ROM versions (58 original -> tuned steps: Stage 1/2, EGR/DPF
+     off, vmax...). Each modified byte range was located inside a detected
+     map or, failing that, inside the self-describing record that really
+     encloses it. Before this pass only 38% of the tuner-modified
+     calibration bytes fell inside a detected map; the uncovered records
+     were real 1D curves (engine and per-gear torque limiters, EGR
+     hysteresis), a start-torque map, the flat boost limiter, and driver
+     wish maps on a 13x10 build.
+   - **The reference database on the exact same builds.** Its build code is
+     the last 3 digits of the Bosch hardware number and the last 4 of the
+     software number; 12 corpus files have their exact build in it (32
+     named entries each), which turns it into per-file ground truth.
+   Added from that evidence: a curve record reader (`[n][X n][Z n]`, which
+   all of the reference database's 1D entries decode as on those builds);
+   `EngPrt_trqLim`, `TrqMaxGear1..6/R`, `TrqStrtBas` (nine declared grids),
+   `PCR_DesMax` (a headerless scalar, read only at +0x244 from the
+   `PCR_DesMaxAP` record, the offset on 220 of 222 reference builds);
+   declared alternate grids for the driver wish family and `PCR_DesMaxAP`;
+   flat data accepted only where real files show the family flat; and four
+   EGR hysteresis curves that no reference names (identified by their
+   high/low pair structure and by real edits: every EGR-off tune in the
+   corpus sets them to 0, a Stage 1 tune scales them with injected
+   quantity). Runs whose records are shorter than two address windows
+   (gears 0x3E, hysteresis 0x66) are only ever resolved as a whole: for
+   such a stride any build shift puts a sibling inside a member's window,
+   and two real shifts do exactly that (+0xC0 gear runs in the reference
+   database, +0xFC hysteresis on Grande Punto/Punto).
 
 ## What this PR adds
 
-- `src-tauri/src/detector/ecu/bosch/edc16c39/{mod.rs,signatures.rs}`: 21
-  calibrated 2D map families (20 fire on the best real files; the 21st,
-  `PCR_DesMaxAP`, is a flat constant on every corpus file and is rejected by
-  the generic never-flat gate — see Known limits).
+- `src-tauri/src/detector/ecu/bosch/edc16c39/{mod.rs,signatures.rs}`: 35
+  calibrated families -- 22 maps (driver wish x4, air mass, EGR duty,
+  smoke limiter x2, torque-to-quantity, injection timing x5, injector
+  duration, turbo duty, boost target, boost limiter, rail pressure x3,
+  cranking torque), 12 curves (engine torque limiter, gearbox torque
+  limiter x7, EGR hysteresis x4) and the single-value boost limiter.
 - Checksum and completeness routing in `src/lib/ecu/bosch/checksums/index.ts`
   and `src-tauri/src/commands.rs` restricted to the VAG EDC16 variants they
   were validated on, so this family gets no unvalidated "checksum OK" and no
@@ -140,63 +219,78 @@ memory layout rather than a missed family.
 - `src-tauri/examples/edc16c39_real_check.rs`: bench tool, same convention as
   `dump_maps`.
 
-## Bench result (42 real 2MB files, `edc16c39_real_check`, of 21 templates)
+## Bench result (42 real 2MB files, `edc16c39_real_check`, of 49 families)
 
-| Model | Files | Maps found (min-max) |
+| Model | Files | Maps found |
 |---|---|---|
-| Alfa 159 | 3 | 20 on all 3 |
-| Alfa 147 (incl. a Ducati Corse 170hp build) | 3 | 19-20 |
-| Alfa GT | 1 | 20 |
-| Alfa Brera | 2 | 20 on both |
-| Fiat Croma | 3 | 16-20 |
-| Fiat Doblo | 2 | 20 on both |
-| Fiat Grande Punto | 6 | 18-20 |
-| Fiat Punto | 2 | 20 on both |
-| Fiat Bravo | 3 | 0, 5, 20 -- see "Known limits", this is the weakest-understood model |
-| Other real Alfa/Fiat 0281xxxxxx builds (unnamed in the archive) | 7 | 0, 0, 1, 7, 20, 20, 20 |
-| Fiat Ducato | 10 | **0 on all 10** -- confirms the safety contract holds |
+| Alfa 159 | 3 | 35-40 |
+| Alfa 147 (incl. a Ducati Corse 170hp build) | 3 | 40 on all 3 |
+| Alfa GT | 1 | 40 |
+| Alfa Brera | 2 | 35 on both |
+| Fiat Croma | 3 | 35-40 |
+| Fiat Doblo | 2 | 40 on both |
+| Fiat Grande Punto | 6 | 38-40 |
+| Fiat Punto | 2 | 40 on both |
+| Fiat Bravo | 3 | 0, 5, 40 -- see "Known limits" |
+| Other unnamed real Alfa/Fiat builds | 7 | 0, 0, 1, 7, 35, 35, 40 |
+| Fiat Ducato | 10 | **0 of the 34 passenger families on all 10**; 10 of the 15 platform-wide families on 6 of 10 (see Corpus) |
 
-526 maps over the 42 files (464 before the review fixes; every changed file
-went up, none went down). No file reports the same map name twice (verified
-by script across all 42, and now enforced by construction in `detect()`).
+1080 maps over the 42 files (920 before this pass; 526 before the review
+fixes). No file reports the same map name twice.
+
+- **Reference ground truth (12 files whose exact build the reference
+  database lists):** 347 of its named entries detected at exactly the
+  declared address, 0 missed. On one further file (Alfa 159 2.4, SW
+  377554) the reference's own entries for that build code do not describe
+  the file -- only 6 of its 30 structural entries even decode there, all 6
+  detected at exactly that address -- while all 34 of this detector's
+  own-named records there decode, at the addresses the reference gives
+  for the sibling 159/Brera 2.4 build. The one reference entry never
+  reported is `SpdLimMax` (see Known limits).
+- **Tuned files:** the 43 tuned ROM versions saved in the corpus projects
+  report 1137 maps; no family detected on an original is lost on any of
+  its tuned versions (including EGR-off steps that zero the hysteresis
+  curves).
 
 ## Known limits (read before trusting this beyond this corpus)
 
-- **Fiat Bravo is the weakest-understood model**: 3 real 2MB files range
-  from 0 to 20 maps found, wider than any other model. The 20-map file
-  (1.9 JTDM) behaves like Alfa/Croma; the 0-map file (1.6 MultiJet 120cv)
-  genuinely carries several of this corpus's templates tens of KB away from
-  every other build's address (confirmed real, via the family's own
-  internal relative spacing) but far outside the window this detector
-  trusts, so it correctly reports nothing rather than a guess. More real
-  Bravo files, especially other 1.6 MultiJet builds, would confirm whether
-  this is one outlier or a second, uncalibrated address family worth its
-  own template set. Three of the seven unnamed Alfa/Fiat builds (0, 1 and 7
-  maps) look like the same situation.
+- **19 of the 49 families have no confirmed Bosch symbol** (`EgrHys1..4`,
+  `IA_FuelAccel1..8`, `I3_InjCrvCorr1..5`, `BS_TurboPressureCorr1..2`):
+  ECM Titanium's `axis_table` DRT variant names them with a categorical
+  English description, not the per-chip Bosch internal symbol its
+  `named_maps` variant carries for the other 30. `symbol_confirmed: false`
+  on these, and the app shows "no reference symbol" in their description
+  rather than inventing one.
+- **Real tunes still edit calibrations this detector does not report,
+  because no reference names them** (edited on N corpus files): an 8x8
+  engine speed x temperature map (16), an 8x8 engine speed x rail pressure
+  map (13), a 10x10 temperature x quantity map (9), further isolated maps
+  scattered through the boost/rail/injection regions on a widely-shared
+  RPM breakpoint grid this pass could not safely attribute to one real
+  table (see method item 8), and on Grande Punto/Punto a fixed-capacity
+  pedal table around 0x1C2040 (13) that uses neither record layout.
+  Naming them would be guessing; they are listed here instead.
+- **`SpdLimMax` (vehicle speed limit) is not read.** It is a headerless
+  scalar, and unlike `PCR_DesMax` no family sits at a stable offset from it
+  (best candidate: 68% of reference builds), so reading it would mean
+  trusting a raw address.
+- **Fiat Bravo is the weakest-understood model**: 3 real 2MB files, 0/5/40
+  maps. The 0-map file (1.6 MultiJet 120cv) carries several families tens of
+  KB away from every other build's address, outside the window this
+  detector trusts, so it reports nothing rather than a guess. Three of the
+  seven unnamed Alfa/Fiat builds (0, 1 and 7 maps) look like the same
+  situation.
 - **CONTRIBUTING.md's bar is 50 real files across software versions and
   engines**; this corpus (42 usable 2MB dumps) is close on raw count but
-  still concentrated on 1.9 JTD/JTDm-class engines. Giulietta and Mito were
-  seen carrying the same "EDC16C39" WinOLS label in the source archive but
-  only as 256KB partial extracts, too small to use — still UNCHECKED.
-- **No completeness/invariant report yet** — needs the "always N of X" pass
-  CONTRIBUTING.md describes, written from real per-model statistics, not
-  asserted from a handful of files.
-- **`PCR_DesMaxAP` (Boost Pressure Limiter) is calibrated but never
-  fires**: its Z data reads as a flat constant (4800-5000 hPa, per file) on
-  every one of the 9 real files where the block is present, and the generic
-  "a calibration map is never flat" rejection (needed everywhere else,
-  inherited from the CP31 design) throws it out. Possibly a genuinely fixed
-  ceiling on this engine family — not enough evidence yet to special-case
-  the check safely. This is why the best files report 20, not 21.
-- **1D curves and scalars are not read at all** (`TrqMaxGear1..6+R`,
-  `EngPrt_trqLim`, `SpdLimMax`, `PCR_DesMax`) — confirmed present at fixed
-  real addresses via the same reference database, structurally different
-  on-disk record this pass did not implement a reader for. Matches CP31's
-  own staged curve support (2/47 shipped initially).
-- **`TrqStrtBas`** was seen at a stable address but with a genuinely
-  different grid on one real file (16x16 vs 10x16) — left out rather than
-  guessed at.
-- **No mappack export, no checksum correction, no "solution"** — matches
+  still concentrated on 1.9/2.4 JTD/JTDm engines. Giulietta and Mito only
+  exist here as 256KB partial extracts -- still UNCHECKED.
+- **No completeness/invariant report yet** -- needs the "always N of X" pass
+  CONTRIBUTING.md describes, written from real per-model statistics.
+- **EGR hysteresis display**: the four curves use the same name and field
+  convention as the VAG EDC16 "EGR hysteresis" curves, so the app shows them
+  exactly like those (the name-based EGR layout draws a 25x1 column); the
+  cell index used for reading and writing is correct in both orientations.
+- **No mappack export, no checksum correction, no "solution"** -- matches
   CONTRIBUTING.md's rule and the same caution CP31 took with a one-software
   corpus. Export is gated off in the editor for this family; the VAG EDC16
   additive checksum corrector is not offered for it (a real EDC16C39 dump
@@ -211,6 +305,7 @@ spreads across more engines (not just 1.9 JTD/JTDm), stock and tuned; real
 Giulietta/Mito 2MB dumps to replace the two 256KB partial extracts currently
 unusable; more Fiat Bravo 1.6 MultiJet files to resolve whether that build's
 large address drift is a one-off or a second address family worth its own
-templates; a bench table like the one above run against that full corpus;
+templates; a named reference (damos/A2L) for the tuner-edited families
+still unreported; a bench table like the one above run against that full corpus;
 and real invariants ("this ECU always carries N of X") written from that
 corpus, not asserted from a spot-check.

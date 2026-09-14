@@ -116,7 +116,19 @@ pub fn identify_ecu(
 ///       vrai sens physique de leur second axe (mg/Hub, Nm, degC, hPa, bar
 ///       x mm3) ; Trq2qBas est lu signé ; la map EGR est renommée pour ne
 ///       plus déclencher la transposition EGR VAG du front.
-pub const DETECTOR_VERSION: u32 = 51;
+///   52 — EDC16C39 : courbes 1D (limiteur de couple moteur, limiteurs de
+///       couple par rapport 1..6 et R, quatre hystérésis EGR), map de couple
+///       au démarrage (TrqStrtBas, grilles multiples), limiteur de boost
+///       accepté plat et SVBL lu à +0x244, variantes de grille du driver
+///       wish ; les séries serrées (rapports, hystérésis) ne sont résolues
+///       qu en entier.
+///   53 — EDC16C39 : 15 familles de plus, issues de la variante « axis_table »
+///       des DRT ECM Titanium (catégorielle, sans symbole Bosch confirmé) --
+///       Fuel During Acceleration 1..8, Injection Timing Correction 1..5,
+///       Turbo Pressure Correction 1..2. Ces deux dernières se détectent
+///       aussi sur les Ducato récents (0281015xxx-0281016xxx), un vrai
+///       recouvrement de plateforme, pas un faux positif.
+pub const DETECTOR_VERSION: u32 = 53;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.

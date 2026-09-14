@@ -65,13 +65,34 @@ export function DTCModal({
       try {
         // Determine which detector to use based on ECU type
         const ecuFamily = ecuType?.toUpperCase() || '';
+        // detectEDC16DTCs only implements the VAG EDC16 variants (it then picks
+        // U1 vs U34/C34 by FILE SIZE alone -- a real, size-only heuristic, so it
+        // must never see a non-VAG EDC16 file). `includes('EDC16')` alone also
+        // matched EDC16C39 (Fiat/Alfa): a real 2MB C39 dump was routed to the
+        // U34 branch by size, failed to find U34's own control-zone signature
+        // (it genuinely isn't U34), and surfaced that internal failure as if it
+        // were this file's own error instead of the honest "not implemented"
+        // message below.
+        const vagEdc16 = ['EDC16U1', 'EDC16U34', 'EDC16C34'].some((v) => ecuFamily.includes(v));
 
         let result: DTCDetectionResult;
 
         if (ecuFamily.includes('EDC15')) {
           result = detectEDC15PDTCs(dataArray, ecuFamily.includes('VM') ? 'EDC15VM' : 'EDC15P');
-        } else if (ecuFamily.includes('EDC16')) {
+        } else if (vagEdc16) {
           result = detectEDC16DTCs(dataArray);
+        } else if (ecuFamily.startsWith('EDC16')) {
+          // A real, identified EDC16 family with no DTC support yet (EDC16C39
+          // today) -- never falls through to the VAG detector, which is a
+          // different structure and would either fail confusingly or, worse,
+          // coincidentally "succeed" on the wrong bytes.
+          result = {
+            success: false,
+            ecuType: ecuType || 'Unknown',
+            codeblocks: [],
+            dtcs: [],
+            errors: [`DTC detection not yet implemented for ${ecuType || 'unknown ECU type'}`],
+          };
         } else {
           // For other ECU types, try EDC16 detector as fallback for VAG ECUs
           // since they share similar DTC structures
