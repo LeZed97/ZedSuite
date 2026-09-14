@@ -175,7 +175,19 @@ fn build_expected_report(
     if ecu.contains("EDC15VM") {
         return build_expected_report_edc15vm(maps);
     }
-    if !ecu.contains("EDC16") {
+    // The rules below (labels, minimum counts, SOI-pack maths) are calibrated
+    // specifically on EDC16U1/U31/U34 (VAG) map names -- `ecu.contains("EDC16")`
+    // alone also matches any OTHER Bosch EDC16 sub-family (e.g. EDC16C39,
+    // Fiat/Alfa), whose real map names ("Driver Wish A", "EGR Duty Cycle
+    // Base", "Injection Timing 1"...) share none of these prefixes. Applying
+    // this ruleset there reported a false "0% complete, nothing found" for
+    // every one of its 21 real, correctly-detected families -- caught by
+    // testing a real EDC16C39 file through the app, not a VAG one. No
+    // completeness report is written for EDC16C39 yet (see its own module's
+    // "Known limits"), so returning None here is the honest answer, not a
+    // guess at rules that don't exist.
+    let is_vag_edc16 = ecu.contains("EDC16U1") || ecu.contains("EDC16U31") || ecu.contains("EDC16U34");
+    if !is_vag_edc16 {
         return None;
     }
 
