@@ -1,5 +1,8 @@
-// GENERATED reference data -- see signatures.rs's module doc for the corpus and method.
-// Included via `include!` so the axis-key arrays don't have to be retyped by hand.
+// GENERATED reference data, then hand-maintained -- see signatures.rs's module doc
+// for the corpus and method. Included via `include!` so the axis-key arrays don't
+// have to be retyped by hand. Axis meanings and Z sign/range were corrected
+// against an independent reference database and real cell values after the
+// first generation; see each template's fields and mod.rs's tests.
 
 /// Axis key for `AccPed_trqENU` (Driver Wish (Neutral)).
 /// 16x16, address 0x1C1CFC, confirmed byte-identical on 3 independent real dumps
@@ -90,13 +93,7 @@ pub const C39_KEYS_AIRCTL_REGRBAS: &[AxisKey] = &[
         ny: 16,
         x: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500],
         y: &[0, 1229, 1638, 2048, 2458, 2867, 3277, 3686, 4096, 4915, 5325, 5734, 6144, 6963, 7782, 8192],
-    },
-    AxisKey {
-        nx: 8,
-        ny: 16,
-        x: &[0, 500, 1000, 1500, 2000, 2500, 3000, 3500],
-        y: &[0, 1229, 1638, 2048, 2458, 2867, 3277, 3686, 4096, 4915, 5325, 5734, 6144, 6963, 7782, 8192],
-        // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
+        // also byte-identical on: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
     },
 ];
 
@@ -191,13 +188,7 @@ pub const C39_KEYS_TRQ2QBAS: &[AxisKey] = &[
         ny: 16,
         x: &[250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000],
         y: &[0, 50, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 4500, 5000],
-    },
-    AxisKey {
-        nx: 16,
-        ny: 16,
-        x: &[250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000],
-        y: &[0, 50, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 4500, 5000],
-        // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
+        // also byte-identical on: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
     },
     AxisKey {
         nx: 16,
@@ -217,6 +208,7 @@ pub const C39_KEYS_INJVCD_TIET: &[AxisKey] = &[
         ny: 20,
         x: &[500, 1200, 1210, 2000, 2500, 3000, 4000, 6000, 8000, 10000, 12000, 13000, 14000, 15000, 16000, 18000, 18010, 18020, 18030, 18040],
         y: &[0, 20, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 1000, 1500, 2000, 3000, 4000, 6000, 8000],
+        // also byte-identical on: CROMA (Fiat.Croma.Bosch.EDC16C39.51820797.394821.v0.bin)
     },
     AxisKey {
         nx: 20,
@@ -224,13 +216,6 @@ pub const C39_KEYS_INJVCD_TIET: &[AxisKey] = &[
         x: &[500, 1200, 1210, 2000, 2500, 3000, 4000, 6000, 8000, 10000, 12000, 13000, 14000, 15000, 16000, 18000, 18010, 18020, 18030, 18040],
         y: &[0, 20, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 1000, 1500, 2000, 3000, 4000, 7000, 10000],
         // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
-    },
-    AxisKey {
-        nx: 20,
-        ny: 20,
-        x: &[500, 1200, 1210, 2000, 2500, 3000, 4000, 6000, 8000, 10000, 12000, 13000, 14000, 15000, 16000, 18000, 18010, 18020, 18030, 18040],
-        y: &[0, 20, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 1000, 1500, 2000, 3000, 4000, 6000, 8000],
-        // real, confirmed: CROMA (Fiat.Croma.Bosch.EDC16C39.51820797.394821.v0.bin)
     },
     AxisKey {
         nx: 20,
@@ -250,6 +235,7 @@ pub const C39_KEYS_PCR_CTLBAS: &[AxisKey] = &[
         ny: 16,
         x: &[1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 5000],
         y: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 3500, 4000, 5000, 6000, 6500, 7000],
+        // also byte-identical on: CROMA (Fiat.Croma.Bosch.EDC16C39.51820797.394821.v0.bin)
     },
     AxisKey {
         nx: 16,
@@ -257,13 +243,6 @@ pub const C39_KEYS_PCR_CTLBAS: &[AxisKey] = &[
         x: &[1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 5000],
         y: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 4000, 5000, 6000, 6500, 7000, 7500],
         // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
-    },
-    AxisKey {
-        nx: 16,
-        ny: 16,
-        x: &[1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 5000],
-        y: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 3500, 4000, 5000, 6000, 6500, 7000],
-        // real, confirmed: CROMA (Fiat.Croma.Bosch.EDC16C39.51820797.394821.v0.bin)
     },
     AxisKey {
         nx: 16,
@@ -290,6 +269,7 @@ pub const C39_KEYS_PCR_DESBAS: &[AxisKey] = &[
         ny: 16,
         x: &[1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000],
         y: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 3500, 4000, 5000, 6000, 6500, 7000],
+        // also byte-identical on: CROMA (Fiat.Croma.Bosch.EDC16C39.51820797.394821.v0.bin)
     },
     AxisKey {
         nx: 16,
@@ -297,13 +277,6 @@ pub const C39_KEYS_PCR_DESBAS: &[AxisKey] = &[
         x: &[1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 4900],
         y: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 4000, 5000, 6000, 6500, 7000, 7500],
         // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
-    },
-    AxisKey {
-        nx: 16,
-        ny: 16,
-        x: &[1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000],
-        y: &[500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 3500, 4000, 5000, 6000, 6500, 7000],
-        // real, confirmed: CROMA (Fiat.Croma.Bosch.EDC16C39.51820797.394821.v0.bin)
     },
     AxisKey {
         nx: 16,
@@ -330,13 +303,7 @@ pub const C39_KEYS_PCR_DESMAXAP: &[AxisKey] = &[
         ny: 16,
         x: &[250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500],
         y: &[630, 680, 730, 780, 830, 880, 930, 980, 1030, 1080, 1081, 1082, 1083, 1084, 1085, 1086],
-    },
-    AxisKey {
-        nx: 16,
-        ny: 16,
-        x: &[250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 4000, 4500],
-        y: &[630, 680, 730, 780, 830, 880, 930, 980, 1030, 1080, 1081, 1082, 1083, 1084, 1085, 1086],
-        // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
+        // also byte-identical on: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
     },
 ];
 
@@ -375,13 +342,7 @@ pub const C39_KEYS_RAIL_POINTLIMTEM: &[AxisKey] = &[
         ny: 8,
         x: &[1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500],
         y: &[3031, 3131, 3231, 3331, 3431, 3531, 3631, 3731],
-    },
-    AxisKey {
-        nx: 8,
-        ny: 8,
-        x: &[1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500],
-        y: &[3031, 3131, 3231, 3331, 3431, 3531, 3631, 3731],
-        // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
+        // also byte-identical on: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
     },
     AxisKey {
         nx: 8,
@@ -408,13 +369,7 @@ pub const C39_KEYS_RAIL_POINTMAX: &[AxisKey] = &[
         ny: 8,
         x: &[250, 750, 1000, 1250, 1500, 2000, 2500, 2750, 3000, 3250, 3500, 5000],
         y: &[500, 1000, 2000, 3000, 4000, 5000, 6000, 7000],
-    },
-    AxisKey {
-        nx: 12,
-        ny: 8,
-        x: &[250, 750, 1000, 1250, 1500, 2000, 2500, 2750, 3000, 3250, 3500, 5000],
-        y: &[500, 1000, 2000, 3000, 4000, 5000, 6000, 7000],
-        // real, confirmed: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
+        // also byte-identical on: BRERA (Alfa.Brera.Bosch.EDC16C39.51820069.0281014459.390927.v0.bin)
     },
     AxisKey {
         nx: 12,
@@ -719,7 +674,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::AirControl,
         nx: 14,
         ny: 16,
-        axes: (AxisType::Rpm, AxisType::AirMass),
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
         z_factor: 0.1000000000,
         z_offset: 0.0,
         z_range_stock: (-48.00, 1488.00),
@@ -730,8 +685,14 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         axis_keys: C39_KEYS_AIRCTL_MDESBAS,
         calibrated: true,
     },
+    // Named without the token "EGR" on purpose: the frontend treats any map
+    // whose name contains "egr" as the VAG 13x16 EGR layout and re-transposes
+    // it in five places (map-cell-layout.ts, map-viewer.tsx, editor/page.tsx),
+    // which for this genuinely 8-row x 16-column block put every cell under
+    // the wrong rpm/% pair and wrote edits to a different operating point
+    // than the one shown. The Bosch label stays in the description.
     MapTemplate {
-        name: "EGR Duty Cycle Base",
+        name: "Exhaust Gas Recirculation Duty Cycle",
         bosch_label: "AirCtl_rEGRBas",
         category: MapCategory::Egr,
         nx: 8,
@@ -753,7 +714,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::SmokeLimitation,
         nx: 16,
         ny: 16,
-        axes: (AxisType::Rpm, AxisType::Rpm),
+        axes: (AxisType::Rpm, AxisType::AirMass),
         z_factor: 0.0010000000,
         z_offset: 0.0,
         z_range_stock: (0.60, 1.68),
@@ -770,7 +731,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::SmokeLimitation,
         nx: 16,
         ny: 16,
-        axes: (AxisType::Rpm, AxisType::Rpm),
+        axes: (AxisType::Rpm, AxisType::AirMass),
         z_factor: 0.0010000000,
         z_offset: 0.0,
         z_range_stock: (0.60, 1.68),
@@ -787,14 +748,14 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::TorqueToIqConversion,
         nx: 16,
         ny: 16,
-        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        axes: (AxisType::Rpm, AxisType::Torque),
         z_factor: 0.0100000000,
         z_offset: 0.0,
         z_range_stock: (-30.15, 130.65),
         z_range_tuned: (-100.50, 301.50),
         unit: "mm3/cyc",
         address: 0x1CDBB2,
-        signed: false,
+        signed: true,
         axis_keys: C39_KEYS_TRQ2QBAS,
         calibrated: true,
     },
@@ -804,11 +765,11 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::InjectionSystem,
         nx: 20,
         ny: 20,
-        axes: (AxisType::Rpm, AxisType::RailPressure),
+        axes: (AxisType::RailPressure, AxisType::InjectionQty),
         z_factor: 2.0000000000,
         z_offset: 0.0,
-        z_range_stock: (-1800.00, 7800.00),
-        z_range_tuned: (-6000.00, 18000.00),
+        z_range_stock: (0.00, 7800.00),
+        z_range_tuned: (0.00, 18000.00),
         unit: "us",
         address: 0x1DC08A,
         signed: false,
@@ -842,7 +803,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         z_factor: 2.0000000000,
         z_offset: 0.0,
         z_range_stock: (1096.00, 5704.00),
-        z_range_tuned: (-920.00, 10600.00),
+        z_range_tuned: (0.00, 10600.00),
         unit: "hPa",
         address: 0x1E132C,
         signed: false,
@@ -855,7 +816,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::TurboBoostPressure,
         nx: 16,
         ny: 16,
-        axes: (AxisType::Rpm, AxisType::InjectionQty),
+        axes: (AxisType::Rpm, AxisType::BoostPressure),
         z_factor: 2.0000000000,
         z_offset: 0.0,
         z_range_stock: (3500.00, 6500.00),
@@ -875,8 +836,8 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         axes: (AxisType::Rpm, AxisType::InjectionQty),
         z_factor: 0.1000000000,
         z_offset: 0.0,
-        z_range_stock: (-129.00, 1999.00),
-        z_range_tuned: (-1060.00, 4260.00),
+        z_range_stock: (0.00, 1999.00),
+        z_range_tuned: (0.00, 4260.00),
         unit: "bar",
         address: 0x1E67E8,
         signed: false,
@@ -889,7 +850,7 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::InjectionSystem,
         nx: 8,
         ny: 8,
-        axes: (AxisType::Rpm, AxisType::Rpm),
+        axes: (AxisType::Rpm, AxisType::Temperature),
         z_factor: 0.1000000000,
         z_offset: 0.0,
         z_range_stock: (690.00, 1810.00),
@@ -906,11 +867,11 @@ pub const MAP_TEMPLATES: &[MapTemplate] = &[
         category: MapCategory::InjectionSystem,
         nx: 12,
         ny: 8,
-        axes: (AxisType::Rpm, AxisType::Rpm),
+        axes: (AxisType::Rpm, AxisType::InjectionQty),
         z_factor: 0.1000000000,
         z_offset: 0.0,
         z_range_stock: (445.60, 1866.40),
-        z_range_tuned: (-176.00, 3376.00),
+        z_range_tuned: (0.00, 3376.00),
         unit: "bar",
         address: 0x1E6C48,
         signed: false,

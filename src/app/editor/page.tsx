@@ -82,7 +82,7 @@ import { PromptModal } from "@/components/prompt-modal";
 import { correctChecksumByEcuType, isChecksumSupported, ChecksumResult } from "@/lib/ecu/bosch/checksums";
 import { disableDTC, enableDTC, detectDTCs, type DetectedDTC, type CodeblockInfo } from "@/lib/ecu/bosch/dtc";
 import { saveBytesToFile } from "@/lib/local/save-file";
-import { identifyEcu, bytesToBase64, detectorVersion, detectMaps } from "@/lib/local/detector";
+import { identifyEcu, bytesToBase64, detectorVersion, detectMaps, listEcus } from "@/lib/local/detector";
 import * as localStore from "@/lib/local/store";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -2299,10 +2299,34 @@ function EditorPageContent() {
   // Per-ECU mappack settings from the server (admin-configurable):
   // whether export is enabled for this ECU and its price in blue coins.
   const [mappackExportEnabled, setMappackExportEnabled] = useState(true);
+  // Per-ECU flag bundled with the app (src-tauri/ecus.json, `mappack_export_enabled`):
+  // a family whose detector is not yet trusted for export (EDC16C39, beta)
+  // keeps export off client-side whatever the server says. The server flag
+  // above remains the admin switch for the families that do export.
+  const [bundledExportBlocked, setBundledExportBlocked] = useState(false);
   const [mappackPrice, setMappackPrice] = useState(40);
   const [mappackJustUnlocked, setMappackJustUnlocked] = useState(false);
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [maxVersionsPerProject, setMaxVersionsPerProject] = useState(10);
+  useEffect(() => {
+    const ecuType = (projectData?.ecu_type || "").toUpperCase();
+    if (!ecuType) return;
+    let cancelled = false;
+    listEcus()
+      .then((res) => {
+        if (cancelled) return;
+        const entry = (res?.ecus || []).find(
+          (e: { name?: string }) => String(e?.name || "").toUpperCase() === ecuType
+        );
+        setBundledExportBlocked(entry?.mappack_export_enabled === false);
+      })
+      .catch(() => {
+        // Liste indisponible : on ne bloque rien de plus que le serveur.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectData?.ecu_type]);
 
   // Save/Version notification state
   const [saveNotification, setSaveNotification] = useState<{ type: 'save' | 'version' | 'deleted'; message?: string; visible: boolean; fading: boolean }>({ type: 'save', visible: false, fading: false });
@@ -5034,7 +5058,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       toast({ title: t.toolbar.exportMappackLocked, variant: "destructive" });
       return;
     }
-    if (!mappackExportEnabled) {
+    if (!mappackExportEnabled || bundledExportBlocked) {
       toast({ title: t.toolbar.exportMappackDisabled, variant: "destructive" });
       return;
     }

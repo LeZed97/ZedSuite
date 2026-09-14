@@ -107,7 +107,16 @@ pub fn identify_ecu(
 ///       étrangère à la famille) ; et le rapport de complétude du mappack
 ///       n'applique plus les règles VAG (EDC16U1/U31/U34) à ce chip --
 ///       elles affichaient un faux 0 % pour toute famille EDC16 non-VAG.
-pub const DETECTOR_VERSION: u32 = 50;
+///   51 — EDC16C39 : une famille n'est plus jamais signalée deux fois (une
+///       fois par phase) ; les séries de blocs contigus à grille partagée
+///       (Injection Timing 1..5, Smoke Limiter High/Low) sont résolues en
+///       bloc, dans l'ordre de stockage, au lieu de membre par membre ; la
+///       fenêtre d'adresse part de l'adresse exacte ; le mode stock est
+///       respecté par la phase par clé d'axe ; huit familles reprennent le
+///       vrai sens physique de leur second axe (mg/Hub, Nm, degC, hPa, bar
+///       x mm3) ; Trq2qBas est lu signé ; la map EGR est renommée pour ne
+///       plus déclencher la transposition EGR VAG du front.
+pub const DETECTOR_VERSION: u32 = 51;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.

@@ -1,64 +1,76 @@
 // Bosch EDC16C39 (Fiat/Alfa Romeo Multijet) map signatures.
 //
-// STATUS: CALIBRATED for the Alfa 159/147-class passenger-car layout only.
-// See `mod.rs`'s header for the record layout and `docs/PORTING-EDC16C39.md`
+// STATUS: CALIBRATED for the 2MB passenger-car layout shared by Alfa
+// 159/147/GT/Brera and Fiat Bravo/Croma/Doblo/Grande Punto/Punto. See
+// `mod.rs`'s header for the record layout and `docs/PORTING-EDC16C39.md`
 // for the full corpus/method writeup.
 //
-// Corpus for this file: 3 independent real dumps pulled from a large
-// third-party tuning archive (not committed, per CONTRIBUTING.md) --
-// Alfa Romeo 159 1.9 JTDm (two different software builds) and Alfa Romeo 147
-// 1.9 JTD, all genuinely different vehicles/ECU flashes, not re-saves of one
-// file. Every address, dimension pair AND axis-key vector below was found
-// BYTE-IDENTICAL across all three before being accepted here -- a template
-// with axis values that differed between builds was left out rather than
-// guessed at (see mod.rs's "not yet calibrated" list).
+// Corpus for this file: the 21 families' addresses, grids and first axis
+// keys were read byte-identical out of 3 independent real dumps (Alfa
+// Romeo 159, two software builds, and Alfa Romeo 147). The additional axis
+// keys in `signatures_data.rs` were then harvested from a further 39 real
+// 2MB dumps across the models above -- each one is the exact grid read at
+// that family's confirmed slot on one real build, never typed in. A family
+// whose grid differed between builds in SHAPE was left out rather than
+// guessed at (see mod.rs's "Known limits").
+//
+// Physical meaning of every axis was cross-checked against an independent
+// third-party ECU reference database's declared axis units for this chip,
+// not inferred from the numbers alone.
 
 use crate::models::MapCategory;
 
 /// Physical meaning of one axis. Determines both the accepted raw range (a
 /// structural sanity check, independent of any specific file) and the
-/// display factor/label.
+/// display factor/offset/label.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AxisType {
     /// Engine speed, 1 rpm/bit.
     Rpm,
     /// Accelerator pedal / any duty-cycle ratio: 1/8192 per bit (8192 == 100%).
     Percent,
-    /// Injected quantity, matches the Trq2qBas/Rail_Point family convention.
+    /// Injected quantity, 0.01 mm3/stroke per bit.
     InjectionQty,
     /// Rail pressure, 0.1 bar/bit.
     RailPressure,
-    /// Boost / manifold pressure, 1 hPa absolute per bit.
+    /// Boost / ambient / manifold pressure, 1 hPa absolute per bit.
     BoostPressure,
-    /// Air mass, 0.1 mg/Hub per bit.
+    /// Air mass, 0.1 mg/stroke per bit.
     AirMass,
-    /// Torque set point, 0.1 Nm/bit.
+    /// Torque, 0.1 Nm/bit.
     Torque,
-    /// Duration, 2 us/bit (the InjVCD_tiET conversion).
-    Microseconds,
+    /// Temperature, 0.1 K per bit, shown in degrees C.
+    Temperature,
 }
 
 impl AxisType {
     /// Accepted RAW value window for this axis type, before the factor. A
-    /// structural filter, not a guess at any one file's actual breakpoints
-    /// -- bounds below are the real observed min/max across all 21
-    /// confirmed families' axis arrays (see signatures.rs's module doc),
-    /// with a small margin, not copied from another family's (CP31's)
-    /// assumptions. `Rpm` in particular is wider than a literal engine-speed
-    /// axis needs, because it is reused here for a couple of non-RPM index
-    /// axes this pass did not fully re-derive the physical meaning of (see
-    /// docs/PORTING-EDC16C39.md's Known Limits) -- a real simplification,
-    /// not a guess: every bound is still a real ceiling seen in the corpus.
+    /// structural filter that a real breakpoint vector must pass, so it is
+    /// set from what is physically possible for that quantity on this
+    /// engine class, not from any one file -- and every axis key harvested
+    /// from a real dump must pass it (test
+    /// `every_axis_key_passes_its_templates_axis_gates`; an earlier
+    /// revision's tighter "observed" bounds silently rejected four real
+    /// Brera/Doblo grids and lost those builds' maps).
     pub const fn raw_range(self) -> (i16, i16) {
         match self {
-            AxisType::Rpm => (0, 18_100),
+            // 8000 rpm: no Multijet diesel here revs past ~5500; the widest
+            // real breakpoint vector (driver wish) ends at 6200.
+            AxisType::Rpm => (0, 8_000),
+            // 8192 == 100 %; real vectors reach 8356 (a few % of overshoot).
             AxisType::Percent => (0, 8_400),
-            AxisType::InjectionQty => (0, 7_200),
-            AxisType::RailPressure => (0, 8_200),
-            AxisType::BoostPressure => (0, 1_200),
-            AxisType::AirMass => (0, 5_200),
-            AxisType::Torque => (0, 8_400),
-            AxisType::Microseconds => (0, 18_100),
+            // 120 mm3/stroke; real vectors reach 100 (injector-duration map).
+            AxisType::InjectionQty => (0, 12_000),
+            // 2200 bar; real vectors reach 2000.
+            AxisType::RailPressure => (0, 22_000),
+            // 4000 hPa absolute; real vectors (ambient pressure) reach 1086.
+            AxisType::BoostPressure => (0, 4_000),
+            // 1500 mg/stroke; real vectors (smoke limiter) reach 1050.
+            AxisType::AirMass => (0, 15_000),
+            // 800 Nm; real vectors reach 500.
+            AxisType::Torque => (0, 8_000),
+            // -50 .. 150 degC in tenths of kelvin; real vectors span 30..110.
+            AxisType::Temperature => (2_231, 4_231),
         }
     }
 
@@ -71,10 +83,11 @@ impl AxisType {
             AxisType::BoostPressure => "hPa",
             AxisType::AirMass => "mg/Hub",
             AxisType::Torque => "Nm",
-            AxisType::Microseconds => "us",
+            AxisType::Temperature => "degC",
         }
     }
 
+    /// displayed = raw * factor() + offset()
     pub const fn factor(self) -> f64 {
         match self {
             AxisType::Rpm => 1.0,
@@ -84,7 +97,14 @@ impl AxisType {
             AxisType::BoostPressure => 1.0,
             AxisType::AirMass => 0.1,
             AxisType::Torque => 0.1,
-            AxisType::Microseconds => 2.0,
+            AxisType::Temperature => 0.1,
+        }
+    }
+
+    pub const fn offset(self) -> f64 {
+        match self {
+            AxisType::Temperature => -273.1,
+            _ => 0.0,
         }
     }
 }
@@ -93,13 +113,14 @@ impl AxisType {
 /// real block, read from a real dump. Matched byte for byte at the block
 /// head, independently of address, so the family is still identified on a
 /// build where the compiler moved every zone -- see mod.rs's
-/// `detect_by_axis_keys`. A key is a FILTER, never proof on its own: the
-/// block is decoded and range-checked by `try_block` afterwards regardless.
+/// `axis_key_hits`. A key is a FILTER, never proof on its own: the block is
+/// decoded and range-checked by `try_block` afterwards regardless.
 #[derive(Debug, Clone)]
 pub struct AxisKey {
     pub nx: usize,
     pub ny: usize,
-    /// First axis in memory (engine speed on every calibrated family here).
+    /// First axis in memory -- engine speed on every family here except
+    /// `InjVCD_tiET`, which is indexed by rail pressure (see its template).
     pub x: &'static [i16],
     /// Second axis in memory.
     pub y: &'static [i16],
@@ -131,12 +152,14 @@ pub struct MapTemplate {
     pub bosch_label: &'static str,
     pub category: MapCategory,
     /// Expected grid, read from the block header and confirmed identical on
-    /// all 3 corpus files. A block whose header declares a different (nx,
-    /// ny) is rejected outright -- this is the check that keeps the
-    /// address-window phase from accepting a coincidental neighbour block
-    /// with a differently-shaped calibration.
+    /// every corpus file where the family was found. A block whose header
+    /// declares a different (nx, ny) is rejected outright -- this is the
+    /// check that keeps the address-window phase from accepting a
+    /// coincidental neighbour block with a differently-shaped calibration.
     pub nx: usize,
     pub ny: usize,
+    /// (first axis in memory, second axis in memory) -- physical meaning
+    /// from the reference database's declared axis units.
     pub axes: (AxisType, AxisType),
     /// raw * z_factor + z_offset = physical value.
     pub z_factor: f64,
@@ -146,14 +169,15 @@ pub struct MapTemplate {
     pub unit: &'static str,
     /// Whether the raw Z cells are a signed i16 (torque/timing families that
     /// legitimately go negative) or an unsigned u16 (percentages, pressures,
-    /// masses -- everything else in this corpus). Determined from the real
-    /// ECU database's own declared physical range for each family, not
-    /// guessed.
+    /// masses). Determined from the reference database's declared physical
+    /// range AND checked against real cells: `Trq2qBas` carries raw values
+    /// above 0x7FFF on 4 real files that decode to a plausible -0.85 mm3
+    /// signed and an impossible 655 mm3 unsigned, so it is signed although
+    /// the database lists its minimum as 0.
     pub signed: bool,
-    /// Confirmed real address (identical across all 3 corpus files). Used as
-    /// the center of a small search window in the zone-walk phase, and as a
-    /// tie-breaker when an axis key's byte pattern coincidentally repeats
-    /// elsewhere in the file.
+    /// Confirmed real address on the corpus. Center of the outward search
+    /// in the address phase, and the tie-breaker when an axis key's byte
+    /// pattern repeats elsewhere in the file.
     pub address: usize,
     pub axis_keys: &'static [AxisKey],
     pub calibrated: bool,
