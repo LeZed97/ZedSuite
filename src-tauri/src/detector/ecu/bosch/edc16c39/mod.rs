@@ -22,12 +22,18 @@
 // implementation, calibrated against a completely different real corpus.
 //
 // A second real finding, specific to this family and DIFFERENT from CP31:
-// on every one of the 3 real dumps in the corpus, a given family's block
-// sits at the EXACT SAME ADDRESS, not just the same axis-key shape. CP31's
-// addresses moved per software build; these do not, at least across the
-// three real builds checked. `MapTemplate::address` is therefore used as a
-// primary signal (a small window around it), with the axis key as a second,
-// address-independent check -- see `detect_by_address` and
+// on MOST real dumps, a given family's block sits at the same address, or a
+// few hundred bytes from it -- not just the same axis-key shape. This is
+// no longer universal, though: the corpus has since grown past the
+// original 3 Alfa 159/147 files to ~40 real 2MB dumps across Alfa
+// 147/159/GT/Brera and Fiat Bravo/Croma/Doblo/Grande Punto/Punto, and a
+// handful of real builds (a Fiat Bravo 1.6 MultiJet 120cv and an Alfa
+// 0281018045 build, specifically) carry several of these families tens of
+// KB away from every other build's address. Those are deliberately left
+// UNDETECTED on those specific files rather than guessed at -- see
+// `C39_KEY_AMBIGUITY_WINDOW` below and "Known limits". `MapTemplate::address`
+// is used as a primary signal (a small window around it), with the axis key
+// as a second, address-independent check -- see `detect_by_address` and
 // `detect_by_axis_keys` below.
 //
 // Safety contract of this module
@@ -35,20 +41,29 @@
 // `detect()` returns an empty vector for any file that is not the
 // calibrated 2MB layout, and never falls back to the VAG detectors. Per
 // CONTRIBUTING.md: "A false 'unsupported file' is annoying; a false 'this
-// is an EDC16' corrupts someone's ECU."
+// is an EDC16' corrupts someone's ECU." The same contract extends to
+// *labels*: `detect_by_axis_keys` picks at most ONE address per template
+// (see its own doc), because two of this family's real tables can share a
+// byte-identical axis grid closely enough that trusting every match
+// produced the same map name twice at two different real addresses --
+// caught on real Croma/Bravo/Grande Punto/Alfa dumps, not hypothetical.
 //
-// Known limits of a 3-file corpus
-// ---------------------------------
-//   * All 3 corpus files are Alfa Romeo 159/147 1.9 JTD/JTDm passenger cars.
-//     Fiat Ducato (commercial van, same "EDC16C39" WinOLS label) was checked
-//     directly against this layout and does NOT match at these addresses --
-//     it is a different physical calibration on the same base chip and is
-//     explicitly NOT covered. Fiat Bravo/Doblo/Croma/Punto and other Fiat
-//     Group passenger cars sharing the Alfa platform are UNCHECKED, not
-//     assumed to work.
-//   * `z_range_stock`/`z_range_tuned` are derived from only 3 real files'
-//     observed spans, generously widened -- not yet the "20 files, know
-//     what's always there" bar CONTRIBUTING.md asks for.
+// Known limits (corpus: ~40 real 2MB dumps + 12 partial 256KB extracts)
+// -----------------------------------------------------------------------
+//   * Fiat Ducato (commercial van, same "EDC16C39" WinOLS label) does not
+//     match this layout at all on every real Ducato file checked (10+) --
+//     confirmed a different physical calibration on the same base chip,
+//     explicitly NOT covered.
+//   * Coverage is real but uneven per model: Alfa 159/147/GT and Fiat Croma
+//     typically detect 16-21 of the 21 templates; Fiat Grande Punto/Punto
+//     plateau at 15-16 (a structurally smaller subset actually present in
+//     that calibration base, not a detector gap as far as the corpus shows);
+//     a minority of real Brera/Croma/Doblo/Bravo builds detect 0, matching a
+//     genuinely different memory layout on that specific software revision
+//     rather than a missed family.
+//   * `z_range_stock`/`z_range_tuned` are derived from this corpus's observed
+//     spans, generously widened -- still not the "20 files, know what's
+//     always there" bar CONTRIBUTING.md asks for on every family.
 //   * No completeness/invariant report yet (needs a real multi-file bench,
 //     see docs/PORTING-EDC16C39.md).
 //   * 1D curves (TrqMaxGear1..6+R, EngPrt_trqLim) and scalars (SpdLimMax,
@@ -56,7 +71,7 @@
 //     yet -- confirmed present (see docs/PORTING-EDC16C39.md) but not
 //     implemented, matching CP31's own staged curve support.
 //   * `TrqStrtBas` was seen at a stable address but with a DIFFERENT grid on
-//     one of the 3 files (16x16 vs 10x16) -- deliberately left uncalibrated
+//     one real file (16x16 vs 10x16) -- deliberately left uncalibrated
 //     rather than guessed at.
 
 mod signatures;
@@ -190,24 +205,44 @@ impl EDC16C39Detector {
 
     // ------------------------ PHASE 1: axis keys ------------------------
 
-    /// A `MapTemplate` carries the exact `[nx][ny] + X + Y` bytes of the one
-    /// block it describes, read from 3 real dumps. Searching for those bytes
-    /// identifies the family without knowing where it lives -- but several
-    /// of this family's breakpoint grids turn out to be shared by more than
-    /// one real map (a common RPM/quantity axis reused across otherwise
-    /// unrelated tables, discovered empirically against real files: see
-    /// signatures.rs's module doc), so a raw hit list is NOT enough evidence
-    /// on its own here, unlike a rarer grid would be. Kept conservative:
-    /// when a key matches more than once, only hits close to the
-    /// independently-confirmed `template.address` are trusted; if NONE are
-    /// close and there is more than one hit, the whole key is treated as
-    /// ambiguous and skipped rather than guessed at.
+    /// A `MapTemplate` carries the exact `[nx][ny] + X + Y` bytes of the
+    /// block(s) it describes, read from real dumps -- often several
+    /// slightly-different variants, one per software build the corpus
+    /// happened to include. Searching for those bytes identifies the family
+    /// without knowing where it lives, but two real, independently observed
+    /// effects mean a raw hit list is NOT enough evidence on its own here:
+    ///   - several families in this corpus share the EXACT SAME breakpoint
+    ///     grid (the five `InjCrv_Bas1`..`Bas5` injection-timing curves are
+    ///     all indexed by the same RPM/quantity grid -- only their Z data
+    ///     differs), so one family's key can also match at a sibling's real
+    ///     address a few hundred bytes away;
+    ///   - a single family's OWN historical key variants are not mutually
+    ///     exclusive either: on a real Alfa/Fiat build not in the corpus a
+    ///     given file's actual slot can hold one variant's grid while a
+    ///     DIFFERENT, unrelated real table elsewhere in the same file
+    ///     happens to hold another variant's grid byte-for-byte (confirmed:
+    ///     `LmbdSmkHigh`'s "500 RPM" variant matched a real block ~0x48C
+    ///     bytes after this family's own confirmed slot on an Alfa dump
+    ///     whose slot itself used the "600 RPM" variant).
+    ///
+    /// Both effects have the same shape -- multiple candidate locations,
+    /// only one of them this template's real slot -- so all of a template's
+    /// keys are searched together into one candidate pool, and only the
+    /// SINGLE candidate CLOSEST to the independently-confirmed
+    /// `template.address`, across every key combined, is trusted. Emitting
+    /// one result per key independently (the previous approach) is exactly
+    /// what let two different variants each uniquely match a different real
+    /// block and mislabel both under the same name; picking one winner per
+    /// template makes that structurally impossible. If even the closest
+    /// candidate is farther than `C39_KEY_AMBIGUITY_WINDOW`, it is treated
+    /// as ambiguous and skipped rather than guessed at.
     fn detect_by_axis_keys(&self, data: &[u8]) -> Vec<DetectedMap> {
         let mut out = Vec::new();
         for template in MAP_TEMPLATES {
             if !self.exploratory && !template.calibrated {
                 continue;
             }
+            let mut candidates: Vec<usize> = Vec::new();
             for key in template.axis_keys {
                 let bytes = key.to_bytes();
                 if bytes.len() < C39_BLOCK_HEADER_LEN + 8 {
@@ -225,28 +260,30 @@ impl EDC16C39Detector {
                     off += 2;
                 }
                 if hits.is_empty() || hits.len() > C39_MAX_KEY_HITS {
+                    // Either no match, or shared by so much of the file that
+                    // it describes a grid, not a family -- not usable
+                    // evidence either way.
                     continue;
                 }
-                if hits.len() > 1 {
-                    let near_confirmed: Vec<usize> = hits
-                        .iter()
-                        .copied()
-                        .filter(|&h| h.abs_diff(template.address) <= C39_KEY_AMBIGUITY_WINDOW)
-                        .collect();
-                    if near_confirmed.is_empty() {
-                        // Ambiguous: this grid is shared by several tables and none
-                        // of the hits is where we independently know this family
-                        // lives. Skip rather than guess -- see this fn's doc.
-                        continue;
-                    }
-                    hits = near_confirmed;
-                }
-                for hit in hits {
-                    if let Some(mut map) = self.try_block_ranged(data, hit, template, true) {
-                        map.confidence = (map.confidence + C39_AXIS_KEY_BONUS).min(0.99);
-                        out.push(map);
-                    }
-                }
+                candidates.extend(hits);
+            }
+            if candidates.is_empty() {
+                continue;
+            }
+            let nearest = candidates
+                .iter()
+                .copied()
+                .min_by_key(|&h| h.abs_diff(template.address))
+                .expect("candidates is non-empty");
+            if nearest.abs_diff(template.address) > C39_KEY_AMBIGUITY_WINDOW {
+                // Ambiguous: no candidate from any of this template's keys is
+                // anywhere near where this family is known to live. Skip
+                // rather than guess.
+                continue;
+            }
+            if let Some(mut map) = self.try_block_ranged(data, nearest, template, true) {
+                map.confidence = (map.confidence + C39_AXIS_KEY_BONUS).min(0.99);
+                out.push(map);
             }
         }
         out

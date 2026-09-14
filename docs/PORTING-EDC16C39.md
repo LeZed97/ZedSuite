@@ -1,28 +1,36 @@
 # Porting notes: Bosch EDC16C39 (Fiat / Alfa Romeo Multijet)
 
-Status: **calibrated for the Alfa 159/147-class 2MB passenger-car layout only**,
-opened as a draft PR per CONTRIBUTING.md while the corpus grows. See
+Status: **calibrated for the 2MB passenger-car layout shared by Alfa
+159/147/GT/Brera and Fiat Bravo/Croma/Doblo/Grande Punto/Punto**, confirmed
+NOT to cover Fiat Ducato (commercial van, same chip, different layout);
+opened as a draft PR per CONTRIBUTING.md while the corpus grows past 42
+real dumps toward the 50+ bar. See
 `src-tauri/src/detector/ecu/bosch/edc16c39/signatures.rs`'s module doc for the
 per-family reference table and `mod.rs`'s doc for the detection mechanism.
 
 ## Corpus
 
-3 real dumps, pulled from a large third-party tuning archive (not committed,
-per CONTRIBUTING.md's ground rules):
+Grew from an initial 3-file spot-check to **54 real dumps**, pulled from a
+large third-party tuning archive (not committed, per CONTRIBUTING.md's
+ground rules) plus a dedicated seedbox search for more Fiat/Alfa material:
 
-| Vehicle | Engine | Bosch SW | Real, independent build? |
-|---|---|---|---|
-| Alfa Romeo 159 | 1.9 JTDm | (reference build) | yes |
-| Alfa Romeo 159 | 1.9 JTDm | different real-world flash | yes |
-| Alfa Romeo 147 | 1.9 JTD | different real-world flash | yes |
+- **42 are the calibrated 2MB layout** and were run through
+  `edc16c39_real_check`, spanning: Alfa Romeo 147 (3, incl. a Ducati Corse
+  170hp build), 159 (3), GT (1), Brera (2); Fiat Bravo (3), Croma (3), Doblo
+  (2), Grande Punto (6), Punto (2), Ducato (8, all real, all **0 maps** —
+  see below); plus 4 further real Alfa/Fiat 0281xxxxxx builds not tied to a
+  named model in the archive.
+- **12 are 256KB partial extracts** (Alfa Brera/Giulietta, Fiat
+  Bravo/Croma/Doblo) under the same "EDC16C39" WinOLS label — too small to
+  be the full flash, not run through the detector, not assumed to work.
 
-Plus 2 files used only to confirm what is **NOT** covered:
-- Fiat Ducato (commercial van): same WinOLS "EDC16C39" label, genuinely
-  different calibration layout (confirmed: none of the 21 calibrated
-  addresses decode to anything on this file). Explicitly out of scope.
-- Fiat Bravo: a 256KB dump under the same label — either a different flash
-  chip generation or an EEPROM-only read; also out of scope, not investigated
-  further this pass.
+Fiat Ducato (commercial van) is the one model checked in volume (8 real,
+independent files, several software revisions) and confirmed **consistently
+0 maps** on every one — genuinely a different calibration layout on the same
+base chip, not a detector gap. Every other model above has at least one real
+file detecting maps; a few individual builds (see "Known limits") detect 0
+or very few, which on inspection reflects that specific software revision's
+memory layout rather than a missed family.
 
 ## Method
 
@@ -49,71 +57,112 @@ Plus 2 files used only to confirm what is **NOT** covered:
    retard, engine-braking torque) and the generic axis-range gate borrowed
    from CP31 (tuned to a Mercedes corpus) rejected several real EDC16C39
    axes outright until widened to this platform's own observed values.
+5. As the corpus grew past the original 3 files, two further real
+   mislabeling bugs surfaced and were fixed the same way — by testing
+   against the new files, not by guessing:
+   - **Cross-family axis-key ambiguity**: several map families
+     (`InjCrv_Bas1`..`Bas5` in particular) share a byte-identical breakpoint
+     grid, so searching for one family's key also matched its siblings' real
+     addresses. Fixed by keeping only the single hit nearest that
+     template's own confirmed address, and by treating an axis key as
+     ambiguous (skipped, not guessed) if even its nearest hit is far outside
+     a bounded window.
+   - **Same-template multi-key duplication**: several templates accumulated
+     more than one historical axis-key variant (one per real software build
+     the corpus happened to add). On specific real Croma/Bravo/Grande Punto
+     and Alfa dumps, TWO of a single template's own variants each matched a
+     *different* real address in the same file — one the family's real
+     slot, the other a different, unrelated real table that happened to
+     share the same grid — and both got reported under the same name.
+     Root cause: each key's hits were resolved (and pushed) independently,
+     so two keys on the same template could each contribute their own
+     address. Fixed by pooling every key's candidate hits per template
+     first, then keeping only the single closest-to-address candidate
+     across all of them combined — structurally at most one result per
+     template, regardless of how many key variants it accumulates.
 
 ## What this PR adds
 
 - `src-tauri/src/detector/ecu/bosch/edc16c39/{mod.rs,signatures.rs}`: 21
   calibrated 2D map families.
 - Identifier gate in `ecu_identifier.rs`: the literal `"EDC16C39"` family
-  string (found in every one of the 5 real files checked, including the two
-  out-of-scope ones — a real, findable marker, unlike the HW-prefix
-  heuristic the VAG variants rely on, which this chip's *prefix* shares with
-  several unrelated OEMs), raised to high confidence only once the confirmed
+  string (found in all 54 real files checked — the 42 usable dumps AND the
+  12 partial extracts AND all 8 out-of-scope Ducato files — a real,
+  consistently findable marker, unlike the HW-prefix heuristic the VAG
+  variants rely on, which this chip's *prefix* shares with several unrelated
+  OEMs), raised to high confidence only once the confirmed
   EGR block also decodes structurally.
 - `src-tauri/examples/edc16c39_real_check.rs`: bench tool, same convention as
   `dump_maps`.
 
-## Bench result (3 corpus files, `edc16c39_real_check`)
+## Bench result (42 real 2MB files, `edc16c39_real_check`, of 21 templates)
 
-| File | Maps found |
-|---|---|
-| Alfa 159 (reference build) | 23 |
-| Alfa 159 (different build) | 22 |
-| Alfa 147 | 22 |
-| Fiat Ducato (out of scope) | **0** — confirms the safety contract holds |
+| Model | Files | Maps found (min-max) |
+|---|---|---|
+| Alfa 159 | 3 | 20 on all 3 |
+| Alfa 147 (incl. a Ducati Corse 170hp build) | 3 | 17-20 |
+| Alfa GT | 1 | 20 |
+| Alfa Brera | 2 | 17 on both |
+| Fiat Croma | 3 | 16-20 |
+| Fiat Doblo | 2 | 19-20 |
+| Fiat Grande Punto | 6 | 15-16 (a real, structurally smaller subset, not a gap — see below) |
+| Fiat Punto | 2 | 16 on both |
+| Fiat Bravo | 3 | 0, 1, 20 — see "Known limits", this is the weakest-understood model |
+| Other real Alfa/Fiat 0281xxxxxx builds (unnamed in the archive) | 4 | 0, 2, 14, 17 |
+| Fiat Ducato | 8 | **0 on all 8** — confirms the safety contract holds |
 
-## Known limits (read before trusting this beyond the 3-file corpus)
+No file in this corpus reports the same map name twice (verified by script
+across all 42, after the multi-key-duplication fix described above).
 
-- **All 3 corpus files are the same vehicle class** (Alfa 159/147 1.9
-  JTD/JTDm). CONTRIBUTING.md's bar is 50 files across software versions and
-  engines; this is a starting point, not a finished detector. Fiat Group
-  passenger cars sharing the same platform (Bravo, Doblo, Croma, Grande
-  Punto, Giulietta, Mito, Brera, Spider — all real models seen carrying this
-  same "EDC16C39" WinOLS label in the archive this corpus was drawn from) are
-  UNCHECKED, not assumed to work.
-- **No completeness/invariant report yet** — needs the "20 files, know what's
-  always there" pass CONTRIBUTING.md describes, not statistics from 3 files.
+## Known limits (read before trusting this beyond this corpus)
+
+- **Fiat Bravo is the weakest-understood model**: 3 real 2MB files range
+  from 0 to 20 maps found, wider than any other model. The 20-map file
+  (1.9 JTDM) behaves like Alfa/Croma; the 0-map file (1.6 MultiJet 120cv)
+  genuinely carries several of this corpus's templates tens of KB away from
+  every other build's address (confirmed real, via the family's own
+  internal relative spacing — see `mod.rs`'s "Known limits") but far outside
+  the window this detector currently trusts, so it correctly reports
+  nothing rather than a guess. More real Bravo files, especially other 1.6
+  MultiJet builds, would confirm whether this is one outlier or a second,
+  uncalibrated address family worth its own template set.
+- **Fiat Grande Punto/Punto plateau at 15-16 of 21 templates** across all 8
+  real files checked (6 Grande Punto + 2 Punto) — consistent enough across
+  independent builds to read as a real, structurally smaller subset present
+  in that calibration base, not a detector gap, but not yet confirmed
+  against a reference database the way the original 159/147 set was.
+- **CONTRIBUTING.md's bar is 50 real files across software versions and
+  engines**; this corpus (42 usable 2MB dumps) is close on raw count but
+  still concentrated on 1.9 JTD/JTDm-class engines. Giulietta and Mito were
+  seen carrying the same "EDC16C39" WinOLS label in the source archive but
+  only as 256KB partial extracts, too small to use — still UNCHECKED.
+- **No completeness/invariant report yet** — needs the "always N of X" pass
+  CONTRIBUTING.md describes, written from real per-model statistics, not
+  asserted from a handful of files.
 - **`PCR_pBDesMaxAP` (Boost Pressure Limiter) is address-confirmed but not yet
-  detected**: its Z data reads as a flat constant on all 3 corpus files, and
+  detected**: its Z data reads as a flat constant on every file checked, and
   the generic "a calibration map is never flat" rejection (needed everywhere
-  else, and inherited from the CP31 design) throws it out. Possibly a
-  genuinely fixed ceiling on this engine, possibly a fourth file would show
-  real variation — not enough evidence yet to special-case the check safely.
-- **`AirCtl_rEGRBas` (EGR) and `LmbdSmkHigh`/`LmbdSmkLow` (smoke limiter) each
-  report twice**, at two real, back-to-back, structurally-identical
-  addresses, consistently across all 3 files. Not yet root-caused: possibly
-  two genuine real tables (e.g. a second calibration variant), possibly one
-  is something else that happens to share the exact grid. Both instances
-  decode to physically plausible values either way, so this is a duplicate
-  count, not a wrong-value risk — but it means the completeness report can't
-  be written honestly yet (see previous point).
+  else, inherited from the CP31 design) throws it out. Possibly a genuinely
+  fixed ceiling on this engine family — not enough evidence yet to
+  special-case the check safely.
 - **1D curves and scalars are not read at all** (`TrqMaxGear1..6+R`,
   `EngPrt_trqLim`, `SpdLimMax`, `PCR_pDesMax`) — confirmed present at fixed
   real addresses via the same reference database, structurally different
   on-disk record this pass did not implement a reader for. Matches CP31's
   own staged curve support (2/47 shipped initially).
 - **`TrqStrtBas`** was seen at a stable address but with a genuinely
-  different grid on one of the 3 files (16x16 vs 10x16) — left out rather
-  than guessed at.
+  different grid on one real file (16x16 vs 10x16) — left out rather than
+  guessed at.
 - **No mappack export, no "solution"** — matches CONTRIBUTING.md's rule and
   the same caution CP31 took with a one-software corpus.
 
 ## What would get this out of draft
 
-Per CONTRIBUTING.md's own bar: a corpus in the range of 50 real files across
-software versions and the Fiat Group models/engines that carry this chip,
-stock and tuned; a bench table like the one above run against that full
-corpus; real invariants ("this ECU always carries N of X") written from that
-corpus, not copied from the 3-file spot-check above; and the two open
-duplicate-address/flat-map questions resolved with real evidence rather than
-left as documented gaps.
+Per CONTRIBUTING.md's own bar: a corpus solidly past 50 real files that also
+spreads across more engines (not just 1.9 JTD/JTDm), stock and tuned; real
+Giulietta/Mito 2MB dumps to replace the two 256KB partial extracts currently
+unusable; more Fiat Bravo 1.6 MultiJet files to resolve whether that build's
+large address drift is a one-off or a second address family worth its own
+templates; a bench table like the one above run against that full corpus;
+and real invariants ("this ECU always carries N of X") written from that
+corpus, not asserted from a spot-check.
