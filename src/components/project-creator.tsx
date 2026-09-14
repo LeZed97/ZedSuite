@@ -507,6 +507,8 @@ export function ProjectCreator({ onProjectCreated }: ProjectCreatorProps) {
                     { value: "Seat", label: "Seat" },
                     { value: "Skoda", label: "Skoda" },
                     { value: "Volkswagen", label: "Volkswagen" },
+                    { value: "Alfa Romeo", label: "Alfa Romeo" },
+                    { value: "Fiat", label: "Fiat" },
                   ]}
                 />
               </div>
