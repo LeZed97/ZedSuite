@@ -217,6 +217,23 @@ const looksLikeDefinitionFile = (bytes: Uint8Array): boolean => {
   return c === 0x3c /* < */ || c === 0x7b /* { */ || c === 0x5b /* [ */;
 };
 
+/**
+ * État du checksum d'un résultat de correctChecksumByEcuType. « OK » seulement
+ * quand les sommes ont réellement été vérifiées : aucune région reconnue
+ * (null), disposition EDC15 inconnue ou fichier de moins de 512 Ko (variant
+ * 'unknown'), algorithme non déterminé (ChecksumTypeError, dont les octets
+ * « corrigés » sont faux) = non vérifiable. L'export annonçait « Checksum OK »
+ * et nommait le fichier _ChecksumOK dans ces cas-là.
+ */
+const checksumStatusOf = (
+  res: ReturnType<typeof correctChecksumByEcuType>,
+): 'ok' | 'bad' | 'unsupported' => {
+  if (!res || res.info.variant === 'unknown' || res.info.result === ChecksumResult.ChecksumTypeError) {
+    return 'unsupported';
+  }
+  return res.info.fixed === 0 ? 'ok' : 'bad';
+};
+
 const saveProjectToSession = (data: ProjectData) => {
   const { file_data, ...dataWithoutFileData } = data;
   try {
@@ -2499,7 +2516,7 @@ function EditorPageContent() {
   const [checksumCorrectedData, setChecksumCorrectedData] = useState<number[] | null>(null);
   // État du checksum des données à exporter, vérifié à l'ouverture de la
   // fenêtre d'export : ok → export direct, bad → correction proposée
-  const [exportChecksumStatus, setExportChecksumStatus] = useState<'checking' | 'ok' | 'bad'>('checking');
+  const [exportChecksumStatus, setExportChecksumStatus] = useState<'checking' | 'ok' | 'bad' | 'unsupported'>('checking');
 
   // ── État du mappack : rapport de complétude EDC16 (expected_maps) ──
   // Le détecteur liste les familles de maps qui existent TOUJOURS sur cette
@@ -3479,8 +3496,7 @@ function EditorPageContent() {
       // correctChecksumByEcuType ne modifie pas son entrée (copie interne) :
       // fixed === 0 signifie que tous les checksums du fichier sont déjà bons
       const res = correctChecksumByEcuType(projectData.ecu_type, hexdumpDisplayData);
-      // variant 'unknown' (disposition EDC15 non reconnue) = pas de correction possible
-      setChecksumStatus(res && res.info.variant !== 'unknown' ? (res.info.fixed === 0 ? 'ok' : 'bad') : 'unsupported');
+      setChecksumStatus(checksumStatusOf(res));
     }, 400);
     return () => clearTimeout(timer);
   }, [hexdumpDisplayData, currentVersionId, projectData?.ecu_type, projectData?.file_data?.length]);
@@ -3577,7 +3593,7 @@ function EditorPageContent() {
       // signifie que tous les checksums du fichier sont déjà bons
       const editedData = buildEditedFileData();
       const res = correctChecksumByEcuType(projectData.ecu_type, editedData);
-      setExportChecksumStatus(res ? (res.info.fixed === 0 ? 'ok' : 'bad') : 'ok');
+      setExportChecksumStatus(checksumStatusOf(res));
     }, 60);
   };
 
@@ -5763,9 +5779,10 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     if (!res) return;
     const { correctedData, info } = res;
 
-    // Disposition EDC15 inconnue : aucune table de checksum ne s'applique,
-    // le fichier est rendu intact — ne pas annoncer « déjà valide ».
-    if (info.variant === 'unknown') {
+    // Disposition EDC15 inconnue (fichier rendu intact) ou algorithme non
+    // déterminé (octets « corrigés » avec le mauvais algorithme) : ne rien
+    // écrire et ne pas annoncer « déjà valide ».
+    if (checksumStatusOf(res) === 'unsupported') {
       setChecksumStatus('unsupported');
       toast({ title: t.checksum.statusUnsupported, variant: 'destructive' });
       return;
@@ -5848,12 +5865,13 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     // projet ressortait NOK à la réouverture (N75 du v4-Golf5 du banc).
     const current = buildEditedFileDataRef.current?.() ?? [];
     const check = current.length ? correctChecksumByEcuType(ecuType, current) : null;
-    if (check && check.info.fixed > 0) {
+    const checkStatus = checksumStatusOf(check);
+    if (checkStatus === 'bad') {
       // performChecksumRecalc corrige les octets, les ajoute aux modifications
       // binaires, puis enregistre (même chemin que le bouton manuel)
       await performChecksumRecalcRef.current?.();
     } else {
-      setChecksumStatus('ok');
+      setChecksumStatus(checkStatus);
       await handleSaveRef.current?.();
     }
   };
