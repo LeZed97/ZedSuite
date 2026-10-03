@@ -20,6 +20,7 @@ import {
   readFile,
   readTextFile,
   remove,
+  rename,
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -51,6 +52,38 @@ export function newId(): string {
   crypto.getRandomValues(rand);
   for (let i = 0; i < 15; i++) id += chars[rand[i] % chars.length];
   return id;
+}
+
+/**
+ * Écritures atomiques : le contenu est écrit dans un fichier temporaire voisin
+ * (nom unique, deux écritures simultanées ne se mélangent pas) puis renommé
+ * par-dessus la cible. writeTextFile / writeFile vident le fichier avant de
+ * l'écrire : un plantage ou une coupure entre les deux laissait un JSON
+ * tronqué, que les lectures ignorent sans rien dire — projet absent de la
+ * liste, version rouverte sans ses modifications, puis écrasée au prochain
+ * enregistrement. Le renommage remplace la cible d'un coup (Windows compris).
+ */
+async function replaceAtomically(path: string, write: (tmp: string) => Promise<void>): Promise<void> {
+  const tmp = `${path}.${newId()}.tmp`;
+  try {
+    await write(tmp);
+    await rename(tmp, path, { oldPathBaseDir: BaseDirectory.AppData, newPathBaseDir: BaseDirectory.AppData });
+  } catch (e) {
+    try {
+      await remove(tmp, BASE);
+    } catch {
+      // le fichier temporaire n'a peut-être jamais été créé
+    }
+    throw e;
+  }
+}
+
+function writeTextAtomic(path: string, content: string): Promise<void> {
+  return replaceAtomically(path, (tmp) => writeTextFile(tmp, content, BASE));
+}
+
+function writeBytesAtomic(path: string, bytes: Uint8Array): Promise<void> {
+  return replaceAtomically(path, (tmp) => writeFile(tmp, bytes, BASE));
 }
 
 async function ensureProjectsDir(): Promise<void> {
@@ -93,10 +126,9 @@ export async function getFile(fileId: string): Promise<FileRecord | null> {
 
 async function saveFileRecord(record: FileRecord): Promise<void> {
   record.updated = nowIso();
-  await writeTextFile(
+  await writeTextAtomic(
     `${projectDir(record.id)}/project.json`,
-    JSON.stringify(record, null, 2),
-    BASE
+    JSON.stringify(record, null, 2)
   );
 }
 
@@ -209,10 +241,9 @@ export async function createProject(input: CreateProjectInput): Promise<{
     await mkdir(projectDir(id), { ...BASE, recursive: true });
     await writeFile(`${projectDir(id)}/original.bin`, input.binary, BASE);
     await writeVersions(id, [oriVersion]);
-    await writeTextFile(
+    await writeTextAtomic(
       `${projectDir(id)}/project.json`,
-      JSON.stringify(record, null, 2),
-      BASE
+      JSON.stringify(record, null, 2)
     );
   } catch (e) {
     try {
@@ -238,10 +269,9 @@ export async function listVersions(fileId: string): Promise<Version[]> {
 }
 
 async function writeVersions(fileId: string, versions: Version[]): Promise<void> {
-  await writeTextFile(
+  await writeTextAtomic(
     `${projectDir(fileId)}/versions.json`,
-    JSON.stringify(versions, null, 2),
-    BASE
+    JSON.stringify(versions, null, 2)
   );
 }
 
@@ -312,7 +342,7 @@ export async function writeVersionBinary(
 ): Promise<void> {
   const found = await findVersion(versionId);
   if (!found) throw new Error("version_not_found");
-  await writeFile(`${projectDir(found.fileId)}/version-${versionId}.bin`, bytes, BASE);
+  await writeBytesAtomic(`${projectDir(found.fileId)}/version-${versionId}.bin`, bytes);
 }
 
 export async function readVersionBinary(
@@ -334,10 +364,9 @@ export async function writeVersionExtraMaps(
 ): Promise<void> {
   const found = await findVersion(versionId);
   if (!found) throw new Error("version_not_found");
-  await writeTextFile(
+  await writeTextAtomic(
     `${projectDir(found.fileId)}/version-${versionId}-maps.json`,
-    JSON.stringify(maps),
-    BASE
+    JSON.stringify(maps)
   );
 }
 
@@ -452,10 +481,9 @@ export async function replaceMapEdits(
         payload: e.payload ?? {},
         created: nowIso(),
       }));
-      await writeTextFile(
+      await writeTextAtomic(
         `${projectDir(found.fileId)}/edits-${versionId}.json`,
-        JSON.stringify(list),
-        BASE
+        JSON.stringify(list)
       );
       result = list;
     });
@@ -484,10 +512,9 @@ async function addMapEditUnlocked(
     created: nowIso(),
   };
   edits.push(edit);
-  await writeTextFile(
+  await writeTextAtomic(
     `${projectDir(found.fileId)}/edits-${versionId}.json`,
-    JSON.stringify(edits),
-    BASE
+    JSON.stringify(edits)
   );
   return edit;
 }
