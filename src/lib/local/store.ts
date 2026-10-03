@@ -53,6 +53,31 @@ export function newId(): string {
   return id;
 }
 
+/**
+ * Lecture-modification-écriture SÉRIALISÉES par fichier. updateFile,
+ * createVersion, updateVersion et deleteVersion relisent le JSON, le
+ * modifient puis le réécrivent : deux appels simultanés repartaient de la
+ * même lecture et le dernier écrit effaçait l'autre (six PATCH simultanés de
+ * champs différents n'en gardaient qu'un, cinq créations de version
+ * simultanées une seule). Même principe que la file des edits de maps.
+ */
+const fileQueues = new Map<string, Promise<unknown>>();
+
+function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = fileQueues.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  fileQueues.set(key, run);
+  run
+    .catch(() => undefined)
+    .then(() => {
+      if (fileQueues.get(key) === run) fileQueues.delete(key);
+    });
+  return run;
+}
+
+const projectFileKey = (fileId: string) => `${fileId}/project.json`;
+const versionsFileKey = (fileId: string) => `${fileId}/versions.json`;
+
 async function ensureProjectsDir(): Promise<void> {
   if (!(await exists(PROJECTS_DIR, BASE))) {
     await mkdir(PROJECTS_DIR, { ...BASE, recursive: true });
@@ -104,11 +129,13 @@ export async function updateFile(
   fileId: string,
   patch: Partial<FileRecord>
 ): Promise<FileRecord | null> {
-  const record = await getFile(fileId);
-  if (!record) return null;
-  Object.assign(record, patch, { id: record.id, created: record.created });
-  await saveFileRecord(record);
-  return record;
+  return serialized(projectFileKey(fileId), async () => {
+    const record = await getFile(fileId);
+    if (!record) return null;
+    Object.assign(record, patch, { id: record.id, created: record.created });
+    await saveFileRecord(record);
+    return record;
+  });
 }
 
 export async function deleteFile(fileId: string): Promise<boolean> {
@@ -251,22 +278,24 @@ export async function createVersion(
   baseVersionId?: string | null,
   setCurrent: boolean = true
 ): Promise<Version | null> {
-  const versions = await listVersions(fileId);
-  if (versions.length === 0 && !(await getFile(fileId))) return null;
-  if (setCurrent) {
-    for (const v of versions) v.is_current = false;
-  }
-  const version: Version = {
-    id: newId(),
-    file: fileId,
-    name,
-    is_current: setCurrent,
-    base_version: baseVersionId || null,
-    created: nowIso(),
-  };
-  versions.push(version);
-  await writeVersions(fileId, versions);
-  return version;
+  return serialized(versionsFileKey(fileId), async () => {
+    const versions = await listVersions(fileId);
+    if (versions.length === 0 && !(await getFile(fileId))) return null;
+    if (setCurrent) {
+      for (const v of versions) v.is_current = false;
+    }
+    const version: Version = {
+      id: newId(),
+      file: fileId,
+      name,
+      is_current: setCurrent,
+      base_version: baseVersionId || null,
+      created: nowIso(),
+    };
+    versions.push(version);
+    await writeVersions(fileId, versions);
+    return version;
+  });
 }
 
 /** Find which project folder owns a version (versions carry their file id). */
@@ -290,15 +319,21 @@ export async function updateVersion(
 ): Promise<Version | null> {
   const found = await findVersion(versionId);
   if (!found) return null;
-  const { fileId, versions, version } = found;
-  if (patch.is_current === true) {
-    for (const v of versions) v.is_current = v.id === versionId;
-  } else if (patch.is_current === false) {
-    version.is_current = false;
-  }
-  if (patch.name !== undefined) version.name = patch.name;
-  await writeVersions(fileId, versions);
-  return version;
+  const { fileId } = found;
+  return serialized(versionsFileKey(fileId), async () => {
+    // relu dans la file : une écriture concurrente a pu passer entre-temps
+    const versions = await listVersions(fileId);
+    const version = versions.find((v) => v.id === versionId);
+    if (!version) return null;
+    if (patch.is_current === true) {
+      for (const v of versions) v.is_current = v.id === versionId;
+    } else if (patch.is_current === false) {
+      version.is_current = false;
+    }
+    if (patch.name !== undefined) version.name = patch.name;
+    await writeVersions(fileId, versions);
+    return version;
+  });
 }
 
 // ── Imported version binaries ─────────────────────────────────────
@@ -361,16 +396,24 @@ export async function deleteVersion(
 ): Promise<{ ok: boolean; error?: string }> {
   const found = await findVersion(versionId);
   if (!found) return { ok: false, error: "not_found" };
-  const { fileId, versions, version } = found;
-  if (version.name === "Ori") return { ok: false, error: "cannot_delete_ori" };
-  if (versions.length <= 1) return { ok: false, error: "last_version" };
+  const { fileId } = found;
+  const removed = await serialized(versionsFileKey(fileId), async (): Promise<{ ok: boolean; error?: string }> => {
+    // relu dans la file : une écriture concurrente a pu passer entre-temps
+    const versions = await listVersions(fileId);
+    const version = versions.find((v) => v.id === versionId);
+    if (!version) return { ok: false, error: "not_found" };
+    if (version.name === "Ori") return { ok: false, error: "cannot_delete_ori" };
+    if (versions.length <= 1) return { ok: false, error: "last_version" };
 
-  const remaining = versions.filter((v) => v.id !== versionId);
-  if (version.is_current && remaining.length > 0) {
-    // Promote the most recent remaining version
-    remaining.reduce((a, b) => (a.created > b.created ? a : b)).is_current = true;
-  }
-  await writeVersions(fileId, remaining);
+    const remaining = versions.filter((v) => v.id !== versionId);
+    if (version.is_current && remaining.length > 0) {
+      // Promote the most recent remaining version
+      remaining.reduce((a, b) => (a.created > b.created ? a : b)).is_current = true;
+    }
+    await writeVersions(fileId, remaining);
+    return { ok: true };
+  });
+  if (!removed.ok) return removed;
   try {
     await remove(`${projectDir(fileId)}/edits-${versionId}.json`, BASE);
   } catch {
