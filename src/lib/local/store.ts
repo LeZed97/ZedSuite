@@ -115,6 +115,9 @@ export async function deleteFile(fileId: string): Promise<boolean> {
   const dir = projectDir(fileId);
   if (!(await exists(dir, BASE))) return false;
   await remove(dir, { ...BASE, recursive: true });
+  for (const [versionId, owner] of versionOwner) {
+    if (owner === fileId) versionOwner.delete(versionId);
+  }
   return true;
 }
 
@@ -228,10 +231,20 @@ export async function createProject(input: CreateProjectInput): Promise<{
 
 // ── Versions ──────────────────────────────────────────────────────
 
+// id de version → dossier du projet qui la porte. findVersion parcourait les
+// versions.json de TOUS les projets à chaque appel (ouvrir une version en
+// déclenche trois, chaque enregistrement un de plus) : le coût grandissait
+// avec le nombre de projets. Le cache n'est qu'un raccourci : la version est
+// toujours relue et vérifiée dans son projet, et une entrée périmée retombe
+// sur le parcours complet.
+const versionOwner = new Map<string, string>();
+
 export async function listVersions(fileId: string): Promise<Version[]> {
   try {
     const raw = await readTextFile(`${projectDir(fileId)}/versions.json`, BASE);
-    return JSON.parse(raw) as Version[];
+    const versions = JSON.parse(raw) as Version[];
+    for (const v of versions) versionOwner.set(v.id, fileId);
+    return versions;
   } catch {
     return [];
   }
@@ -266,6 +279,7 @@ export async function createVersion(
   };
   versions.push(version);
   await writeVersions(fileId, versions);
+  versionOwner.set(version.id, fileId);
   return version;
 }
 
@@ -273,6 +287,13 @@ export async function createVersion(
 async function findVersion(
   versionId: string
 ): Promise<{ fileId: string; versions: Version[]; version: Version } | null> {
+  const cached = versionOwner.get(versionId);
+  if (cached) {
+    const versions = await listVersions(cached);
+    const version = versions.find((v) => v.id === versionId);
+    if (version) return { fileId: cached, versions, version };
+    versionOwner.delete(versionId);
+  }
   await ensureProjectsDir();
   const entries = await readDir(PROJECTS_DIR, BASE);
   for (const entry of entries) {
@@ -371,6 +392,7 @@ export async function deleteVersion(
     remaining.reduce((a, b) => (a.created > b.created ? a : b)).is_current = true;
   }
   await writeVersions(fileId, remaining);
+  versionOwner.delete(versionId);
   try {
     await remove(`${projectDir(fileId)}/edits-${versionId}.json`, BASE);
   } catch {
