@@ -53,6 +53,16 @@ export function newId(): string {
   return id;
 }
 
+async function ensureProjectsDir(): Promise<void> {
+  if (!(await exists(PROJECTS_DIR, BASE))) {
+    await mkdir(PROJECTS_DIR, { ...BASE, recursive: true });
+  }
+}
+
+function projectDir(fileId: string): string {
+  return `${PROJECTS_DIR}/${fileId}`;
+}
+
 /**
  * Lecture-modification-écriture SÉRIALISÉES par fichier. updateFile,
  * createVersion, updateVersion et deleteVersion relisent le JSON, le
@@ -77,16 +87,6 @@ function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
 
 const projectFileKey = (fileId: string) => `${fileId}/project.json`;
 const versionsFileKey = (fileId: string) => `${fileId}/versions.json`;
-
-async function ensureProjectsDir(): Promise<void> {
-  if (!(await exists(PROJECTS_DIR, BASE))) {
-    await mkdir(PROJECTS_DIR, { ...BASE, recursive: true });
-  }
-}
-
-function projectDir(fileId: string): string {
-  return `${PROJECTS_DIR}/${fileId}`;
-}
 
 // ── Files (projects) ──────────────────────────────────────────────
 
