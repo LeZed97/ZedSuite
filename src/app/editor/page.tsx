@@ -3459,21 +3459,16 @@ function EditorPageContent() {
 
   // Surveillance du checksum : re-vérification (débouncée) à chaque changement
   // des octets courants — édits de maps, DTC, import, changement de version.
-  // Un checksum déjà invalide n'est PAS re-vérifié à chaque modification (il
-  // le reste forcément) : seuls un changement de version ou le recalcul
-  // manuel relancent la vérification.
-  const checksumStatusRef = useRef(checksumStatus);
-  checksumStatusRef.current = checksumStatus;
-  const checksumCheckedVersionRef = useRef<string | null>(null);
+  // Un checksum invalide est re-vérifié lui aussi : annuler la modification
+  // fautive (ou la refaire à l'identique) rend le fichier valide, et
+  // l'indicateur restait « invalide » jusqu'au changement de version. Une
+  // vérification coûte ~5 ms sur un EDC16 de 2 Mo, après 400 ms de calme.
   useEffect(() => {
     if (!projectData?.file_data?.length || hexdumpDisplayData.length === 0) return;
     if (!isChecksumSupported(projectData.ecu_type)) {
       setChecksumStatus('unsupported');
       return;
     }
-    const versionChanged = checksumCheckedVersionRef.current !== currentVersionId;
-    checksumCheckedVersionRef.current = currentVersionId;
-    if (!versionChanged && checksumStatusRef.current === 'bad') return;
     setChecksumStatus('checking');
     const timer = setTimeout(() => {
       // correctChecksumByEcuType ne modifie pas son entrée (copie interne) :
@@ -4502,15 +4497,6 @@ function EditorPageContent() {
             },
           };
         });
-
-        // Les octets binaires (checksum/DTC) viennent d'être réappliqués :
-        // forcer une RE-VÉRIFICATION du checksum. Sans ça, la règle « un
-        // checksum invalide n'est pas re-vérifié à chaque modification »
-        // gobait la correction quand le premier calcul était parti sur les
-        // octets bruts pendant le chargement — au retour sur un projet
-        // corrigé, le statut restait NOK à tort (course dépendante du cache,
-        // d'où l'asymétrie retour immédiat OK / via autre projet NOK).
-        checksumCheckedVersionRef.current = null;
 
         // Clear the map data cache when switching versions
         const { clearMapDataCache } = await import("@/components/map-viewer");
