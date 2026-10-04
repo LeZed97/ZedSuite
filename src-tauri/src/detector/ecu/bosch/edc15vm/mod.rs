@@ -75,7 +75,7 @@ impl EDC15VMDetector {
         // Special detections
         self.detect_soi_maps(&codeblocks, data, &mut result, &mut detected_addresses);
         // Fallback mono-SOI (fichiers sans sélecteur C4/C5) — après le
-        // nommage : s'ancre sur les « SOI limiter (temp) » déjà classés
+        // nommage : s'ancre sur les « SOI limiter » déjà classés
         self.detect_single_soi_maps(data, &mut result, &mut detected_addresses);
         self.find_svrl_vm(data, &mut result, &mut detected_addresses);
         self.find_left_foot_brake_vm(data, &mut result, &mut detected_addresses);
@@ -1215,9 +1215,81 @@ impl EDC15VMDetector {
                 } else if matches!((xh, yh),
                     (0xDD, 0xC3) | (0xC3, 0xDD) | (0xDC, 0xC5) | (0xC5, 0xDC)
                 ) {
-                    map.name = Some("SOI limiter (temp)".to_string());
+                    map.name = Some("SOI limiter".to_string());
                     map.correction_factor = Some(0.01);
                     map.category = Some("Start of injection".to_string());
+                    named = true;
+                }
+            }
+
+            // ── Size 120 (12x5 / 5x12) - SOI limiter by temperature ──
+            // 038906012GN / 4308 carries one per codeblock:
+            //   CB1: F9(12) RPM @ 0x5AFD6 + C5(5) temp @ 0x5AFF2
+            //        -> data 0x5AFFC
+            //   CB2: F9(12) RPM @ 0x7AFD6 + C5(5) temp @ 0x7AFF2
+            //        -> data 0x7AFFC
+            //
+            // 120 bytes is also a valid torque-limiter size (3x20), so do not
+            // classify on size alone. Require the exact F9/C5 axis families,
+            // the 12x5 dimensions, and physically plausible monotonic axes.
+            if !named
+                && map.size == 120
+                && ((x_len == 12 && y_len == 5) || (x_len == 5 && y_len == 12))
+                && matches!((xh, yh), (0xF9, 0xC5) | (0xC5, 0xF9))
+            {
+                let read_axis = |addr: Option<u32>, len: usize| -> Vec<u16> {
+                    addr.map(|a| {
+                        (0..len)
+                            .map(|i| {
+                                let off = a as usize + i * 2;
+                                if off + 1 < data.len() {
+                                    u16::from_le_bytes([data[off], data[off + 1]])
+                                } else {
+                                    0
+                                }
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+                };
+
+                let (rpm, temp) = if xh == 0xF9 {
+                    (
+                        read_axis(map.x_axis_address, x_len),
+                        read_axis(map.y_axis_address, y_len),
+                    )
+                } else {
+                    (
+                        read_axis(map.y_axis_address, y_len),
+                        read_axis(map.x_axis_address, x_len),
+                    )
+                };
+
+                // GN 4308 stock:
+                // RPM  = 210..3990 (CB1 has 1150, CB2 has 1239)
+                // Temp = 3031..3532 raw = Kelvin*10 (30.0..80.1 °C)
+                //
+                // Keep the limits deliberately wider than the stock values so
+                // remapped axes still detect, while rejecting unrelated 12x5
+                // structures that happen to share the same byte size.
+                let rpm_ok = rpm.len() == 12
+                    && rpm.windows(2).all(|w| w[0] < w[1])
+                    && rpm[0] <= 500
+                    && (3000..=7000).contains(&rpm[11]);
+                let temp_ok = temp.len() == 5
+                    && temp.windows(2).all(|w| w[0] < w[1])
+                    && temp.iter().all(|&v| (2200..=3900).contains(&v));
+
+                if rpm_ok && temp_ok {
+                    map.name = Some("SOI limiter".to_string());
+                    map.category = Some("Start of injection".to_string());
+                    map.unit = Some("deg CrS".to_string());
+                    // VP37 EDC15VM SOI values are hundredths of a crank degree.
+                    map.correction_factor = Some(0.01);
+                    map.description = Some(
+                        "Maximum SOI | X: Temperature (°C) | Y: Engine speed (rpm)"
+                            .to_string(),
+                    );
                     named = true;
                 }
             }
@@ -1491,7 +1563,7 @@ impl EDC15VMDetector {
     /// Fallback « une seule map SOI » : certains EDC15VM (golf zlatarica,
     /// 038906012L, jetta…) n'ont PAS de sélecteur de température C4/C5 —
     /// leur(s) map(s) SOI ([DDxx][12-16 RPM] + [DCxx][6-10 IQ], données
-    /// signées faibles) sont juste AVANT le « SOI limiter (temp) » de
+    /// signées faibles) sont juste AVANT le « SOI limiter » de
     /// chaque codeblock (golf : 2×14x7 à 0x60EFC/0x61010, limiteur à
     /// 0x611C6). Confirme l'intuition de ZedPerf (« certains ont juste une
     /// seule map SOI »).
@@ -1514,7 +1586,7 @@ impl EDC15VMDetector {
         }
         let lim_addrs: Vec<usize> = maps
             .iter()
-            .filter(|m| m.name.as_deref() == Some("SOI limiter (temp)"))
+            .filter(|m| m.name.as_deref() == Some("SOI limiter"))
             .map(|m| m.address as usize)
             .collect();
         let le16 = |o: usize| u16::from_le_bytes([data[o], data[o + 1]]);
