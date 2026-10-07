@@ -5580,8 +5580,10 @@ impl EDC16U34Detector {
                     // Read Big-Endian 16-bit value
                     let value = ((data[svrl_offset] as u16) << 8) | (data[svrl_offset + 1] as u16);
 
-                    // Validate RPM range: 0-6500 RPM
-                    if value <= 6500 {
+                    // Validate RPM range: 3000-6500 RPM. The signature also lands
+                    // on unrelated words (2781 at 0x18DFCA on a Touran 03G906021RN,
+                    // issue #50): below 3000 it is not a rev limit.
+                    if (3000..=6500).contains(&value) {
                         log::debug!("🎯 [EDC16] Found SVRL by signature at 0x{:X}, value: {} RPM", svrl_offset, value);
 
                         let mut map = DetectedMap::new(

@@ -220,7 +220,12 @@ pub fn import_map_definitions(
 ///   47 — Switch MAP/MAF des EDC16 (U1/U31/U34) et identification : un
 ///       EDC15VM sans référence VAG dans le binaire n'est plus pris
 ///       pour un EDC15P (2.5 V6).
-pub const DETECTOR_VERSION: u32 = 49;
+///   50 — EDC15P : axes partagés des SOI retrouvés sur un fichier préparé
+///       (second passage tolérant quand le premier point IQ n'est plus 0 ou
+///       que l'axe de régime a été réécrit) ; EDC16U34 : un SVRL sous
+///       3000 tr/min n'est plus retenu (issue #50) ; MAP linearisation à
+///       l'axe brut, comme EDCSuite (913 et 44 sur un capteur 4 bars).
+pub const DETECTOR_VERSION: u32 = 50;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.

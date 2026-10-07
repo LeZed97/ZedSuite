@@ -6,7 +6,7 @@ import { useI18n } from "@/contexts/i18n-context";
 import { MODAL_GLASS, MODAL_GLASS_LIGHT } from "@/lib/modal-glass";
 import { useThemeOptional } from "@/contexts/theme-context";
 
-export type ExportChecksumStatus = "checking" | "ok" | "bad";
+export type ExportChecksumStatus = "checking" | "ok" | "bad" | "unsupported";
 
 interface ChecksumModalProps {
   onClose: () => void;
@@ -20,7 +20,8 @@ interface ChecksumModalProps {
   /** Fichier enregistré : coche verte « Fichier exporté » (même pastille que le mappack) */
   exportComplete?: boolean;
   /** État du checksum des données à exporter, vérifié à l'ouverture :
-   *  ok → export direct, bad → proposer la correction avant l'export. */
+   *  ok → export direct, bad → proposer la correction avant l'export,
+   *  unsupported → checksum non vérifiable, export sans correction seulement. */
   status?: ExportChecksumStatus;
 }
 
@@ -77,14 +78,14 @@ export function ChecksumModal({
               style={{
                 backgroundColor: calculationComplete || exportComplete || (!isCalculating && status === "ok")
                   ? 'rgba(34, 197, 94, 0.15)'
-                  : !isCalculating && status === "bad"
+                  : !isCalculating && (status === "bad" || status === "unsupported")
                     ? 'rgba(245, 158, 11, 0.15)'
                     : 'rgba(59, 130, 246, 0.15)'
               }}
             >
               {calculationComplete || exportComplete || (!isCalculating && status === "ok") ? (
                 <Check className="w-10 h-10" style={{ color: '#22c55e' }} />
-              ) : !isCalculating && status === "bad" ? (
+              ) : !isCalculating && (status === "bad" || status === "unsupported") ? (
                 <AlertTriangle className="w-10 h-10" style={{ color: '#f59e0b' }} />
               ) : (
                 <RefreshCw
@@ -106,8 +107,15 @@ export function ChecksumModal({
                     ? t.checksum.verifying
                     : status === "ok"
                       ? t.checksum.exportStatusOk
-                      : t.checksum.exportStatusBad}
+                      : status === "unsupported"
+                        ? t.checksum.statusUnsupported
+                        : t.checksum.exportStatusBad}
             </h2>
+            {!isCalculating && !calculationComplete && !exportComplete && status === "unsupported" && (
+              <p className={`mt-3 text-sm text-center ${L ? "text-slate-600" : "text-white/70"}`}>
+                {t.checksum.exportStatusUnsupportedHint}
+              </p>
+            )}
           </div>
 
           {/* Action buttons — selon l'état du checksum */}
@@ -118,6 +126,19 @@ export function ChecksumModal({
                 className="flex-1 bg-gradient-to-r from-red-600 via-red-500 to-orange-500 hover:from-red-500 hover:via-red-400 hover:to-orange-400 text-white"
               >
                 {t.checksum.exportNow}
+              </Button>
+            </div>
+          )}
+          {/* Non vérifiable : pas de bouton « checksum OK » ni de correction,
+              l'export garde un nom sans _ChecksumOK */}
+          {!isCalculating && !calculationComplete && !exportComplete && status === "unsupported" && (
+            <div className="flex">
+              <Button
+                onClick={onExportWithoutChecksum}
+                variant="outline"
+                className="flex-1"
+              >
+                {t.checksum.exportWithoutCorrection}
               </Button>
             </div>
           )}

@@ -7,10 +7,11 @@
 //  - next time (just closes; the daily check will offer it again)
 //  - skip this version (never offered again until an even newer release)
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openExternal, ZEDSUITE_RELEASES_URL } from "@/lib/open-external";
+import { parseReleaseNotes, ZEDSUITE_ISSUE_URL, type NoteInline } from "@/lib/release-notes";
 import { MODAL_GLASS } from "@/lib/modal-glass";
 import { useI18n } from "@/contexts/i18n-context";
 import { describeUpdateError, downloadAndInstallUpdate, type UpdateInfo } from "@/lib/update";
@@ -32,6 +33,27 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
     total: null,
   });
   const [error, setError] = useState<string | null>(null);
+  // Notes de la release (en anglais, telles qu'écrites sur GitHub) en blocs
+  // lisibles : sections, puces, gras, numéros d'issue cliquables
+  const notes = useMemo(() => parseReleaseNotes(info.release_notes || ""), [info.release_notes]);
+  const renderInlines = (inlines: NoteInline[]) =>
+    inlines.map((part, i) => {
+      if (part.kind === "bold") return <strong key={i} className="font-semibold text-white">{part.text}</strong>;
+      if (part.kind === "code") return <code key={i} className="px-1 rounded bg-white/[0.08] font-mono text-[12px]">{part.text}</code>;
+      if (part.kind === "issue") {
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => void openExternal(`${ZEDSUITE_ISSUE_URL}${part.number}`)}
+            className="underline underline-offset-2 text-slate-200 hover:text-white"
+          >
+            #{part.number}
+          </button>
+        );
+      }
+      return <span key={i}>{part.text}</span>;
+    });
 
   // Download progress events from the Rust side
   useEffect(() => {
@@ -88,7 +110,7 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
       style={{ backgroundColor: "#000000a2", animation: "backdropFadeIn 0.2s ease-out forwards" }}
     >
       <div
-        className="relative w-full max-w-lg mx-4"
+        className="relative w-full max-w-xl mx-4"
         style={{ animation: "modalExpand 0.2s ease-out forwards" }}
       >
         <div className="border rounded-lg p-6" style={MODAL_GLASS}>
@@ -106,11 +128,25 @@ export function UpdateDialog({ info, onClose, onSkip }: UpdateDialogProps) {
             </div>
           </div>
 
-          {info.release_notes && (
-            <div className="mb-5 max-h-44 overflow-y-auto rounded-lg border border-white/[0.08] bg-black/20 p-3">
-              <pre className="whitespace-pre-wrap font-sans text-sm text-slate-300">
-                {info.release_notes}
-              </pre>
+          {notes.length > 0 && (
+            <div className="mb-5">
+              <p className="mb-1.5 text-xs uppercase tracking-wide text-slate-400">{t.updateDialog.whatsNew}</p>
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-white/[0.08] bg-black/20 px-4 py-3 text-[13px] leading-relaxed text-slate-300">
+                {notes.map((block, i) =>
+                  block.kind === "heading" ? (
+                    <p key={i} className={`text-xs uppercase tracking-wide text-slate-400 ${i === 0 ? "" : "mt-3"} mb-1`}>
+                      {block.text}
+                    </p>
+                  ) : block.kind === "item" ? (
+                    <p key={i} className="flex gap-2 mb-1.5">
+                      <span className="shrink-0 text-slate-500">•</span>
+                      <span>{renderInlines(block.inlines)}</span>
+                    </p>
+                  ) : (
+                    <p key={i} className="mb-1.5">{renderInlines(block.inlines)}</p>
+                  ),
+                )}
+              </div>
             </div>
           )}
 

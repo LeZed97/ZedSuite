@@ -33,6 +33,7 @@ import {
   PanelLeftOpen,
   Search,
   FileUp,
+  Timer,
 } from "lucide-react";
 import { PiHeadCircuit } from "react-icons/pi";
 import { HexdumpViewer, type MapRegion } from "@/components/hexdump-viewer";
@@ -56,6 +57,8 @@ import {
 import { DTCModal } from "@/components/dtc-modal";
 import { isMacOS } from "@/lib/platform";
 import { PowerEstimateModal } from "@/components/power-estimate-modal";
+import { EoiModal } from "@/components/eoi-modal";
+import { hasEoiMaps } from "@/lib/ecu/bosch/eoi-calculation";
 import type { FileRecord } from "@/lib/types";
 import { PROJECT_NAME_MAX_LENGTH } from "@/lib/types";
 import { SolutionsModal } from "@/components/solutions-modal";
@@ -215,6 +218,23 @@ const looksLikeDefinitionFile = (bytes: Uint8Array): boolean => {
   if (i >= bytes.length) return false;
   const c = bytes[i];
   return c === 0x3c /* < */ || c === 0x7b /* { */ || c === 0x5b /* [ */;
+};
+
+/**
+ * État du checksum d'un résultat de correctChecksumByEcuType. « OK » seulement
+ * quand les sommes ont réellement été vérifiées : aucune région reconnue
+ * (null), disposition EDC15 inconnue ou fichier de moins de 512 Ko (variant
+ * 'unknown'), algorithme non déterminé (ChecksumTypeError, dont les octets
+ * « corrigés » sont faux) = non vérifiable. L'export annonçait « Checksum OK »
+ * et nommait le fichier _ChecksumOK dans ces cas-là.
+ */
+const checksumStatusOf = (
+  res: ReturnType<typeof correctChecksumByEcuType>,
+): 'ok' | 'bad' | 'unsupported' => {
+  if (!res || res.info.variant === 'unknown' || res.info.result === ChecksumResult.ChecksumTypeError) {
+    return 'unsupported';
+  }
+  return res.info.fixed === 0 ? 'ok' : 'bad';
 };
 
 const saveProjectToSession = (data: ProjectData) => {
@@ -2100,32 +2120,99 @@ function EditorPageContent() {
   // persisted labels back into MapViewer via `initialXAxisLabels` /
   // `initialYAxisLabels`.
   const [mapAxisLabels, setMapAxisLabels] = useState<Map<number, { x?: string[]; y?: string[] }>>(new Map());
+  // Axes partagés : sur EDC15, les dix SOI d'un codeblock lisent le même axe
+  // de régime et le même axe d'IQ dans le fichier (les durations EDC16
+  // aussi). Une édition d'axe faite sur l'une vaut pour toutes : les autres
+  // fenêtres l'affichaient encore à l'ancienne alors que l'export écrivait
+  // bien le fichier. L'entrée est donc posée, ou retirée, sur chaque map qui
+  // lit la même adresse, convertie par le brut quand ses facteurs diffèrent.
+  const sharedAxisRef = useRef<{ maps: MapData[]; settings: Map<number, MapDisplaySettings> }>({ maps: [], settings: new Map() });
+  const effectiveAxisSources = (map: MapData, settings: Map<number, MapDisplaySettings>) => {
+    const sources = resolveAxisSources(map);
+    const ds = settings.get(map.address);
+    const eff = (factor?: number, divisor?: number): number | undefined => {
+      if (typeof factor !== 'number' || !isFinite(factor)) return undefined;
+      const div = typeof divisor === 'number' && isFinite(divisor) && divisor !== 0 ? divisor : 1;
+      return factor / div;
+    };
+    const offsetOf = (value: number | undefined, fallback: number) =>
+      typeof value === 'number' && isFinite(value) ? value : fallback;
+    return {
+      x: {
+        address: sources.x.address,
+        correction: (ds ? eff(ds.xAxis.factor, ds.xAxis.divisor) : undefined) ?? sources.x.correction,
+        offset: offsetOf(ds?.xAxis.offset, sources.x.offset),
+      },
+      y: {
+        address: sources.y.address,
+        correction: (ds ? eff(ds.yAxis.factor, ds.yAxis.divisor) : undefined) ?? sources.y.correction,
+        offset: offsetOf(ds?.yAxis.offset, sources.y.offset),
+      },
+    };
+  };
+  const convertAxisLabels = (
+    labels: string[],
+    from: { correction: number; offset: number },
+    to: { correction: number; offset: number },
+  ): string[] => {
+    if (from.correction === to.correction && from.offset === to.offset) return [...labels];
+    return labels.map((label) => {
+      const value = Number(String(label).trim().replace(',', '.'));
+      if (!Number.isFinite(value)) return label;
+      const raw = Math.round((value - from.offset) / (from.correction || 1));
+      return String(Number((raw * to.correction + to.offset).toFixed(4)));
+    });
+  };
   const handleAxisLabelsChange = useCallback((mapAddress: number, axes: { x?: string[]; y?: string[] }) => {
     setMapAxisLabels(prev => {
-      const existing = prev.get(mapAddress) || {};
-      // Tableau vide = axe revenu à l'origine → on retire l'entrée
-      const merged = {
-        x: axes.x !== undefined ? (axes.x.length > 0 ? axes.x : undefined) : existing.x,
-        y: axes.y !== undefined ? (axes.y.length > 0 ? axes.y : undefined) : existing.y,
-      };
-      if (!merged.x && !merged.y) {
-        if (!prev.has(mapAddress)) return prev;
-        const next = new Map(prev);
-        next.delete(mapAddress);
-        // Retirer un axe édité est aussi une modification à enregistrer
-        if (!isLoadingVersionRef.current) {
-          setTimeout(() => setHasUnsavedChanges(true), 0);
+      const { maps, settings } = sharedAxisRef.current;
+      const source = maps.find((m) => m.address === mapAddress);
+      const sourceAxes = source && !source.external_source ? effectiveAxisSources(source, settings) : null;
+      const siblings: { map: MapData; axis: 'x' | 'y'; sourceAxis: 'x' | 'y' }[] = [];
+      if (sourceAxes) {
+        for (const m of maps) {
+          if (m.address === mapAddress || m.external_source) continue;
+          const sa = effectiveAxisSources(m, settings);
+          for (const sourceAxis of ['x', 'y'] as const) {
+            const addr = sourceAxes[sourceAxis].address;
+            if (axes[sourceAxis] === undefined || !addr) continue;
+            if (sa.x.address === addr) siblings.push({ map: m, axis: 'x', sourceAxis });
+            if (sa.y.address === addr) siblings.push({ map: m, axis: 'y', sourceAxis });
+          }
         }
-        return next;
       }
-      const prevEntry = prev.get(mapAddress);
-      const xSame = JSON.stringify(prevEntry?.x) === JSON.stringify(merged.x);
-      const ySame = JSON.stringify(prevEntry?.y) === JSON.stringify(merged.y);
-      if (xSame && ySame) return prev;
+
       const next = new Map(prev);
-      next.set(mapAddress, merged);
-      // Axis label edits need to be persisted just like cell edits.
-      // Mark as dirty so the next Save call picks them up.
+      let changed = false;
+      // Tableau vide = axe revenu à l'origine → l'entrée de cet axe est retirée
+      const apply = (address: number, patch: { x?: string[]; y?: string[] }) => {
+        const existing = next.get(address) || {};
+        const merged = {
+          x: patch.x !== undefined ? (patch.x.length > 0 ? patch.x : undefined) : existing.x,
+          y: patch.y !== undefined ? (patch.y.length > 0 ? patch.y : undefined) : existing.y,
+        };
+        const prevEntry = next.get(address);
+        if (!merged.x && !merged.y) {
+          if (prevEntry) {
+            next.delete(address);
+            changed = true;
+          }
+          return;
+        }
+        if (JSON.stringify(prevEntry?.x) === JSON.stringify(merged.x) && JSON.stringify(prevEntry?.y) === JSON.stringify(merged.y)) return;
+        next.set(address, merged);
+        changed = true;
+      };
+      apply(mapAddress, axes);
+      for (const sibling of siblings) {
+        const labels = axes[sibling.sourceAxis] ?? [];
+        const converted = labels.length > 0 && sourceAxes
+          ? convertAxisLabels(labels, sourceAxes[sibling.sourceAxis], effectiveAxisSources(sibling.map, settings)[sibling.axis])
+          : [];
+        apply(sibling.map.address, sibling.axis === 'x' ? { x: converted } : { y: converted });
+      }
+      if (!changed) return prev;
+      // Un axe édité, ou remis d'origine, est une modification à enregistrer
       if (!isLoadingVersionRef.current) {
         setTimeout(() => setHasUnsavedChanges(true), 0);
       }
@@ -2174,6 +2261,33 @@ function EditorPageContent() {
       return { ...prev, x, width };
     });
   }, [powerMinWidth]);
+
+  // Fenêtre « Fin d'injection » (menu Outils) : même cadre flottant, mêmes
+  // règles et même source (état en mémoire) que la fenêtre de puissance.
+  const [eoiFile, setEoiFile] = useState<FileRecord | null>(null);
+  const [eoiLayout, setEoiLayout] = useState({ x: 90, y: 50, width: 880, height: 600 });
+  const [eoiZIndex, setEoiZIndex] = useState(100);
+  const [eoiMinWidth, setEoiMinWidth] = useState(480);
+  const eoiAutoHeightRef = useRef(false);
+  const handleEoiContentHeight = useCallback((contentHeight: number) => {
+    if (!eoiAutoHeightRef.current) return;
+    setEoiLayout((prev) => {
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      const wanted = contentHeight + POWER_FRAME_OVERHEAD;
+      const height = Math.max(360, rect ? Math.min(wanted, rect.height) : wanted);
+      if (Math.abs(height - prev.height) < 1) return prev;
+      return { ...prev, height };
+    });
+  }, []);
+  useEffect(() => {
+    setEoiLayout((prev) => {
+      if (prev.width >= eoiMinWidth) return prev;
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      const width = rect ? Math.min(eoiMinWidth, rect.width) : eoiMinWidth;
+      const x = rect ? Math.max(0, Math.min(prev.x, rect.width - width)) : prev.x;
+      return { ...prev, x, width };
+    });
+  }, [eoiMinWidth]);
 
   // Tracks the display-vs-file row/col flip state for each open map. MapViewer
   // reorders rows/cols for human-friendly display (e.g. RPM descending), so
@@ -2307,6 +2421,7 @@ function EditorPageContent() {
   // Store pour les settings d'affichage de chaque map (clé: mapAddress)
   const [mapDisplaySettingsStore, setMapDisplaySettingsStore] = useState<Map<number, MapDisplaySettings>>(new Map());
   // Incrémenté à chaque restauration des réglages d'un projet : la mémoire
+  sharedAxisRef.current = { maps: projectData?.detectionResults?.maps ?? [], settings: mapDisplaySettingsStore };
   // par calculateur doit se réappliquer APRÈS, sinon la restauration
   // asynchrone (réponse du fichier projet) écrase ce qu'elle avait posé.
   const [displayRestoreTick, setDisplayRestoreTick] = useState(0);
@@ -2499,7 +2614,7 @@ function EditorPageContent() {
   const [checksumCorrectedData, setChecksumCorrectedData] = useState<number[] | null>(null);
   // État du checksum des données à exporter, vérifié à l'ouverture de la
   // fenêtre d'export : ok → export direct, bad → correction proposée
-  const [exportChecksumStatus, setExportChecksumStatus] = useState<'checking' | 'ok' | 'bad'>('checking');
+  const [exportChecksumStatus, setExportChecksumStatus] = useState<'checking' | 'ok' | 'bad' | 'unsupported'>('checking');
 
   // ── État du mappack : rapport de complétude EDC16 (expected_maps) ──
   // Le détecteur liste les familles de maps qui existent TOUJOURS sur cette
@@ -3459,28 +3574,22 @@ function EditorPageContent() {
 
   // Surveillance du checksum : re-vérification (débouncée) à chaque changement
   // des octets courants — édits de maps, DTC, import, changement de version.
-  // Un checksum déjà invalide n'est PAS re-vérifié à chaque modification (il
-  // le reste forcément) : seuls un changement de version ou le recalcul
-  // manuel relancent la vérification.
-  const checksumStatusRef = useRef(checksumStatus);
-  checksumStatusRef.current = checksumStatus;
-  const checksumCheckedVersionRef = useRef<string | null>(null);
+  // Un checksum invalide est re-vérifié lui aussi : annuler la modification
+  // fautive (ou la refaire à l'identique) rend le fichier valide, et
+  // l'indicateur restait « invalide » jusqu'au changement de version. Une
+  // vérification coûte ~5 ms sur un EDC16 de 2 Mo, après 400 ms de calme.
   useEffect(() => {
     if (!projectData?.file_data?.length || hexdumpDisplayData.length === 0) return;
     if (!isChecksumSupported(projectData.ecu_type)) {
       setChecksumStatus('unsupported');
       return;
     }
-    const versionChanged = checksumCheckedVersionRef.current !== currentVersionId;
-    checksumCheckedVersionRef.current = currentVersionId;
-    if (!versionChanged && checksumStatusRef.current === 'bad') return;
     setChecksumStatus('checking');
     const timer = setTimeout(() => {
       // correctChecksumByEcuType ne modifie pas son entrée (copie interne) :
       // fixed === 0 signifie que tous les checksums du fichier sont déjà bons
       const res = correctChecksumByEcuType(projectData.ecu_type, hexdumpDisplayData);
-      // variant 'unknown' (disposition EDC15 non reconnue) = pas de correction possible
-      setChecksumStatus(res && res.info.variant !== 'unknown' ? (res.info.fixed === 0 ? 'ok' : 'bad') : 'unsupported');
+      setChecksumStatus(checksumStatusOf(res));
     }, 400);
     return () => clearTimeout(timer);
   }, [hexdumpDisplayData, currentVersionId, projectData?.ecu_type, projectData?.file_data?.length]);
@@ -3577,7 +3686,7 @@ function EditorPageContent() {
       // signifie que tous les checksums du fichier sont déjà bons
       const editedData = buildEditedFileData();
       const res = correctChecksumByEcuType(projectData.ecu_type, editedData);
-      setExportChecksumStatus(res ? (res.info.fixed === 0 ? 'ok' : 'bad') : 'ok');
+      setExportChecksumStatus(checksumStatusOf(res));
     }, 60);
   };
 
@@ -4503,15 +4612,6 @@ function EditorPageContent() {
           };
         });
 
-        // Les octets binaires (checksum/DTC) viennent d'être réappliqués :
-        // forcer une RE-VÉRIFICATION du checksum. Sans ça, la règle « un
-        // checksum invalide n'est pas re-vérifié à chaque modification »
-        // gobait la correction quand le premier calcul était parti sur les
-        // octets bruts pendant le chargement — au retour sur un projet
-        // corrigé, le statut restait NOK à tort (course dépendante du cache,
-        // d'où l'asymétrie retour immédiat OK / via autre projet NOK).
-        checksumCheckedVersionRef.current = null;
-
         // Clear the map data cache when switching versions
         const { clearMapDataCache } = await import("@/components/map-viewer");
         clearMapDataCache();
@@ -4653,23 +4753,18 @@ function EditorPageContent() {
    *  (enregistrés ou non) — même forme que les édits du store, pour que la
    *  fenêtre de puissance calcule exactement ce que l'éditeur affiche. */
   const getLivePowerState = useCallback(() => {
-    const bytes = Uint8Array.from(projectData?.file_data || []);
+    // Octets de l'export : cellules, axes et miroirs d'affichage déjà
+    // encodés par applyEditsToFileData. Avant, les cellules modifiées
+    // partaient en coordonnées d'affichage et l'estimateur les posait sur
+    // la grille fichier : sur une map à régime décroissant à l'écran, la
+    // hausse tombait sur la ligne miroir et la courbe ne bougeait pas
+    // (issue #45).
+    const bytes = Uint8Array.from(buildEditedFileData());
     binaryModifications.forEach(({ newValue }, addr) => {
       if (addr >= 0 && addr < bytes.length) bytes[addr] = newValue & 0xff;
     });
-    const edits = Array.from(allMapModifications.entries()).map(([map_address, cells]) => ({
-      map_address,
-      payload: {
-        changedCells: Object.entries(cells)
-          .map(([key, value]) => {
-            const [rowStr, colStr] = key.includes(',') ? key.split(',') : key.split('-');
-            return { row: parseInt(rowStr), col: parseInt(colStr), value };
-          })
-          .filter((c) => Number.isFinite(c.row) && Number.isFinite(c.col)),
-      },
-    }));
-    return { bytes, edits };
-  }, [projectData?.file_data, binaryModifications, allMapModifications]);
+    return { bytes, edits: [] as { map_address: number; payload?: Record<string, unknown> }[] };
+  }, [buildEditedFileData, binaryModifications]);
 
   /** Ouvre la fenêtre de puissance sur le projet courant, avec la liste de
    *  maps de l'éditeur (celle du store peut être en retard d'une détection). */
@@ -4789,6 +4884,38 @@ function EditorPageContent() {
       setPowerFile({ ...record, detection_data: { maps: projectData.detectionResults.maps } });
     } catch (e) {
       console.error("power estimate: project record unavailable", e);
+    }
+  };
+
+  // Fin d'injection : seulement les EDC15P avec maps d'avance et durées
+  const eoiAvailable = useMemo(
+    () => hasEoiMaps(projectData?.detectionResults?.maps || [], projectData?.ecu_type || ""),
+    [projectData?.detectionResults?.maps, projectData?.ecu_type],
+  );
+  const openEoiCalculator = async () => {
+    if (!projectData?.fileId) return;
+    if (olsProjectBlocked()) return;
+    if (eoiFile) {
+      bringEoiToFront();
+      return;
+    }
+    try {
+      const record = await localStore.getFile(projectData.fileId);
+      if (!record) return;
+      // Marche suivante de la cascade, après les maps et la puissance
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      if (rect) {
+        const width = Math.min(Math.max(880, eoiMinWidth), Math.max(480, rect.width - 8));
+        const height = Math.min(600, Math.max(360, rect.height - 8));
+        const origin = cascadeOrigin(mapLayouts.size + (powerFile ? 1 : 0));
+        const { x, y } = clampPosition(origin.x, origin.y, width, height);
+        setEoiLayout({ x, y, width, height });
+      }
+      eoiAutoHeightRef.current = true;
+      setEoiZIndex(Math.max(hexdumpZIndex, previewZIndex, powerZIndex, ...openMaps.map((_, i) => 50 + i)) + 1);
+      setEoiFile({ ...record, detection_data: { maps: projectData.detectionResults.maps } });
+    } catch (e) {
+      console.error("end of injection: project record unavailable", e);
     }
   };
 
@@ -5625,7 +5752,15 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
     const axisLabelModificationsCount = mapAxisLabels.size;
     const totalModifications = mapModificationsCount + binaryModifications.size + axisLabelModificationsCount;
 
-    if (totalModifications === 0) {
+    // Find current version
+    const currentVersion = versions.find(v => v.id === currentVersionId);
+    const isOri = !currentVersion || currentVersion.name === "Ori";
+
+    // Rien à enregistrer — sauf sur une version existante dont toutes les
+    // modifications viennent d'être remises d'origine (hasUnsavedChanges) :
+    // cet état vide doit être écrit, sinon les anciens edits de la version
+    // restaient sur le disque et revenaient à la réouverture.
+    if (totalModifications === 0 && (isOri || !hasUnsavedChanges)) {
       toast({
         title: t.errors.noChanges,
         description: t.errors.noChangesDescription,
@@ -5634,12 +5769,9 @@ await axios.put("/api/versioning/map-edits", { versionId: newVersionId, edits: e
       return;
     }
 
-    // Find current version
-    const currentVersion = versions.find(v => v.id === currentVersionId);
-
     // If on "Ori" version, create a new version (awaited so callers can
     // chain work after the save — e.g. the checksum recalculation)
-    if (!currentVersion || currentVersion.name === "Ori") {
+    if (isOri) {
       await handleCreateVersion();
       return;
     }
@@ -5763,9 +5895,10 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     if (!res) return;
     const { correctedData, info } = res;
 
-    // Disposition EDC15 inconnue : aucune table de checksum ne s'applique,
-    // le fichier est rendu intact — ne pas annoncer « déjà valide ».
-    if (info.variant === 'unknown') {
+    // Disposition EDC15 inconnue (fichier rendu intact) ou algorithme non
+    // déterminé (octets « corrigés » avec le mauvais algorithme) : ne rien
+    // écrire et ne pas annoncer « déjà valide ».
+    if (checksumStatusOf(res) === 'unsupported') {
       setChecksumStatus('unsupported');
       toast({ title: t.checksum.statusUnsupported, variant: 'destructive' });
       return;
@@ -5848,12 +5981,13 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     // projet ressortait NOK à la réouverture (N75 du v4-Golf5 du banc).
     const current = buildEditedFileDataRef.current?.() ?? [];
     const check = current.length ? correctChecksumByEcuType(ecuType, current) : null;
-    if (check && check.info.fixed > 0) {
+    const checkStatus = checksumStatusOf(check);
+    if (checkStatus === 'bad') {
       // performChecksumRecalc corrige les octets, les ajoute aux modifications
       // binaires, puis enregistre (même chemin que le bouton manuel)
       await performChecksumRecalcRef.current?.();
     } else {
-      setChecksumStatus('ok');
+      setChecksumStatus(checkStatus);
       await handleSaveRef.current?.();
     }
   };
@@ -6211,7 +6345,19 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
         color: getTextColor(),
       }}
     >
-      <div className="px-3 py-1.5 text-sm opacity-60 select-none">{t.sidebar.toolsEmpty}</div>
+      <button
+        type="button"
+        disabled={!eoiAvailable}
+        title={eoiAvailable ? undefined : t.eoiModal.menuHint}
+        onClick={() => {
+          setToolsMenuOpen(false);
+          void openEoiCalculator();
+        }}
+        className={`w-full px-3 py-1.5 text-left text-sm rounded-md flex items-center gap-2 transition-colors ${eoiAvailable ? getButtonHoverClass() : 'opacity-50 cursor-default'}`}
+      >
+        <Timer className="w-4 h-4" />
+        <span>{t.eoiModal.title}</span>
+      </button>
     </div>
   );
 
@@ -6502,13 +6648,17 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
 
   // Handler pour amener la fenêtre Preview au premier plan
   const bringPreviewToFront = () => {
-    const maxZ = Math.max(hexdumpZIndex, powerZIndex, ...openMaps.map((_, i) => 50 + i));
+    const maxZ = Math.max(hexdumpZIndex, powerZIndex, eoiZIndex, ...openMaps.map((_, i) => 50 + i));
     setPreviewZIndex(maxZ + 1);
   };
 
   const bringPowerToFront = () => {
-    const maxZ = Math.max(hexdumpZIndex, previewZIndex, ...openMaps.map((_, i) => 50 + i));
+    const maxZ = Math.max(hexdumpZIndex, previewZIndex, eoiZIndex, ...openMaps.map((_, i) => 50 + i));
     setPowerZIndex(maxZ + 1);
+  };
+  const bringEoiToFront = () => {
+    const maxZ = Math.max(hexdumpZIndex, previewZIndex, powerZIndex, ...openMaps.map((_, i) => 50 + i));
+    setEoiZIndex(maxZ + 1);
   };
 
   // Store pour garder les infos de sélection de chaque map
@@ -7932,7 +8082,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
                           style={{ color: getWindowHeaderTextColor() }}
                           onClick={handleCollapseHexdump}
                           onMouseDown={(e) => e.stopPropagation()}
-                          title="Fermer le hexdump"
+                          title={t.sidebar.closeHexdump}
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -8248,6 +8398,45 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
                     onContentHeightChange={handlePowerContentHeight}
                     file={powerFile}
                     onClose={() => setPowerFile(null)}
+                    live={{
+                      versionId: currentVersionId || "",
+                      getState: getLivePowerState,
+                      refreshKey: powerRefreshKey,
+                    }}
+                  />
+                </FloatingWindow>
+              )}
+
+              {/* Fenêtre « Fin d'injection » (menu Outils) : même cadre que la puissance */}
+              {eoiFile && projectData && (
+                <FloatingWindow
+                  title={t.eoiModal.title}
+                  icon={<Timer className="w-4 h-4" />}
+                  zIndex={eoiZIndex}
+                  layout={eoiLayout}
+                  onLayoutChange={(l) => {
+                    eoiAutoHeightRef.current = false;
+                    setEoiLayout(l);
+                  }}
+                  onClose={() => setEoiFile(null)}
+                  onFocus={bringEoiToFront}
+                  minWidth={Math.max(480, eoiMinWidth)}
+                  getWindowHeaderBg={getWindowHeaderBg}
+                  getWindowHeaderTextColor={getWindowHeaderTextColor}
+                  getBorderColor={getBorderColor}
+                  getButtonHoverClass={getButtonHoverClass}
+                  getWindowBg={getWindowBg}
+                  workspaceRef={workspaceRef}
+                  closeTitle={t.common.close}
+                  onDragActiveChange={(active) => {
+                    setOverlayCursor('move');
+                    setIsWindowDragActive(active);
+                  }}
+                >
+                  <EoiModal
+                    onMinWidthChange={setEoiMinWidth}
+                    onContentHeightChange={handleEoiContentHeight}
+                    file={eoiFile}
                     live={{
                       versionId: currentVersionId || "",
                       getState: getLivePowerState,
