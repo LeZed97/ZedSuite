@@ -31,6 +31,7 @@
 // is still applied so an uncapped wish cannot exceed what the turbo feeds.
 
 import { isBigEndianEcu } from "./ecu-endianness";
+import { resolveMapCellLayout } from "./map-cell-layout";
 
 export interface DetectedMapLite {
   name?: string;
@@ -192,31 +193,59 @@ function decodeAxis(
   return out;
 }
 
-/** Overlay saved map edits (display units, source orientation) onto a grid. */
+/** Overlay saved map edits (display units) onto a grid.
+ *
+ *  Les cellules enregistrées sont en coordonnées d'AFFICHAGE du viewer : la
+ *  disposition peut transposer la map (durations 01-05, torque limiter, N75
+ *  13x16) et le miroir (`payload.flip`, régime décroissant à l'écran) retourne
+ *  les lignes. Appliquées telles quelles sur la grille fichier, une hausse
+ *  du driver wish à haut régime tombait à bas régime et la courbe ne bougeait
+ *  pas (issue #45). On revient à l'index fichier avec la même règle que le
+ *  viewer, puis `toGrid` place la valeur dans la grille de l'appelant. */
 function applyCellEdits(
   values: number[][],
   edits: MapEditLite[],
-  mapAddress: number
+  map: DetectedMapLite,
+  toGrid: (fileIndex: number) => [number, number]
 ): number[][] {
   let out = values;
   let copied = false;
+  let layout: ReturnType<typeof resolveMapCellLayout> | null = null;
   for (const edit of edits) {
-    if (edit.map_address !== mapAddress) continue;
+    if (edit.map_address !== map.address) continue;
     const cells = edit.payload?.changedCells;
     if (!Array.isArray(cells)) continue;
     if (!copied) {
       out = values.map((r) => [...r]);
       copied = true;
     }
+    if (!layout) {
+      const two = map.dimensions?.TwoDimensional;
+      const cellBytes = (map.data_type || "").toLowerCase().includes("8") ? 1 : 2;
+      layout = resolveMapCellLayout({
+        name: map.name,
+        dimensions: map.dimensions,
+        data_type: map.data_type,
+        size: (two ? two.rows * two.cols : 0) * cellBytes,
+        rows_reversed: map.rows_reversed ?? undefined,
+      });
+    }
+    const rowsReversed = edit.payload?.flip?.rowsReversed === true;
+    const colsReversed = edit.payload?.flip?.colsReversed === true;
     for (const cell of cells) {
       if (
-        typeof cell?.row === "number" &&
-        typeof cell?.col === "number" &&
-        typeof cell?.value === "number" &&
-        out[cell.row] !== undefined &&
-        out[cell.row][cell.col] !== undefined
+        typeof cell?.row !== "number" ||
+        typeof cell?.col !== "number" ||
+        typeof cell?.value !== "number"
       ) {
-        out[cell.row][cell.col] = cell.value;
+        continue;
+      }
+      const dispRow = rowsReversed ? layout.rows - 1 - cell.row : cell.row;
+      const dispCol = colsReversed ? layout.cols - 1 - cell.col : cell.col;
+      if (dispRow < 0 || dispRow >= layout.rows || dispCol < 0 || dispCol >= layout.cols) continue;
+      const [r, c] = toGrid(layout.cellIndex(dispRow, dispCol));
+      if (out[r] !== undefined && out[r][c] !== undefined) {
+        out[r][c] = cell.value;
       }
     }
   }
@@ -269,7 +298,10 @@ function orientMap(
     }
     v.push(row);
   }
-  v = applyCellEdits(v, edits, map.address);
+  v = applyCellEdits(v, edits, map, (fileIndex) => {
+    const fileRow = Math.floor(fileIndex / cols);
+    return [map.rows_reversed ? rows - 1 - fileRow : fileRow, fileIndex % cols];
+  });
 
   const xMax = Math.max(...x);
   const yMax = Math.max(...y);
@@ -306,7 +338,7 @@ function torqueLimiterCurve(
     }
     v.push(row);
   }
-  v = applyCellEdits(v, edits, map.address);
+  v = applyCellEdits(v, edits, map, (fileIndex) => [fileIndex % rows, Math.floor(fileIndex / rows)]);
   if (Math.max(...rpmAxis) < 1500) return null;
   return { rpm: rpmAxis, other: v[0]?.map((_, i) => i) ?? [], v };
 }
@@ -519,7 +551,9 @@ function computeIqBasedCurve(
 
   const rMin = Math.max(1000, Math.min(...wotRpm));
   let rMax = Math.max(...wotRpm);
-  if (svrl && svrl > 2000 && svrl < rMax) rMax = svrl;
+  // Un SVRL sous 3500 tr/min est une fausse détection (2781 sur un Touran
+  // 03G906021RN, issue #50) : aucun limiteur de régime ne descend là.
+  if (svrl && svrl >= 3500 && svrl < rMax) rMax = svrl;
   if (rMax <= rMin) return null;
 
   // Gros montage « déplafonné » : quand le fichier cible plus de 3 bar
@@ -750,7 +784,9 @@ function computeEdc16FuelCurve(
     Math.max(...dwCurves.map((c) => interp1(c.rpm, c.value, rpm)));
   const rMin = Math.max(1000, Math.min(...dwCurves[0].rpm));
   let rMax = Math.min(Math.max(...dwCurves[0].rpm), 5100);
-  if (svrl && svrl > 2000 && svrl < rMax) rMax = svrl;
+  // Un SVRL sous 3500 tr/min est une fausse détection (2781 sur un Touran
+  // 03G906021RN, issue #50) : aucun limiteur de régime ne descend là.
+  if (svrl && svrl >= 3500 && svrl < rMax) rMax = svrl;
   if (rMax <= rMin) return null;
 
   const limits = new Set<LimitTag>();

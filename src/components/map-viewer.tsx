@@ -26,7 +26,7 @@ type ViewMode = "text" | "2d" | "3d";
 
 // Cache pour mémoriser les données extraites de chaque map (par adresse)
 // Ce cache évite de recalculer les données à chaque changement de map
-const CACHE_VERSION = "2026-09-axis-corrections-v38";
+const CACHE_VERSION = "2026-10-axis-corrections-v39";
 
 // Map globale pour sauvegarder les positions de caméra de chaque map 3D
 // Persiste entre les montages/démontages du composant
@@ -688,6 +688,9 @@ export function MapViewer({
 const [mapValues, setMapValues] = useState<number[][]>([]);
 const [xAxisLabels, setXAxisLabels] = useState<string[]>([]);
 const [yAxisLabels, setYAxisLabels] = useState<string[]>([]);
+// Extraction dont xAxisLabels / yAxisLabels sont issus : l'effet qui remonte
+// les axes édités au parent n'agit que si elle est l'extraction courante.
+const [axisLabelsSource, setAxisLabelsSource] = useState<object | null>(null);
 // Axes sans valeurs dans le fichier (sélecteurs, courbes 1×N…) : l'en-tête
 // affiche « . » à la place d'un index, sur tous les calculateurs
 const [axisIsIndex, setAxisIsIndex] = useState<{ x: boolean; y: boolean }>({ x: false, y: false });
@@ -836,10 +839,16 @@ const skipAutoSizeRef = useRef<boolean>(false);
     }
     return { labels, values, flipped: false };
   };
-  const xAdjusted = ensureXAsc(displayXAxisLabels, displayMapValues);
-  displayXAxisLabels = xAdjusted.labels;
-  displayMapValues = xAdjusted.values;
-  if (xAdjusted.flipped) displayColsFlippedCount++;
+  // MAP linearisation EDC15 : ses deux points restent dans l'ordre d'EDCSuite
+  // (décroissant, 913 puis 44 sur un capteur 4 bars), ici et dans
+  // l'ordonnancement final plus bas. Les EDC16 gardent l'axe croissant.
+  const keepXDescending = mapNameLowerDisplay === 'map linearisation' && !isBigEndianEcu(ecuType);
+  if (!keepXDescending) {
+    const xAdjusted = ensureXAsc(displayXAxisLabels, displayMapValues);
+    displayXAxisLabels = xAdjusted.labels;
+    displayMapValues = xAdjusted.values;
+    if (xAdjusted.flipped) displayColsFlippedCount++;
+  }
  
 
   // Y ordering:
@@ -940,10 +949,12 @@ const skipAutoSizeRef = useRef<boolean>(false);
     const anyMirror = xMirrored || yMirrored;
 
     if (!anyMirror) {
-      const xFinal = ensureXAsc(displayXAxisLabels, displayMapValues);
-      displayXAxisLabels = xFinal.labels;
-      displayMapValues = xFinal.values;
-      if (xFinal.flipped) netColsFlipped = !netColsFlipped;
+      if (!keepXDescending) {
+        const xFinal = ensureXAsc(displayXAxisLabels, displayMapValues);
+        displayXAxisLabels = xFinal.labels;
+        displayMapValues = xFinal.values;
+        if (xFinal.flipped) netColsFlipped = !netColsFlipped;
+      }
 
       const keepYAscending = isSelectorInjector || isInjectorDurationDisplay;
       if (!keepYAscending) {
@@ -2617,7 +2628,11 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
       if (tempXLabels.length > 1) {
         const first = parseFloat(tempXLabels[0]);
         const last = parseFloat(tempXLabels[tempXLabels.length - 1]);
-        if (first > last) {
+        // MAP linearisation EDC15 : EDCSuite présente ses deux points à
+        // l'envers (axe « backwards » : 913 puis 44 sur un capteur 4 bars),
+        // on garde le même ordre pour que les écrans se comparent.
+        const xDescendingLikeEdcsuite = mapNameLower === 'map linearisation' && !mapData.external_source && !isBigEndianEcu(ecuType);
+        if (xDescendingLikeEdcsuite ? first < last : first > last) {
           // Values are descending in file, reverse to get ascending for display (EDCsuite format)
           xLabels.push(...tempXLabels.reverse());
           xLabelsWereReversed = true;
@@ -3060,6 +3075,11 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     });
   }, [extractedData, mapData.address, onAxesFlipChange]);
   
+  // Libellés d'axe poussés par le parent et appliqués ici (signature), pour
+  // ne réappliquer qu'un jeu nouveau et revenir au fichier s'il les retire
+  const lastAppliedInitialXRef = useRef<string>("");
+  const lastAppliedInitialYRef = useRef<string>("");
+
   // Mettre ├á jour les ├®tats avec les donn├®es extraites
   useEffect(() => {
     if (extractedData) {
@@ -3117,6 +3137,9 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         : extractedData.yAxisLabels;
       setXAxisLabels(restoredX);
       setYAxisLabels(restoredY);
+      setAxisLabelsSource(extractedData);
+      lastAppliedInitialXRef.current = restoredX === extractedData.xAxisLabels ? "" : initialXAxisLabels!.join('|');
+      lastAppliedInitialYRef.current = restoredY === extractedData.yAxisLabels ? "" : initialYAxisLabels!.join('|');
       setAxesSwapped(extractedData.axesSwapped);
       setCurrentMapAddress(mapData.address); // Mark as ready
     }
@@ -3129,10 +3152,10 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extractedData, mapData.address, initialChangedCells]);
 
-  // Track which map's labels have been initialized so the post-mount sync
-  // below only fires when the parent actively pushes a *new* set of labels.
-  const lastAppliedInitialXRef = useRef<string>("");
-  const lastAppliedInitialYRef = useRef<string>("");
+  // Post-mount sync: the parent pushes a *new* set of labels (an edit made on
+  // another map that shares this axis, labels loaded with a version), or
+  // withdraws the ones it had pushed (the shared axis was put back to the
+  // file on another map): the window follows, back to the file labels.
   useEffect(() => {
     if (!extractedData) return;
     // Parent labels arrive in file order; convert to display order before
@@ -3144,12 +3167,18 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
         && initialXAxisLabels!.length === extractedData.xAxisLabels.length) {
       lastAppliedInitialXRef.current = xSig;
       setXAxisLabels(toDisplay(initialXAxisLabels!, extractedData.colsReversed));
+    } else if (!xSig && lastAppliedInitialXRef.current) {
+      lastAppliedInitialXRef.current = '';
+      setXAxisLabels([...extractedData.xAxisLabels]);
     }
     const ySig = initialYAxisLabels ? initialYAxisLabels.join('|') : '';
     if (ySig && ySig !== lastAppliedInitialYRef.current
         && initialYAxisLabels!.length === extractedData.yAxisLabels.length) {
       lastAppliedInitialYRef.current = ySig;
       setYAxisLabels(toDisplay(initialYAxisLabels!, extractedData.rowsReversed));
+    } else if (!ySig && lastAppliedInitialYRef.current) {
+      lastAppliedInitialYRef.current = '';
+      setYAxisLabels([...extractedData.yAxisLabels]);
     }
   }, [initialXAxisLabels, initialYAxisLabels, extractedData]);
 
@@ -3228,6 +3257,14 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
   const lastNotifiedAxisRef = useRef<string>("");
   useEffect(() => {
     if (!onAxisLabelsChange) return;
+    // Les libellés en mémoire doivent venir de CETTE extraction. Quand elle
+    // change (autre version, autre facteur, fichier rechargé), cet effet
+    // tournait une première fois avec l'état de l'ancienne extraction face
+    // aux nouveaux libellés d'origine : un axe édité dans une version se
+    // retrouvait transféré dans l'autre (issue #56), ou un axe entier partait
+    // dans le fichier à l'ancien facteur. L'effet d'initialisation remet
+    // l'état d'aplomb au rendu suivant, on attend celui-là.
+    if (axisLabelsSource !== extractedData) return;
     if (xAxisLabels.length === 0 && yAxisLabels.length === 0) return;
     const origX = originalXAxisLabelsRef.current;
     const origY = originalYAxisLabelsRef.current;
@@ -3262,7 +3299,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
     if (sig === lastNotifiedAxisRef.current) return;
     lastNotifiedAxisRef.current = sig;
     onAxisLabelsChange(payload);
-  }, [xAxisLabels, yAxisLabels, onAxisLabelsChange, extractedData]);
+  }, [xAxisLabels, yAxisLabels, onAxisLabelsChange, extractedData, axisLabelsSource]);
 
   // Ajuster la position du menu contextuel pour qu'il reste dans l'écran
   useLayoutEffect(() => {
@@ -4099,7 +4136,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)' }}
             onClick={handleClose}
             onMouseDown={(e) => e.stopPropagation()}
-            title="Fermer cette map"
+            title={t.mapViewer.closeMap}
           >
             <X className="w-4 h-4" />
           </Button>
@@ -4394,7 +4431,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             style={{ color: theme === 'light' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)' }}
             onClick={handleClose}
             onMouseDown={(e) => e.stopPropagation()}
-            title="Fermer cette map"
+            title={t.mapViewer.closeMap}
           >
             <X className="w-4 h-4" />
           </Button>

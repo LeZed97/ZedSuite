@@ -101,19 +101,31 @@ impl MapDetector {
         let y_label = map.y_label.clone().unwrap_or_default();
         let is_edc16 = family == "EDC16";
 
-        // MAP linearisation (EDC15P / EDC15VM) : deux points « pression à
-        // une tension capteur ». L'axe est brut en pas de convertisseur
-        // 10 bits (82 = 0,40 V, 989 = 4,83 V), affiché en millivolts.
+        // MAP linearisation : pression lue à un niveau du signal capteur.
+        // L'axe est brut en pas de convertisseur 10 bits (82 = 0,40 V,
+        // 951 = 4,64 V). Sur EDC15P / EDC15VM il reste brut à l'écran, comme
+        // dans EDCSuite (facteur 1, sans unité) : les tuners comparent les
+        // deux écrans et un capteur 4 bars se reconnaît à « 913 et 44 », pas
+        // à des millivolts. Les EDC16 gardent l'affichage en millivolts.
         if lower == "map linearisation" {
-            map.x_label = Some("Sensor voltage (mV)".to_string());
-            map.x_axis_correction = Some(5000.0 / 1024.0);
-            map.x_axis_offset = Some(0.0);
             if map.unit.as_deref().unwrap_or("").is_empty() {
                 map.unit = Some("mbar".to_string());
             }
-            map.description = Some(
-                "Boost pressure read at two sensor voltages | X: Sensor voltage (mV)".to_string(),
-            );
+            if is_edc16 {
+                map.x_label = Some("Sensor voltage (mV)".to_string());
+                map.x_axis_correction = Some(5000.0 / 1024.0);
+                map.x_axis_offset = Some(0.0);
+                map.description = Some(
+                    "Boost pressure read at two sensor voltages | X: Sensor voltage (mV)".to_string(),
+                );
+            } else {
+                map.x_label = Some("Sensor signal".to_string());
+                map.x_axis_correction = Some(1.0);
+                map.x_axis_offset = Some(0.0);
+                map.description = Some(
+                    "Boost pressure read at two sensor signal levels | X: Sensor signal".to_string(),
+                );
+            }
         }
 
         // Débit d'air en abscisse des limiteurs de fumée : « mg/st » seul ne

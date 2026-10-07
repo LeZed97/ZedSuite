@@ -127,7 +127,7 @@ Tout est dans la section **Assets** de la [dernière release](https://github.com
 curl -fsSL https://raw.githubusercontent.com/LeZed97/ZedSuite/master/install-macos.sh | sh
 ```
 
-**Linux** — téléchargez `ZedSuite_x.y.z_linux-x86_64.AppImage`, rendez-le exécutable (`chmod +x`) et lancez-le, ou installez le `.deb` avec `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. x86 64 bits. Le `.deb` demande Ubuntu 24.04, Debian 13 ou une dérivée plus récente (webkit2gtk 4.1, glibc 2.39). L'AppImage est construite sur Ubuntu 26.04 et demande pour l'instant une distribution aussi récente (glibc 2.43) ; une construction sur une base plus ancienne est prévue. Les mises à jour s'installent toutes seules là aussi : l'AppImage remplace son propre fichier, le `.deb` passe par la demande de mot de passe du système. Le support Linux a été apporté par [@bferd](https://github.com/bferd).
+**Linux** — téléchargez `ZedSuite_x.y.z_linux-x86_64.AppImage`, rendez-le exécutable (`chmod +x`) et lancez-le, ou installez le `.deb` avec `sudo apt install ./ZedSuite_x.y.z_linux-amd64.deb`. x86 64 bits. Les deux sont construits sur Ubuntu 22.04 et tournent sur Ubuntu 22.04 et 24.04, Debian 12 et 13, Mint 21 et 22 et les distributions de cette génération (webkit2gtk 4.1, glibc 2.35 ou plus récente). Les mises à jour s'installent toutes seules là aussi : l'AppImage remplace son propre fichier, le `.deb` passe par la demande de mot de passe du système. Le support Linux a été apporté par [@bferd](https://github.com/bferd).
 
 ## 🗺️ Feuille de route
 

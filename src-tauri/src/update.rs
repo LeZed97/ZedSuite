@@ -29,6 +29,29 @@ use tauri::Emitter;
 
 const GITHUB_REPO: &str = "LeZed97/ZedSuite";
 
+/// The installer URL comes from the webview: only an asset of a release of
+/// GITHUB_REPO is accepted (the `browser_download_url` that
+/// check_for_update hands out). The downloaded file is executed, so any other
+/// URL - another host, another repo, plain http - is refused before the
+/// download starts.
+pub fn is_release_asset_url(url: &str) -> bool {
+    let prefix = format!("https://github.com/{GITHUB_REPO}/releases/download/");
+    match url.strip_prefix(&prefix) {
+        // <tag>/<file name>, without path tricks
+        Some(rest) => {
+            let mut parts = rest.split('/');
+            let tag = parts.next().unwrap_or("");
+            let file = parts.next().unwrap_or("");
+            parts.next().is_none()
+                && !tag.is_empty()
+                && !file.is_empty()
+                && !rest.contains("..")
+                && !rest.contains(['?', '#', '\\', '%'])
+        }
+        None => false,
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UpdateInfo {
     pub update_available: bool,
@@ -384,6 +407,10 @@ pub async fn download_and_install_update(
     url: String,
     version: String,
 ) -> Result<(), String> {
+    if !is_release_asset_url(&url) {
+        log::warn!("[update] refused installer URL: {url}");
+        return Err("download: URL is not a ZedSuite release asset".to_string());
+    }
     // Avant tout téléchargement : l'app doit tourner depuis un dossier où
     // elle peut se remplacer (pas depuis l'image disque ni un dossier
     // temporaire) — sinon le message invite à la glisser dans Applications.
@@ -949,5 +976,53 @@ pub mod linux {
             .stderr(Stdio::null())
             .spawn()
             .map(|_| ())
+    }
+}
+
+#[cfg(test)]
+mod url_check_tests {
+    use super::is_release_asset_url;
+
+    #[test]
+    fn accepts_release_assets_of_the_repo() {
+        assert!(is_release_asset_url(
+            "https://github.com/LeZed97/ZedSuite/releases/download/v1.2.5/ZedSuite_1.2.5_x64-setup.exe"
+        ));
+        assert!(is_release_asset_url(
+            "https://github.com/LeZed97/ZedSuite/releases/download/1.3.0/ZedSuite.app.tar.gz"
+        ));
+        // Real assets of the v1.2.5 release
+        for name in [
+            "ZedSuite_1.2.5_linux-amd64.deb",
+            "ZedSuite_1.2.5_linux-x86_64.AppImage",
+            "ZedSuite_1.2.5_macos-universal.app.tar.gz",
+            "ZedSuite_1.2.5_macos-universal.dmg",
+            "ZedSuite_1.2.5_x64-setup.exe",
+            "ZedSuite_1.2.5_x86-setup.exe",
+        ] {
+            let url = format!("https://github.com/LeZed97/ZedSuite/releases/download/v1.2.5/{name}");
+            assert!(is_release_asset_url(&url), "refused: {url}");
+        }
+    }
+
+    #[test]
+    fn refuses_anything_else() {
+        for url in [
+            "http://github.com/LeZed97/ZedSuite/releases/download/v1/a.exe",
+            "https://github.com/Other/ZedSuite/releases/download/v1/a.exe",
+            "https://github.com/LeZed97/ZedSuiteX/releases/download/v1/a.exe",
+            "https://evil.example/LeZed97/ZedSuite/releases/download/v1/a.exe",
+            "https://github.com.evil.example/LeZed97/ZedSuite/releases/download/v1/a.exe",
+            "https://github.com/LeZed97/ZedSuite/releases/download/v1/../../x/a.exe",
+            "https://github.com/LeZed97/ZedSuite/releases/download/v1/sub/a.exe",
+            "https://github.com/LeZed97/ZedSuite/releases/download/v1/",
+            "https://github.com/LeZed97/ZedSuite/releases/download//a.exe",
+            "https://github.com/LeZed97/ZedSuite/releases/download/v1/a.exe?x=1",
+            "https://github.com/LeZed97/ZedSuite/releases/download/v1/a%2F..exe",
+            "https://github.com/LeZed97/ZedSuite/archive/refs/heads/master.zip",
+            "",
+        ] {
+            assert!(!is_release_asset_url(url), "accepted: {url}");
+        }
     }
 }

@@ -166,6 +166,18 @@ impl EDC15PDetector {
         
         // Filter false SOI maps - only keep numbered ones from detect_soi_maps_by_selector
         classified = self.filter_false_soi_maps(classified);
+
+        // « MAP linearization » : deux pressions croissantes (200 et 3000 mbar
+        // aux deux points de l'axe), quel que soit le chemin qui l'a nommée.
+        // Le même en-tête précède aussi des mots vides (65535, 65535 à 0x51CE8
+        // sur le 019LJ, issue #51) qui sortaient en « MAP linearisation ».
+        classified.retain(|m| {
+            let is_lin = m
+                .name
+                .as_deref()
+                .map_or(false, |n| n.to_lowercase().starts_with("map lineari"));
+            !is_lin || m.size != 4 || Self::map_linearisation_values_plausible(data, m.address)
+        });
         
         // Fix Injector duration maps - renumber and swap axes
         classified = self.fix_injector_duration_maps(data, classified);
@@ -1019,6 +1031,53 @@ impl EDC15PDetector {
                         }
                     }
                     
+                    // Axes retouchés dans un fichier préparé (premier point IQ
+                    // différent de 0, régime réécrit à l'envers…) : les tests
+                    // stricts ci-dessus les manquaient et les dix SOI revenaient
+                    // avec des axes en index après un export. Second passage sur
+                    // le même en-tête (ID + longueur), valeurs seulement
+                    // monotones et plausibles ; les fichiers d'origine passent
+                    // toujours par le premier.
+                    if shared_y_axis_addr.is_none() {
+                        for offset in (search_start..first_map_addr).step_by(2) {
+                            if offset + 36 >= data.len() { continue; }
+                            let id = u16::from_le_bytes([data[offset], data[offset + 1]]);
+                            let len = u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
+                            if (id >> 8) as u8 != 0xF9 || len != 16 { continue; }
+                            let vals: Vec<u16> = (0..16)
+                                .map(|i| u16::from_le_bytes([data[offset + 4 + 2 * i], data[offset + 5 + 2 * i]]))
+                                .collect();
+                            let ascending = vals.windows(2).all(|w| w[0] < w[1]);
+                            let descending = vals.windows(2).all(|w| w[0] > w[1]);
+                            let lo = *vals.iter().min().unwrap();
+                            let hi = *vals.iter().max().unwrap();
+                            if (ascending || descending) && lo <= 1500 && (2500..=7000).contains(&hi) {
+                                shared_y_axis_addr = Some((offset + 4) as u32);
+                                shared_y_axis_id = Some(id);
+                                log::debug!("  ✅ Found tuned Y axis (RPM) at 0x{:X} (data at 0x{:X}), ID=0x{:04X}", offset, offset + 4, id);
+                                break;
+                            }
+                        }
+                    }
+                    if shared_x_axis_addr.is_none() {
+                        for offset in (search_start..first_map_addr).step_by(2) {
+                            if offset + 32 >= data.len() { continue; }
+                            let id = u16::from_le_bytes([data[offset], data[offset + 1]]);
+                            let len = u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
+                            if (id >> 8) as u8 != 0xEB || len != 14 { continue; }
+                            let vals: Vec<u16> = (0..14)
+                                .map(|i| u16::from_le_bytes([data[offset + 4 + 2 * i], data[offset + 5 + 2 * i]]))
+                                .collect();
+                            let ascending = vals.windows(2).all(|w| w[0] < w[1]);
+                            if ascending && vals[0] <= 1500 && vals[13] <= 9000 {
+                                shared_x_axis_addr = Some((offset + 4) as u32);
+                                shared_x_axis_id = Some(id);
+                                log::debug!("  ✅ Found tuned X axis (IQ) at 0x{:X} (data at 0x{:X}), ID=0x{:04X}", offset, offset + 4, id);
+                                break;
+                            }
+                        }
+                    }
+
                     // « SOI selector » : le sélecteur de température lui-même
                     // (1×10, K×10 → °C), listé par WinOLS/EDCSuite et demandé
                     // par les utilisateurs. Adresse = les valeurs de l'axe C5.
@@ -1690,6 +1749,98 @@ impl EDC15PDetector {
                     maps.push(map);
                 }
                 
+                // Deux structures de plus dans le même bloc BIP, demandées sur le
+                // 019LJ (issue #51, jrnelson78) et présentes à la même place sur
+                // tous les EDC15P à disposition standard du banc :
+                //  - juste AVANT l'axe de température : la correction BIP par
+                //    avance et régime (damos zmwBPKorKF), [xx EC][10 régimes]
+                //    [xx C5][8 avances brutes][80 coefficients ×1/256] ;
+                //  - quelques centaines d'octets plus haut : la caractéristique
+                //    de base du BIP, [xx C5][10 points croissants ≤ 1023]
+                //    [10 valeurs décroissantes].
+                // Les dispositions compactes (019AJ/AN/CC/CJ) n'ont pas ce bloc.
+                let u16_at = |p: usize| u16::from_le_bytes([data[p], data[p + 1]]);
+                let corr_data = found_offset.wrapping_sub(162);
+                if found_offset >= 162 + 44 {
+                    let soi_hdr = corr_data - 20;
+                    let rpm_hdr = corr_data - 44;
+                    let rpm: Vec<u16> = (0..10).map(|i| u16_at(rpm_hdr + 4 + 2 * i)).collect();
+                    let soi: Vec<u16> = (0..8).map(|i| u16_at(soi_hdr + 4 + 2 * i)).collect();
+                    let coef: Vec<u16> = (0..80).map(|i| u16_at(corr_data + 2 * i)).collect();
+                    let rpm_ok = data[rpm_hdr + 1] == 0xEC
+                        && u16_at(rpm_hdr + 2) == 10
+                        && rpm.windows(2).all(|w| w[0] < w[1])
+                        && rpm[0] >= 100
+                        && rpm[9] <= 6000;
+                    let soi_ok = data[soi_hdr + 1] == 0xC5
+                        && u16_at(soi_hdr + 2) == 8
+                        && soi.windows(2).all(|w| w[0] < w[1])
+                        && soi[0] >= 1500
+                        && soi[7] <= 4000;
+                    let coef_ok = coef.iter().all(|&v| (100..=700).contains(&v));
+                    if rpm_ok && soi_ok && coef_ok {
+                        let addr = corr_data as u32;
+                        maps.retain(|m| m.address != addr);
+                        detected_addresses.remove(&addr);
+                        let mut map = DetectedMap::new(
+                            addr,
+                            160,
+                            MapDimensions::TwoDimensional { rows: 10, cols: 8 },
+                            DataType::UInt16,
+                        );
+                        map.name = Some("BIP correction by SOI and rpm".to_string());
+                        map.description = Some(
+                            "BIP correction factor by start of injection and engine speed (zmwBPKorKF) | X: SOI (° BTDC) | Y: Engine speed (rpm)".to_string(),
+                        );
+                        map.unit = Some(String::new());
+                        map.correction_factor = Some(0.00390625); // 1/256 : 256 = coefficient 1,00
+                        map.x_axis_address = Some((soi_hdr + 4) as u32);
+                        map.x_axis_correction = Some(-0.023437);
+                        map.x_axis_offset = Some(78.0);
+                        map.y_axis_address = Some((rpm_hdr + 4) as u32);
+                        map.y_axis_correction = Some(1.0);
+                        map.confidence = 0.9;
+                        detected_addresses.insert(addr);
+                        maps.push(map);
+
+                        // Caractéristique de base du BIP, dans les 400 octets avant
+                        let start = rpm_hdr.saturating_sub(400);
+                        let mut p = start + (start % 2);
+                        while p + 44 <= rpm_hdr {
+                            if data[p + 1] == 0xC5 && u16_at(p + 2) == 10 {
+                                let axis: Vec<u16> = (0..10).map(|i| u16_at(p + 4 + 2 * i)).collect();
+                                let vals: Vec<u16> = (0..10).map(|i| u16_at(p + 24 + 2 * i)).collect();
+                                let axis_ok = axis.windows(2).all(|w| w[0] < w[1]) && axis[0] >= 100 && axis[9] <= 1023;
+                                let vals_ok = vals.windows(2).all(|w| w[0] > w[1]) && vals[9] >= 300 && vals[0] <= 3000;
+                                if axis_ok && vals_ok {
+                                    let basic_addr = (p + 24) as u32;
+                                    maps.retain(|m| m.address != basic_addr);
+                                    detected_addresses.remove(&basic_addr);
+                                    let mut basic = DetectedMap::new(
+                                        basic_addr,
+                                        20,
+                                        MapDimensions::TwoDimensional { rows: 1, cols: 10 },
+                                        DataType::UInt16,
+                                    );
+                                    basic.name = Some("BIP basic characteristic".to_string());
+                                    basic.description = Some(
+                                        "BIP basic characteristic, raw values | X: Voltage (raw)".to_string(),
+                                    );
+                                    basic.unit = Some(String::new());
+                                    basic.correction_factor = Some(1.0);
+                                    basic.x_axis_address = Some((p + 4) as u32);
+                                    basic.x_axis_correction = Some(1.0);
+                                    basic.confidence = 0.85;
+                                    detected_addresses.insert(basic_addr);
+                                    maps.push(basic);
+                                    break;
+                                }
+                            }
+                            p += 2;
+                        }
+                    }
+                }
+
                 offset = found_offset + 1;
             } else {
                 break;
@@ -4164,6 +4315,19 @@ impl EDC15PDetector {
         result
     }
 
+    /// Deux pressions d'une « MAP linearisation » EDC15P : 50..600 mbar au
+    /// premier point, 1000..5000 au second, croissantes (même règle que la
+    /// passe précoce d'early.rs).
+    fn map_linearisation_values_plausible(data: &[u8], address: u32) -> bool {
+        let a = address as usize;
+        if a + 4 > data.len() {
+            return false;
+        }
+        let v0 = u16::from_le_bytes([data[a], data[a + 1]]);
+        let v1 = u16::from_le_bytes([data[a + 2], data[a + 3]]);
+        (50..=600).contains(&v0) && (1000..=5000).contains(&v1) && v1 > v0
+    }
+
     fn name_known_maps(&self, data: &[u8], maps: Vec<DetectedMap>) -> Vec<DetectedMap> {
         let mut classified = Vec::new();
         // Hors disposition standard, les maps génériques sont conservées pour
@@ -5367,8 +5531,12 @@ impl EDC15PDetector {
                     classified_this = true;
                 }
             }
-            // Length 160 (8x10 or 10x8) - Injector duration, BIP SOI Correction
-            else if map.size == 160 {
+            // Length 160 (8x10 or 10x8) - Injector duration, BIP SOI Correction.
+            // La correction BIP par avance et régime (find_bip_temp_correction)
+            // a la même forme, 8 avances C5 × 10 régimes EC : déjà nommée, elle
+            // ne doit pas repasser en « Injector duration » — la chaîne des
+            // durations la jetait ensuite comme doublon.
+            else if map.size == 160 && !map.name.as_deref().map_or(false, |n| n.starts_with("BIP ")) {
                 if x_len == 8 && y_len == 10 && x_axis_id_high == 0xC5 && y_axis_id_high == 0xEC {
                     // Injector duration
                     map.category = Some("Detected maps".to_string());
