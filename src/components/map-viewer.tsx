@@ -1,4 +1,4 @@
-﻿+"use client";
+"use client";
 
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,15 @@ import { resolveMapCellLayout, resolveAxisLabels, resolveAxisSources } from "@/l
 import { getMapValueRange, clampMapValue } from "@/lib/map-value-range";
 import { gridToText, parseGridText } from "@/lib/clipboard-grid";
 import { readSystemClipboardText, writeSystemClipboardText } from "@/lib/system-clipboard";
+import {
+  identifySmokeMap,
+  computeAfrMatrix,
+  getAfrCellColor,
+  formatAfrValue,
+  AfrMatrixResult,
+  AfrUnit,
+  AFR_ENGINE_PRESETS,
+} from "@/lib/ecu/bosch/afr-calculation";
 
 // Import Plotly dynamiquement pour ├®viter les probl├¿mes SSR
 import dynamic from "next/dynamic";
@@ -1048,9 +1057,32 @@ const skipAutoSizeRef = useRef<boolean>(false);
   const mutateDisplayYAxis = (displayIdx: number, fn: (current: string) => string) =>
     mutateSourceAxis(displayYAxisToSource(displayIdx), fn);
 
-  // Injector duration 00: handled in Y ordering (descending); no extra reversal here
+  // --- AFR Mode for Smoke Limiters (EDC15 / extensible) ---
+  const [isAfrActive, setIsAfrActive] = useState<boolean>(false);
+  const [afrUnit, setAfrUnit] = useState<AfrUnit>('afr');
+  const [afrEnginePreset, setAfrEnginePreset] = useState<string>('4cyl19');
 
-  // Injector duration 01-05: no special transpose here (keep axes/values as read)
+  const afrMapInfo = useMemo(() => {
+    return identifySmokeMap(mapData, ecuType);
+  }, [mapData, ecuType]);
+
+  const afrResult = useMemo<AfrMatrixResult | null>(() => {
+    if (!afrMapInfo || !isAfrActive) return null;
+    const numericX = displayXAxisLabels.map((l) => parseFloat(l)).filter((n) => !isNaN(n));
+    const numericY = displayYAxisLabels.map((l) => parseFloat(l)).filter((n) => !isNaN(n));
+    return computeAfrMatrix(
+      mapData,
+      displayMapValues,
+      numericX,
+      numericY,
+      {
+        unit: afrUnit,
+        enginePresetId: afrEnginePreset,
+      },
+      ecuType
+    );
+  }, [afrMapInfo, isAfrActive, afrUnit, afrEnginePreset, mapData, displayMapValues, displayXAxisLabels, displayYAxisLabels, ecuType]);
+
 
 
   // Ref local pour savoir si c'est le premier render de cette instance du composant
@@ -5109,7 +5141,18 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                         const mapCoords = toMapCoords(rowIndex, colIndex);
                         const cellKey = getCellKey(mapCoords.row, mapCoords.col);
                         const isSelected = selectedCells.has(cellKey);
-                        const bgColor = isSelected ? getSelectionBg() : (disableTableColors ? 'transparent' : getValueColor(value, minValue, maxValue, theme));
+                        const afrVal = afrResult?.values?.[rowIndex]?.[colIndex];
+                        const rawAfrVal = afrResult?.rawAfr?.[rowIndex]?.[colIndex];
+                        const isAfrCell = isAfrActive && afrVal !== undefined && !isNaN(afrVal) && afrVal > 0;
+                        const bgColor = isSelected
+                          ? getSelectionBg()
+                          : isAfrCell
+                          ? (disableTableColors ? 'transparent' : getAfrCellColor(afrVal, afrUnit, 17.0, theme))
+                          : (disableTableColors ? 'transparent' : getValueColor(value, minValue, maxValue, theme));
+
+                        const displayCellContent = isAfrActive
+                          ? (afrVal !== undefined ? formatAfrValue(afrVal, afrUnit) : '—')
+                          : value.toFixed(cellDecimals);
 
                         return (
                           <td
@@ -5119,10 +5162,18 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                             onDoubleClick={() => handlePromptEdit(rowIndex, colIndex, value)}
                             onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex, value)}
                             className="font-mono text-center cursor-pointer transition-colors"
+                            title={
+                              isAfrActive && afrVal !== undefined && !isNaN(afrVal)
+                                ? afrUnit === 'lambda'
+                                  ? `Lambda: ${formatAfrValue(afrVal, 'lambda')} (AFR ${formatAfrValue(rawAfrVal ?? 0, 'afr')}:1) | IQ: ${value.toFixed(cellDecimals)} mg/st`
+                                  : `AFR: ${formatAfrValue(afrVal, 'afr')}:1 | IQ: ${value.toFixed(cellDecimals)} mg/st`
+                                : undefined
+                            }
                             style={{
                               border: `1px solid ${getCellBorderColor()}`,
                               backgroundColor: bgColor,
                               color: theme === 'light' ? 'black' : 'white',
+                              fontWeight: isAfrCell && (rawAfrVal ?? 0) < 16.5 ? 700 : undefined,
                               padding: 'var(--zs-cell-pad, 2px 4px)' as any,
                               fontSize: 'var(--zs-cell-font, 11px)',
                               fontVariantNumeric: 'tabular-nums',
@@ -5134,7 +5185,7 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
                               height: 'var(--zs-cell-h, 20px)'
                             }}
                           >
-                            {value.toFixed(cellDecimals)}
+                            {displayCellContent}
                           </td>
                         );
                       })}
@@ -5586,6 +5637,33 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             >
               Text
             </button>
+            {afrMapInfo?.isSmokeMap && (
+              <button
+                type="button"
+                onClick={() => setIsAfrActive((prev) => !prev)}
+                className="px-3.5 py-1 text-[11px] leading-[14px] font-bold tracking-wide transition-colors"
+                style={{
+                  borderRight: `1px solid ${getCellBorderColor()}`,
+                  background: isAfrActive
+                    ? 'linear-gradient(90deg, #d97706, #ea580c, #dc2626)'
+                    : getViewButtonBg(),
+                  color: isAfrActive ? '#ffffff' : getCellTextColor(),
+                }}
+                onMouseEnter={(e) => {
+                  if (!isAfrActive) e.currentTarget.style.background = getViewButtonBgHover();
+                }}
+                onMouseLeave={(e) => {
+                  if (!isAfrActive) e.currentTarget.style.background = getViewButtonBg();
+                }}
+                title={
+                  isAfrActive
+                    ? t.mapViewer.afrDisableTitle
+                    : `${t.mapViewer.afrToggleTitle} - ${afrMapInfo.mapType === 'map' ? 'IQ by MAP' : 'Smoke by MAF'}`
+                }
+              >
+                AFR
+              </button>
+            )}
             <button
               onClick={() => handleViewModeChange("2d")}
               disabled={!isSingleLineMap}
@@ -5639,6 +5717,57 @@ const [axesSwapped, setAxesSwapped] = useState<boolean>(false); // Track if axes
             >
               3D
             </button>
+            {isAfrActive && afrResult && (
+              <div
+                className="px-2.5 py-1 text-[10px] leading-[14px] flex items-center gap-2 select-none border-l"
+                style={{
+                  borderColor: getCellBorderColor(),
+                  color: theme === 'light' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+                  background: theme === 'light' ? 'rgba(0, 0, 0, 0.03)' : 'rgba(255, 255, 255, 0.03)'
+                }}
+              >
+                {/* Unit Switcher */}
+                <button
+                  type="button"
+                  onClick={() => setAfrUnit((u) => (u === 'afr' ? 'lambda' : 'afr'))}
+                  className="px-1.5 py-0.5 rounded border text-[9px] font-bold transition-colors"
+                  style={{
+                    borderColor: getCellBorderColor(),
+                    background: afrUnit === 'lambda' ? 'rgba(217, 119, 6, 0.2)' : 'transparent',
+                    color: afrUnit === 'lambda' ? '#f59e0b' : getCellTextColor(),
+                  }}
+                  title={t.mapViewer.afrToggleUnit}
+                >
+                  {afrUnit === 'lambda' ? 'λ' : 'AFR'}
+                </button>
+
+                {/* Engine Preset Selector for MAP-based smoke maps */}
+                {afrResult.mapType === 'map' && (
+                  <select
+                    value={afrEnginePreset}
+                    onChange={(e) => setAfrEnginePreset(e.target.value)}
+                    className="text-[9px] px-1 py-0.5 rounded border bg-transparent font-medium cursor-pointer"
+                    style={{
+                      borderColor: getCellBorderColor(),
+                      color: getCellTextColor(),
+                    }}
+                    title={t.mapViewer.afrEnginePreset}
+                  >
+                    {AFR_ENGINE_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <span>{t.mapViewer.afrMin}: <strong className={afrResult.minAfr < 16.5 ? 'text-red-500 font-bold' : 'text-emerald-500 font-bold'}>{afrUnit === 'lambda' ? afrResult.minLambda.toFixed(2) : `${afrResult.minAfr.toFixed(1)}:1`}</strong></span>
+                <span>{t.mapViewer.afrMax}: <strong>{afrUnit === 'lambda' ? afrResult.maxLambda.toFixed(2) : `${afrResult.maxAfr.toFixed(1)}:1`}</strong></span>
+                {afrResult.smokeRiskCount > 0 && (
+                  <span className="text-amber-500 font-medium">({t.mapViewer.afrSmokeRiskCount.replace('{count}', String(afrResult.smokeRiskCount))})</span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
