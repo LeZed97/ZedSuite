@@ -6171,6 +6171,48 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
     return getDefaultMapDisplaySettings(map);
   }, [mapDisplaySettingsStore]);
 
+  // Réglages Propriétés tels que le MapViewer les reçoit. Partagé avec la
+  // comparaison map par map : les deux vues doivent lire les mêmes valeurs.
+  const buildViewerDisplaySettings = useCallback((map: MapData) => {
+    const mapSettings = mapDisplaySettingsStore.get(map.address);
+    if (!mapSettings) return undefined;
+    // Les défauts d'axes (getDefaultMapDisplaySettings) sont en
+    // orientation BACKEND, alors que MapViewer échange lui-même les
+    // corrections des maps affichées transposées (Drivers wish MJD6…).
+    // Or le toggle d'inversion persiste les settings complets par
+    // défaut : forwarder ces facteurs tels quels écraserait les
+    // corrections échangées (pédale affichée brute 0..25000, RPM
+    // ×0.004). On ne forwarde un override d'axe QUE s'il diffère du
+    // défaut détecté — un défaut inchangé laisse MapViewer décider.
+    const defaults = getDefaultMapDisplaySettings(map);
+    const axisOverride = (
+      saved: MapDisplaySettings['xAxis'],
+      def: MapDisplaySettings['xAxis']
+    ) => ({
+      mirror: saved.mirror,
+      factor: saved.factor !== def.factor ? saved.factor : undefined,
+      offset: saved.offset !== def.offset ? saved.offset : undefined,
+      divisor: saved.divisor !== def.divisor ? saved.divisor : undefined,
+      precision: saved.precision !== def.precision ? saved.precision : undefined,
+    });
+    return {
+      xAxis: axisOverride(mapSettings.xAxis, defaults.xAxis),
+      yAxis: axisOverride(mapSettings.yAxis, defaults.yAxis),
+      map: {
+        factor: mapSettings.factor,
+        offset: mapSettings.offset,
+        divisor: mapSettings.divisor,
+        precision: mapSettings.precision,
+        invertDisplay: mapSettings.invertDisplay,
+      },
+    };
+  }, [mapDisplaySettingsStore]);
+  // Identité stable : la comparaison relit toutes les maps quand elle change
+  const compareMapDisplaySettings = useCallback(
+    (map: { address: number }) => buildViewerDisplaySettings(map as MapData),
+    [buildViewerDisplaySettings],
+  );
+
   // Toggle du bouton "inverser l'affichage" dans l'en-tête d'une map. Même
   // chemin que la fenêtre Propriétés : toute la famille suit.
   const handleToggleInvertDisplay = useCallback((mapAddress: number, invert: boolean) => {
@@ -8312,40 +8354,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
                             disableGraphColors={settings.disableGraphColors}
                             allMaps={projectData.detectionResults.maps}
                             onApplyToSimilarMaps={(targetMaps, copyType) => handleApplyToSimilarMaps(map.address, targetMaps, copyType)}
-                            displaySettings={(() => {
-                              const mapSettings = mapDisplaySettingsStore.get(map.address);
-                              if (!mapSettings) return undefined;
-                              // Les défauts d'axes (getDefaultMapDisplaySettings) sont en
-                              // orientation BACKEND, alors que MapViewer échange lui-même les
-                              // corrections des maps affichées transposées (Drivers wish MJD6…).
-                              // Or le toggle d'inversion persiste les settings complets par
-                              // défaut : forwarder ces facteurs tels quels écraserait les
-                              // corrections échangées (pédale affichée brute 0..25000, RPM
-                              // ×0.004). On ne forwarde un override d'axe QUE s'il diffère du
-                              // défaut détecté — un défaut inchangé laisse MapViewer décider.
-                              const defaults = getDefaultMapDisplaySettings(map);
-                              const axisOverride = (
-                                saved: MapDisplaySettings['xAxis'],
-                                def: MapDisplaySettings['xAxis']
-                              ) => ({
-                                mirror: saved.mirror,
-                                factor: saved.factor !== def.factor ? saved.factor : undefined,
-                                offset: saved.offset !== def.offset ? saved.offset : undefined,
-                                divisor: saved.divisor !== def.divisor ? saved.divisor : undefined,
-                                precision: saved.precision !== def.precision ? saved.precision : undefined,
-                              });
-                              return {
-                                xAxis: axisOverride(mapSettings.xAxis, defaults.xAxis),
-                                yAxis: axisOverride(mapSettings.yAxis, defaults.yAxis),
-                                map: {
-                                  factor: mapSettings.factor,
-                                  offset: mapSettings.offset,
-                                  divisor: mapSettings.divisor,
-                                  precision: mapSettings.precision,
-                                  invertDisplay: mapSettings.invertDisplay,
-                                },
-                              };
-                            })()}
+                            displaySettings={buildViewerDisplaySettings(map)}
                             onToggleInvertDisplay={handleToggleInvertDisplay}
                             incrementValue={(() => {
                               const parsed = Number(modifyValue.replace(",", "."));
@@ -9052,6 +9061,14 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           dimensions: m.dimensions,
         })) || []}
         ecuType={projectData?.ecu_type}
+        maps={projectData?.detectionResults?.maps}
+        getMapDisplaySettings={compareMapDisplaySettings}
+        onOpenMap={(address) => {
+          const map = projectData?.detectionResults?.maps?.find((m) => m.address === address);
+          if (!map) return;
+          setIsCompareOpen(false);
+          handleMapClick(map);
+        }}
       />
 
       {/* Checksum Modal */}
