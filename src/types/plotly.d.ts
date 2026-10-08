@@ -20,6 +20,7 @@ declare module 'react-plotly.js' {
     onLegendClick?: (event: any) => boolean;
     onLegendDoubleClick?: (event: any) => boolean;
     onRelayout?: (event: any) => void;
+    onRelayouting?: (event: any) => void;
     onRestyle?: (event: any) => void;
     onRedraw?: () => void;
     onSelected?: (event: any) => void;
@@ -42,4 +43,13 @@ declare module 'react-plotly.js' {
   }
 
   export default class Plot extends Component<PlotProps> {}
+}
+
+// Build précompilée utilisée par react-plotly.js : l'importer directement
+// réutilise le même module (pas de second Plotly dans le bundle).
+declare module 'plotly.js/dist/plotly' {
+  const Plotly: {
+    relayout: (gd: HTMLElement, update: Record<string, unknown>) => Promise<unknown>;
+  };
+  export default Plotly;
 }
