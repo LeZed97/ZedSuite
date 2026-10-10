@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import axios from "axios";
 import { isBigEndianEcu } from "@/lib/ecu-endianness";
 import { getModalGlassStyle } from "@/lib/modal-glass";
+import { MapCompareView, type CompareMapInput } from "@/components/map-compare-view";
+import type { ExtractMapDisplaySettings } from "@/lib/map-extract";
 
 interface VersionDto {
   id: string;
@@ -59,7 +61,17 @@ interface CompareModalProps {
   hexdumpByteOrder?: "hilo" | "lohi";
   mapRegions?: MapRegion[];
   ecuType?: string;
+  // Définitions complètes des maps (axes, facteurs, type) pour la
+  // comparaison map par map ; sans elles seul le mode binaire est proposé.
+  maps?: CompareMapInput[];
+  // Réglages de la fenêtre Propriétés de chaque map (facteur, offset,
+  // précision) — mêmes valeurs que celles passées au MapViewer.
+  getMapDisplaySettings?: (map: CompareMapInput) => ExtractMapDisplaySettings | undefined;
+  // Ouvre la map dans l'éditeur (la modale se ferme)
+  onOpenMap?: (address: number) => void;
 }
+
+type CompareMode = "binary" | "maps";
 
 /** Lecture d'une valeur 16 bits selon l'ordre des octets choisi. */
 const read16 = (arr: number[], off: number, order: "hilo" | "lohi"): number =>
@@ -551,6 +563,9 @@ export function CompareModal({
   hexdumpByteOrder: initialByteOrder = "lohi",
   mapRegions = [],
   ecuType,
+  maps = [],
+  getMapDisplaySettings,
+  onOpenMap,
 }: CompareModalProps) {
   const { t } = useI18n();
   const { theme } = useTheme();
@@ -575,6 +590,11 @@ export function CompareModal({
   const [selectedVersion1, setSelectedVersion1] = useState<string>("");
   const [selectedVersion2, setSelectedVersion2] = useState<string>("");
   const [isComparing, setIsComparing] = useState(false);
+  // Binaire (hexdump octet par octet) ou map par map (comme WinOLS). Le
+  // choix reste d'une ouverture à l'autre pendant la session.
+  const hasMaps = maps.length > 0;
+  const [compareModeState, setCompareMode] = useState<CompareMode>("maps");
+  const compareMode: CompareMode = hasMaps ? compareModeState : "binary";
 
   // Compare view state
   const [showCompareView, setShowCompareView] = useState(false);
@@ -844,7 +864,7 @@ export function CompareModal({
         setVisibleRange({ start: 0, end: Math.ceil(endRow / RANGE_CHUNK) * RANGE_CHUNK });
       }
     }
-  }, [showCompareView]);
+  }, [showCompareView, compareMode]);
 
   // Calculate bytes per row based on size (8 values * bytesPerValue)
   const bytesPerRow = hexdumpSize === "8b" ? VALUES_PER_ROW : VALUES_PER_ROW * 2;
@@ -920,17 +940,17 @@ export function CompareModal({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
-      } else if (showCompareView && e.key === 'ArrowLeft') {
+      } else if (showCompareView && compareMode === 'binary' && e.key === 'ArrowLeft') {
         e.preventDefault();
         goToPrevDiff();
-      } else if (showCompareView && e.key === 'ArrowRight') {
+      } else if (showCompareView && compareMode === 'binary' && e.key === 'ArrowRight') {
         e.preventDefault();
         goToNextDiff();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, showCompareView, onClose, goToPrevDiff, goToNextDiff]);
+  }, [isOpen, showCompareView, compareMode, onClose, goToPrevDiff, goToNextDiff]);
 
   // Synchronized scrolling - update virtualization immediately during scroll
   const handleScroll = (source: "left" | "right") => {
@@ -1103,7 +1123,7 @@ export function CompareModal({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [showCompareView]);
+  }, [showCompareView, compareMode]);
 
   // Dessin : texture WinOLS du fichier (panneau droit) + marques des
   // différences (rouge = droite plus haute, bleu = droite plus basse).
@@ -1165,7 +1185,7 @@ export function CompareModal({
     }
     ctx.putImageData(img, 0, 0);
     updateMinimapViewport();
-  }, [showCompareView, version1Data, version2Data, differences, minimapSize, theme, updateMinimapViewport]);
+  }, [showCompareView, compareMode, version1Data, version2Data, differences, minimapSize, theme, updateMinimapViewport]);
 
   // Clic / glisser dans la minimap : navigue les DEUX panneaux (sync)
   const handleMinimapMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1262,6 +1282,26 @@ export function CompareModal({
 
   if (!isOpen) return null;
 
+  const modeSwitch = hasMaps && (
+    <div
+      className="flex items-center rounded-lg p-0.5 gap-0.5"
+      style={{ background: getButtonBg(), border: `1px solid ${theme === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)'}` }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {(["maps", "binary"] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setCompareMode(mode)}
+          className={`h-6 px-3 rounded text-[11px] transition-colors ${compareMode === mode ? "bg-red-600/40" : getButtonHoverClass()}`}
+          style={{ color: getTextColor() }}
+        >
+          {mode === "maps" ? t.compare.modeMaps : t.compare.modeBinary}
+        </button>
+      ))}
+    </div>
+  );
+
   const getVersion1Name = () => displayVersions.find((v) => v.id === selectedVersion1)?.name || "";
   const getVersion2Name = () => displayVersions.find((v) => v.id === selectedVersion2)?.name || "";
 
@@ -1295,6 +1335,7 @@ export function CompareModal({
           >
             {t.compare.title}
           </span>
+          {showCompareView && modeSwitch}
           <button
             onClick={onClose}
             onMouseDown={(e) => e.stopPropagation()}
@@ -1314,13 +1355,14 @@ export function CompareModal({
             >
               {t.compare.selectVersions}
             </p>
-            {/* Comparaison binaire seulement pour l'instant ; la comparaison
-                des maps de deux versions viendra ici aussi (07/09) */}
+            {/* Mode de comparaison : map par map (valeurs physiques, axes,
+                comme WinOLS) ou binaire octet par octet */}
+            {hasMaps && <div className="flex justify-center">{modeSwitch}</div>}
             <p
               className="text-[11px] text-center leading-snug px-2"
               style={{ color: theme === "light" ? "rgba(0, 0, 0, 0.5)" : "rgba(255, 255, 255, 0.45)" }}
             >
-              {t.compare.binaryOnlyNotice}
+              {compareMode === "maps" ? t.compare.modeMapsHint : t.compare.modeBinaryHint}
             </p>
 
             <div className="flex gap-3 items-center">
@@ -1414,6 +1456,21 @@ export function CompareModal({
               </div>
             </div>
 
+            {compareMode === "maps" ? (
+              <MapCompareView
+                maps={maps}
+                leftData={version1Data}
+                rightData={version2Data}
+                leftName={getVersion1Name()}
+                rightName={getVersion2Name()}
+                ecuType={ecuType}
+                theme={theme}
+                hairline={hairline}
+                getDisplaySettings={getMapDisplaySettings}
+                onOpenMap={onOpenMap}
+                onBack={() => setShowCompareView(false)}
+              />
+            ) : (<>
             {/* Dual hexdump view — scrollbars natives masquées, une minimap
                 partagée (les deux panneaux scrollent ensemble) les remplace */}
             <div className="flex-1 flex overflow-hidden">
@@ -1606,6 +1663,7 @@ export function CompareModal({
               {/* Right: Spacer for balance */}
               <div style={{ width: '150px' }} />
             </div>
+            </>)}
           </div>
         )}
 
