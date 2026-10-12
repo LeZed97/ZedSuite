@@ -1,4 +1,5 @@
 "use client";
+import { EcuCompatibilityModal } from "@/components/ecu-compatibility-modal";
 
 import { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue } from "react";
 import { useRouter } from "next/navigation";
@@ -6319,6 +6320,7 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
 
   // Menu du bouton Outils (sidebar dépliée ou repliée) : fermé au clic
   // ailleurs ou à l'action choisie
+  const [isEcuCompatibilityOpen, setIsEcuCompatibilityOpen] = useState(false);
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement | null>(null);
   const toolsMenuCollapsedRef = useRef<HTMLDivElement | null>(null);
@@ -6357,6 +6359,9 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
       >
         <Timer className="w-4 h-4" />
         <span>{t.eoiModal.title}</span>
+      </button>
+      <button type="button" onClick={() => { setToolsMenuOpen(false); setIsEcuCompatibilityOpen(true); }} className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors ${getButtonHoverClass()}`}>
+        ECU Compatibility
       </button>
     </div>
   );
@@ -9247,6 +9252,8 @@ await axios.put("/api/versioning/map-edits", { versionId: currentVersionId, edit
           </div>
         </div>
       )}
+
+      {isEcuCompatibilityOpen && <EcuCompatibilityModal theme={theme} onClose={() => setIsEcuCompatibilityOpen(false)} />}
 
     </div>
   );
