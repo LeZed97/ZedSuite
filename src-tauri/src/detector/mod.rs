@@ -214,8 +214,8 @@ impl MapDetector {
     /// chaque détecteur (choix d'affichage) :
     /// - orthographe « linearisation » dans tous les noms de maps (jamais
     ///   « linearization ») ;
-    /// - maps masquées sur tous les calculateurs : « Inverse driver wish »
-    ///   et « MAF linearisation » ;
+    /// - « Inverse driver wish » affichée sur EDC15VM ; masquée sur les
+    ///   autres familles. « MAF linearisation » reste masquée partout ;
     /// - EDC16 : seules les durations 00-05 et le Duration Selector sont
     ///   affichés — « Duration 06+ », « Duration (Dynamic) » et « Duration
     ///   min. injection break after main injection » sont masquées (comme
@@ -239,7 +239,7 @@ impl MapDetector {
             let lower = map.name.as_deref().unwrap_or("").to_ascii_lowercase();
 
             // Masquées partout
-            if (lower.contains("inverse") && lower.contains("driver"))
+            if (family != "EDC15VM" && lower.contains("inverse") && lower.contains("driver"))
                 || lower.contains("maf linearisation")
             {
                 continue;
@@ -313,4 +313,28 @@ mod tests {
         // Should not panic
     }
 
+}
+
+#[cfg(test)]
+mod inverse_visibility_tests {
+    use super::*;
+    use crate::models::{DataType, MapDimensions};
+    fn inverse_map() -> DetectedMap {
+        let mut m=DetectedMap::new(0x4C96C,384,MapDimensions::TwoDimensional { rows:12,cols:16 },DataType::UInt16);
+        m.name=Some("Inverse driver wish".to_string());
+        m.category=Some("Engine fuel request".to_string());
+        m.codeblock_id=Some(1);m
+    }
+    #[test]
+    fn vm_inverse_survives_finalization() {
+        let maps=MapDetector::finalize_maps(vec![inverse_map()],false,"EDC15VM");
+        assert_eq!(maps.len(),1);
+        assert_eq!(maps[0].name.as_deref(),Some("Inverse driver wish"));
+        assert_eq!(maps[0].codeblock_id,Some(1));
+    }
+    #[test]
+    fn other_family_visibility_unchanged() {
+        assert!(MapDetector::finalize_maps(vec![inverse_map()],false,"EDC15P").is_empty());
+        assert!(MapDetector::finalize_maps(vec![inverse_map()],true,"EDC16").is_empty());
+    }
 }

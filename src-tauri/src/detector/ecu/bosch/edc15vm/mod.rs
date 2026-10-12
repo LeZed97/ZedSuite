@@ -652,6 +652,20 @@ impl EDC15VMDetector {
             }
             i += 1;
         }
+        // GN three-bank 512 KiB layout: each calibration bank starts
+        // 0x4000 before its signed code at 0x50000/0x60000/0x70000.
+        // Using signed-code boundaries puts the first two calibration
+        // copies in CB1 and causes one-per-codeblock deduplication losses.
+        // Keep the older, separated-codeblock layout unchanged.
+        if data.len() == 0x80000
+            && codeblocks.iter().map(|cb| cb.start_address).collect::<Vec<_>>()
+                == [0x50000, 0x60000, 0x70000]
+        {
+            for cb in &mut codeblocks {
+                cb.start_address -= 0x4000;
+                cb.end_address -= 0x4000;
+            }
+        }
         codeblocks
     }
 
@@ -906,22 +920,25 @@ impl EDC15VMDetector {
                     } else {
                         (map.y_axis_address, y_len)
                     };
-                    let da_max = da_addr
-                        .map(|addr| {
-                            (0..da_len)
-                                .map(|i| {
-                                    let off = addr as usize + i * 2;
-                                    if off + 1 < data.len() {
-                                        u16::from_le_bytes([data[off], data[off + 1]])
-                                    } else {
-                                        0
-                                    }
-                                })
-                                .max()
-                                .unwrap_or(0)
+                    let da_values: Vec<u16> = da_addr
+                        .and_then(|addr| {
+                            let start = addr as usize;
+                            let bytes = data.get(start..start.checked_add(da_len * 2)?)?;
+                            Some(bytes.chunks_exact(2)
+                                .map(|w| u16::from_le_bytes([w[0], w[1]]))
+                                .collect())
                         })
-                        .unwrap_or(0);
-                    if da_max <= 2600 && da_max >= 1200 {
+                        .unwrap_or_default();
+                    let da_max = da_values.iter().copied().max().unwrap_or(0);
+                    // Tuned MAP axes can extend past the old 2600 mbar cap.
+                    // Require a pressure-like start and increasing 13-point
+                    // axis so high-range MAF/N75 axes do not become MAP tables.
+                    let tuned_pressure_axis = da_len == 13
+                        && da_values.len() == da_len
+                        && (400..=1200).contains(&da_values[0])
+                        && da_values.windows(2).all(|w| w[0] < w[1])
+                        && (2601..=4000).contains(&da_max);
+                    if (1200..=2600).contains(&da_max) || tuned_pressure_axis {
                         map.name = Some("IQ by MAP limiter".to_string());
                         map.correction_factor = Some(0.01);
                         map.category = Some("Smoke limitation".to_string());
@@ -1280,7 +1297,21 @@ impl EDC15VMDetector {
                     && temp.windows(2).all(|w| w[0] < w[1])
                     && temp.iter().all(|&v| (2200..=3900).contains(&v));
 
-                if rpm_ok && temp_ok {
+                // Keep known GN4308 limiter locations visible when a tune has
+                // changed the temperature breakpoints outside the stock range.
+                // Do not infer a different temperature encoding from the values:
+                // C5 remains Kelvin * 10, including for a suspicious tuned axis.
+                let gn_layout = data.len() == 0x80000
+                    && xh == 0xF9 && yh == 0xC5
+                    && x_len == 12 && y_len == 5
+                    && matches!(map.address, 0x5AFFC | 0x7AFFC)
+                    && map.x_axis_address == Some(map.address - 0x26)
+                    && map.y_axis_address == Some(map.address - 0x0A);
+                let unusual_temp = !temp_ok && gn_layout
+                    && temp.len() == 5
+                    && temp.windows(2).all(|w| w[0] < w[1]);
+
+                if rpm_ok && (temp_ok || unusual_temp) {
                     map.name = Some("SOI limiter".to_string());
                     map.category = Some("Start of injection".to_string());
                     map.unit = Some("deg CrS".to_string());
@@ -1290,13 +1321,20 @@ impl EDC15VMDetector {
                         "Maximum SOI | X: Temperature (°C) | Y: Engine speed (rpm)"
                             .to_string(),
                     );
+                    if unusual_temp {
+                        map.description = Some(
+                            "Maximum SOI | X: Temperature (°C) | Y: Engine speed (rpm) | WARNING: temperature axis outside expected Kelvin*10 range; verify binary calibration"
+                                .to_string(),
+                        );
+                    }
                     named = true;
                 }
             }
 
-            // ── Size 162 (9x9) - Cranking fuel map (Start IQ) ──
+            // ── Cranking fuel maps (Start IQ): 9x9 and GQ automatic-bank 9x8 ──
             // 4MKGOLF: DD(9)/C1(9) at 0x6C64A and 0x6C72C
-            if !named && map.size == 162 && x_len == 9 && y_len == 9 {
+            if !named && ((map.size == 162 && x_len == 9 && y_len == 9)
+                || (map.size == 144 && matches!((x_len, y_len), (9, 8) | (8, 9)))) {
                 if matches!((xh, yh),
                     (0xDD, 0xC1) | (0xC1, 0xDD) | (0xEB, 0xC1) | (0xC1, 0xEB) |
                     (0xDC, 0xC1) | (0xC1, 0xDC)
@@ -1422,7 +1460,11 @@ impl EDC15VMDetector {
                     let data_ok = if d + 4 <= data.len() {
                         let d1 = u16::from_le_bytes([data[d], data[d + 1]]);
                         let d2 = u16::from_le_bytes([data[d + 2], data[d + 3]]);
-                        d1 < 1000 && (2000..=3500).contains(&d2)
+                        // DC9C is used by GN4308 with tuned pressure endpoints.
+                        // Retain the ADC endpoint checks and limit the extended
+                        // pressure range to this known header family.
+                        d1 < 1000 && ((2000..=3500).contains(&d2)
+                            || (xfull == 0xDC9C && (3501..=5000).contains(&d2)))
                     } else {
                         false
                     };
@@ -2447,5 +2489,149 @@ impl EDC15VMDetector {
             }
             map
         }).collect()
+    }
+}
+
+#[cfg(test)]
+mod gn4308_limiter_tests {
+    use super::*;
+
+    fn fixture(cb2_temp: [u16; 5]) -> Vec<u8> {
+        let mut data = vec![0u8; 0x80000];
+        for (base, second_rpm, temps) in [
+            (0x50000usize, 1150, [3031, 3134, 3333, 3381, 3532]),
+            (0x70000usize, 1239, cb2_temp),
+        ] {
+            data[base + 1..base + 1 + CODEBLOCK_SIGNATURE.len()]
+                .copy_from_slice(&CODEBLOCK_SIGNATURE);
+            let mut words = vec![0xF948, 12];
+            words.extend([210, second_rpm, 1491, 1743, 1995, 2247,
+                2499, 2751, 3003, 3255, 3738, 3990]);
+            words.extend([0xC504, 5]);
+            words.extend(temps);
+            words.extend([1000; 60]);
+            for (i, word) in words.into_iter().enumerate() {
+                let off = base + 0xAFD2 + i * 2;
+                data[off..off + 2].copy_from_slice(&word.to_le_bytes());
+            }
+        }
+        data
+    }
+
+    #[test]
+    fn stock_and_modified_axes_preserve_kelvin_scaling() {
+        for temps in [[3031, 3134, 3333, 3381, 3532], [3000, 4030, 6020, 7020, 8010]] {
+            let maps = EDC15VMDetector::new().detect(&fixture(temps));
+            for (addr, cb) in [(0x5AFFC, 1), (0x7AFFC, 2)] {
+                let m = maps.iter().find(|m| m.address == addr).unwrap();
+                assert_eq!(m.name.as_deref(), Some("SOI limiter"));
+                assert_eq!(m.codeblock_id, Some(cb));
+                assert_eq!(m.correction_factor, Some(0.01));
+                assert_eq!(m.x_axis_correction, Some(0.1));
+                assert_eq!(m.x_axis_offset, Some(-273.1));
+                let warning = m.description.as_deref().unwrap().contains("WARNING");
+                assert_eq!(warning, addr == 0x7AFFC && temps[4] == 8010);
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_nonmonotonic_modified_axis() {
+        let maps = EDC15VMDetector::new().detect(&fixture([3000, 4030, 6020, 6020, 8010]));
+        assert!(!maps.iter().any(|m| m.address == 0x7AFFC && m.name.as_deref() == Some("SOI limiter")));
+    }
+}
+
+#[cfg(test)]
+mod tuned_map_pressure_tests {
+    use super::*;
+    fn classify(start: u16, end: u16, reversed: bool) -> String {
+        let mut words = vec![0xDD00u16, 16];
+        words.extend((0..16).map(|i| 800 + i * 300));
+        words.extend([0xDA00, 13]);
+        words.extend((0..13).map(|i| start + ((end - start) as u32 * i / 12) as u16));
+        words.extend([2500; 208]);
+        let data: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let cb = Codeblock { id: 1, start_address: 0, end_address: data.len() as u32 };
+        let detector = EDC15VMDetector::new();
+        let mut m = detector.try_detect_map(&data, 0, &cb).unwrap();
+        if reversed {
+            std::mem::swap(&mut m.x_axis_address, &mut m.y_axis_address);
+            m.dimensions = MapDimensions::TwoDimensional { rows: 16, cols: 13 };
+        }
+        detector.name_known_maps(&data, vec![m])[0].name.clone().unwrap()
+    }
+    #[test]
+    fn extended_pressure_is_map_in_both_orientations() {
+        for end in [2600, 2650, 3000, 4000] {
+            for reversed in [false, true] {
+                assert_eq!(classify(800, end, reversed), "IQ by MAP limiter");
+            }
+        }
+    }
+    #[test]
+    fn high_range_axes_stay_n75() {
+        for (start, end) in [(800, 4500), (3000, 8500), (5000, 9500)] {
+            assert_eq!(classify(start, end, false), "N75 duty cycle");
+        }
+    }
+}
+
+#[cfg(test)]
+mod map_linearization_tuned_tests {
+    use super::*;
+    fn named(header: u16, axis: [u16; 2], pressure: [u16; 2]) -> bool {
+        let words = [header, 2, axis[0], axis[1], pressure[0], pressure[1]];
+        let data: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let cb = Codeblock { id: 1, start_address: 0, end_address: 12 };
+        let detector = EDC15VMDetector::new();
+        let m = detector.try_detect_map(&data, 0, &cb).unwrap();
+        detector.name_known_maps(&data, vec![m]).iter()
+            .any(|m| m.name.as_deref() == Some("MAP linearization"))
+    }
+    #[test]
+    fn stock_and_extended_dc9c_detect() {
+        for upper in [2600, 3500, 4300, 5000] {
+            assert!(named(0xDC9C, [82, 989], [400, upper]));
+        }
+    }
+    #[test]
+    fn unrelated_or_invalid_curves_rejected() {
+        assert!(!named(0xDC98, [82, 989], [400, 4300]));
+        assert!(!named(0xDC9C, [82, 989], [400, 5001]));
+        assert!(!named(0xDC9C, [0, 1023], [0, 4300]));
+        assert!(!named(0xDC9C, [82, 989], [1000, 4300]));
+    }
+}
+
+#[cfg(test)]
+mod three_bank_layout_tests {
+    use super::*;
+    fn signatures(starts: &[usize]) -> Vec<u8> {
+        let mut data=vec![0u8;0x80000];
+        for &start in starts { data[start+1..start+1+CODEBLOCK_SIGNATURE.len()].copy_from_slice(&CODEBLOCK_SIGNATURE); }
+        data
+    }
+    #[test]
+    fn adjacent_three_bank_boundaries() {
+        let data=signatures(&[0x50000,0x60000,0x70000]);
+        let blocks=EDC15VMDetector::new().find_codeblocks(&data);
+        let ranges: Vec<_>=blocks.iter().map(|cb|(cb.id,cb.start_address,cb.end_address)).collect();
+        assert_eq!(ranges,vec![(1,0x4C000,0x5C000),(2,0x5C000,0x6C000),(3,0x6C000,0x7C000)]);
+        // The real 8x8 structures straddle the old signed-code boundaries.
+        let mut maps=Vec::new();
+        for (addr,cb) in [(0x4C8AC,1),(0x5C8AC,2),(0x6C8AC,3)] {
+            let mut m=DetectedMap::new(addr,128,MapDimensions::TwoDimensional{rows:8,cols:8},DataType::UInt16);
+            m.name=Some("MAF correction by temperature".to_string());
+            m.codeblock_id=Some(cb);maps.push(m);
+        }
+        EDC15VMDetector::dedupe_unique_per_codeblock(&data,&mut maps);
+        assert_eq!(maps.len(),3);
+    }
+    #[test]
+    fn separated_gn_layout_unchanged() {
+        let blocks=EDC15VMDetector::new().find_codeblocks(&signatures(&[0x50000,0x70000]));
+        assert_eq!((blocks[0].start_address,blocks[0].end_address),(0x50000,0x60000));
+        assert_eq!((blocks[1].start_address,blocks[1].end_address),(0x70000,0x80000));
     }
 }

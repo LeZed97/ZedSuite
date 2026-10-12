@@ -1,0 +1,3186 @@
+[
+  {
+    "fixture": "GN4308 OEM",
+    "bytes": 524288,
+    "sha256": "84722de85d8ec2b04026c8edd4c093569d6cc3ce5f23e9e8ec55819adc8f6e0c",
+    "ecu_specific_detector_total": 80,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346614,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346610,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372732,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372722,
+        "y_axis_address": 372694,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477686,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477682,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503804,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503794,
+        "y_axis_address": 503766,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      }
+    ]
+  },
+  {
+    "fixture": "GN4308 modified SOI",
+    "bytes": 524288,
+    "sha256": "daede61b248364495ca828b79f914aa70ee253d995592dc62ed35c888c3b4648",
+    "ecu_specific_detector_total": 82,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346614,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346610,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372732,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372722,
+        "y_axis_address": 372694,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477686,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477682,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503804,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503794,
+        "y_axis_address": 503766,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm) | WARNING: temperature axis outside expected Kelvin*10 range; verify binary calibration"
+      }
+    ]
+  },
+  {
+    "fixture": "GN supplied multimap",
+    "bytes": 524288,
+    "sha256": "66f878bf376fda2aa26988dbb1733ad1222594e032153044ec320f02c2ab2f08",
+    "ecu_specific_detector_total": 123,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346614,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346610,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372732,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372722,
+        "y_axis_address": 372694,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 379052,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 379036,
+        "y_axis_address": 379016,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 379244,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 379212,
+        "y_axis_address": 379184,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 379948,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 379932,
+        "y_axis_address": 379904,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 380528,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 380510,
+        "y_axis_address": 380488,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 380754,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 380736,
+        "y_axis_address": 380714,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 384344,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 384318,
+        "y_axis_address": 384282,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 412150,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 412146,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 438268,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 438258,
+        "y_axis_address": 438230,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477686,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477682,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503804,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503794,
+        "y_axis_address": 503766,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm) | WARNING: temperature axis outside expected Kelvin*10 range; verify binary calibration"
+      }
+    ]
+  },
+  {
+    "fixture": "FD4102 supplied",
+    "bytes": 524288,
+    "sha256": "7a24db947fef3061363eaa47b05588b42251ea827014561692fb5e43c616764b",
+    "ecu_specific_detector_total": 120,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346614,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346610,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372732,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372722,
+        "y_axis_address": 372694,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 379052,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 379036,
+        "y_axis_address": 379016,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 379244,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 379212,
+        "y_axis_address": 379184,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 379948,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 379932,
+        "y_axis_address": 379904,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 380526,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 380510,
+        "y_axis_address": 380488,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 380752,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 380736,
+        "y_axis_address": 380714,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 384344,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 384318,
+        "y_axis_address": 384282,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 412150,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 412146,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 438268,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 438258,
+        "y_axis_address": 438230,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477686,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477682,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503804,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503794,
+        "y_axis_address": 503766,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      }
+    ]
+  },
+  {
+    "fixture": "GQ4307 stock",
+    "bytes": 524288,
+    "sha256": "8f0969ce89dce9ba4b883ff5a12840928915e3a71b156a452b7458d5422f93a1",
+    "ecu_specific_detector_total": 80,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346614,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346610,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372732,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372722,
+        "y_axis_address": 372694,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477686,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477682,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503804,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503794,
+        "y_axis_address": 503766,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      }
+    ]
+  },
+  {
+    "fixture": "GQ supplied multimap",
+    "bytes": 524288,
+    "sha256": "023921241d3c9a553001652f207fd4216a9f236bd9f21970f9d8ab84ad6c255a",
+    "ecu_specific_detector_total": 120,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346614,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346610,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372732,
+        "codeblock_id": 1,
+        "codeblock_start_address": 311296,
+        "codeblock_end_address": 376832,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372722,
+        "y_axis_address": 372694,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 379052,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 379036,
+        "y_axis_address": 379016,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 379244,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 379212,
+        "y_axis_address": 379184,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 379948,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 379932,
+        "y_axis_address": 379904,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 380528,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 380510,
+        "y_axis_address": 380488,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 380754,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 380736,
+        "y_axis_address": 380714,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 384344,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 384318,
+        "y_axis_address": 384282,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 412150,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 412146,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 438268,
+        "codeblock_id": 2,
+        "codeblock_start_address": 376832,
+        "codeblock_end_address": 442368,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 438258,
+        "y_axis_address": 438230,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477686,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477682,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503804,
+        "codeblock_id": 3,
+        "codeblock_start_address": 442368,
+        "codeblock_end_address": 507904,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503794,
+        "y_axis_address": 503766,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      }
+    ]
+  },
+  {
+    "fixture": "GK KD34 stock",
+    "bytes": 524288,
+    "sha256": "499d0831dd0743d1bce4767488ba3e58910f507d0b843ad32178562580b02f85",
+    "ecu_specific_detector_total": 80,
+    "selected_maps": [
+      {
+        "name": "MAF correction by temperature",
+        "address": 313516,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 313500,
+        "y_axis_address": 313480,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 313708,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 313676,
+        "y_axis_address": 313648,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 314412,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314396,
+        "y_axis_address": 314368,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 314992,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 314974,
+        "y_axis_address": 314952,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 315218,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 9,
+            "rows": 9
+          }
+        },
+        "size": 162,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 315200,
+        "y_axis_address": 315178,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 318808,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 318782,
+        "y_axis_address": 318746,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 346608,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 346604,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 372726,
+        "codeblock_id": 1,
+        "codeblock_start_address": 327680,
+        "codeblock_end_address": 393216,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 372716,
+        "y_axis_address": 372688,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAF correction by temperature",
+        "address": 444588,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 8
+          }
+        },
+        "size": 128,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 444572,
+        "y_axis_address": 444552,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Inverse driver wish",
+        "address": 444780,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 16,
+            "rows": 12
+          }
+        },
+        "size": 384,
+        "correction_factor": 1.0,
+        "offset": 0.0,
+        "x_axis_address": 444748,
+        "y_axis_address": 444720,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Injection quantity (mg/st) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Driver wish",
+        "address": 445484,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 12
+          }
+        },
+        "size": 192,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 445468,
+        "y_axis_address": 445440,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "X: Pedal position (%) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446062,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446046,
+        "y_axis_address": 446024,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "Start IQ",
+        "address": 446288,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 8,
+            "rows": 9
+          }
+        },
+        "size": 144,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 446272,
+        "y_axis_address": 446250,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "X: Temperature (degC) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "IQ by MAP limiter",
+        "address": 449880,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 13,
+            "rows": 16
+          }
+        },
+        "size": 416,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 449854,
+        "y_axis_address": 449818,
+        "x_axis_correction": 1.0,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": 0.0,
+        "description": "Max IQ by boost pressure | X: Boost (mbar) | Y: Engine speed (rpm)"
+      },
+      {
+        "name": "MAP linearization",
+        "address": 477680,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 2,
+            "rows": 1
+          }
+        },
+        "size": 4,
+        "correction_factor": 1.0,
+        "offset": null,
+        "x_axis_address": 477676,
+        "y_axis_address": null,
+        "x_axis_correction": 0.01,
+        "y_axis_correction": null,
+        "x_axis_offset": 0.0,
+        "y_axis_offset": null,
+        "description": "X: Injection quantity (mg/st)"
+      },
+      {
+        "name": "SOI limiter",
+        "address": 503798,
+        "codeblock_id": 2,
+        "codeblock_start_address": 458752,
+        "codeblock_end_address": 524288,
+        "dimensions": {
+          "TwoDimensional": {
+            "cols": 5,
+            "rows": 12
+          }
+        },
+        "size": 120,
+        "correction_factor": 0.01,
+        "offset": 0.0,
+        "x_axis_address": 503788,
+        "y_axis_address": 503760,
+        "x_axis_correction": 0.1,
+        "y_axis_correction": 1.0,
+        "x_axis_offset": -273.1,
+        "y_axis_offset": 0.0,
+        "description": "Maximum SOI | X: Temperature (\u00c2\u00b0C) | Y: Engine speed (rpm)"
+      }
+    ]
+  }
+]

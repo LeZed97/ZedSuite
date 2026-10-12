@@ -225,7 +225,9 @@ pub fn import_map_definitions(
 ///       que l'axe de régime a été réécrit) ; EDC16U34 : un SVRL sous
 ///       3000 tr/min n'est plus retenu (issue #50) ; MAP linearisation à
 ///       l'axe brut, comme EDCSuite (913 et 44 sur un capteur 4 bars).
-pub const DETECTOR_VERSION: u32 = 50;
+///   51 — Custom GN multimap detection fixes and EDC15VM inverse driver
+///        wish visibility; refresh projects with stale detection results.
+pub const DETECTOR_VERSION: u32 = 52;
 
 /// Version du moteur de détection, pour comparaison avec celle enregistrée
 /// dans un projet.
