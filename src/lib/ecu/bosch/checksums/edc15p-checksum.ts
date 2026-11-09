@@ -208,9 +208,9 @@ function tdi41ChecksumSearch(fileBuffer: Uint8Array, fileSize: number): Checksum
   let chkFixed = 0;
   let chkMatch = 0;
 
-  for (; chkFound < chkArray.length - 1; chkFound++) {
-    chkStartAddr = chkArray[chkFound];
-    chkEndAddr = chkArray[chkFound + 1];
+  for (let region = 0; region < chkArray.length - 1; region++) {
+    chkStartAddr = chkArray[region];
+    chkEndAddr = chkArray[region + 1];
 
     if (!firstPass) {
       seedA |= 0x8631;
@@ -221,6 +221,9 @@ function tdi41ChecksumSearch(fileBuffer: Uint8Array, fileSize: number): Checksum
                    (fileBuffer[chkEndAddr - 2] << 16) +
                    (fileBuffer[chkEndAddr - 3] << 8) +
                    fileBuffer[chkEndAddr - 4]) >>> 0;
+
+    if (chkOldValue === 0xC3C3C3C3) { firstPass = false; continue; }
+    chkFound++;
 
     chkValue = tdi41ChecksumCalculate(fileBuffer, chkStartAddr, chkEndAddr - 4, seedA, seedB);
 
@@ -266,9 +269,9 @@ function tdi41v2ChecksumSearch(fileBuffer: Uint8Array, fileSize: number): Checks
   let chkFixed = 0;
   let chkMatch = 0;
 
-  for (; chkFound < chkArray.length - 1; chkFound++) {
-    chkStartAddr = chkArray[chkFound];
-    chkEndAddr = chkArray[chkFound + 1];
+  for (let region = 0; region < chkArray.length - 1; region++) {
+    chkStartAddr = chkArray[region];
+    chkEndAddr = chkArray[region + 1];
 
     if (!firstPass) {
       seedA |= 0x8631;
@@ -281,6 +284,9 @@ function tdi41v2ChecksumSearch(fileBuffer: Uint8Array, fileSize: number): Checks
                    (fileBuffer[chkEndAddr - 2] << 16) +
                    (fileBuffer[chkEndAddr - 3] << 8) +
                    fileBuffer[chkEndAddr - 4]) >>> 0;
+
+    if (chkOldValue === 0xC3C3C3C3) { firstPass = false; continue; }
+    chkFound++;
 
     chkValue = tdi41ChecksumCalculate(fileBuffer, chkStartAddr, chkEndAddr - 4, seedA, seedB);
 
@@ -505,6 +511,18 @@ function detectChecksumVariant(fileBuffer: Uint8Array, fileSize: number): 'tdi41
     return 'tdi41v2';
   }
 
+  // Legacy single-bank ANU layout (verified on AB1071): the V4.1 marker
+  // exists, but the 2002 main/bank-prefix checksums are absent. Its two
+  // populated calibration checksums use the standard tdi41 algorithm.
+  // Select by structure, including the entire padded bank prefix, so this
+  // remains stable after calibration edits invalidate the stored checksum.
+  if (signatures.length === 1 && signatures[0] === 0x70001 &&
+      [0x4bffc, 0x6fffc].every(pos => fileBuffer.slice(pos, pos + 4).every(b => b === 0xc3)) &&
+      fileBuffer.slice(0x6c000, 0x70000).every(b => b === 0xc3) &&
+      [0x13ffc, 0x70b7c, 0x7bffc].every(pos => !fileBuffer.slice(pos, pos + 4).every(b => b === 0xc3))) {
+    return 'tdi41';
+  }
+
   // Check for 2002 variant marker (V4.1 string)
   let chkStoreAddr = 0x4FFFB;
   while (chkStoreAddr + 16 < fileSize) {
@@ -653,6 +671,7 @@ export function verifyEDC15PChecksum(fileData: number[]): ChecksumInfo {
   // If no fixes were needed, checksums are valid
   return {
     ...info,
-    result: info.fixed === 0 ? ChecksumResult.ChecksumOK : ChecksumResult.ChecksumFail,
+    result: info.result === ChecksumResult.ChecksumTypeError ? ChecksumResult.ChecksumTypeError
+      : info.fixed === 0 ? ChecksumResult.ChecksumOK : ChecksumResult.ChecksumFail,
   };
 }
